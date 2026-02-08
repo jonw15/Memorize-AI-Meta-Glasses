@@ -26,6 +26,7 @@ class LiveAIManager: ObservableObject {
     private var currentVideoFrame: UIImage?
     private var isImageSendingEnabled = false
     private var frameUpdateTimer: Timer?
+    private var imageSendTimer: Timer?
 
     // Conversation history
     private var conversationHistory: [ConversationMessage] = []
@@ -186,20 +187,11 @@ class LiveAIManager: ObservableObject {
 
         geminiService.onFirstAudioSent = { [weak self] in
             Task { @MainActor in
-                print("✅ [LiveAIManager] First audio send callback received, enabling image sending")
+                print("✅ [LiveAIManager] First audio send callback received, starting periodic image sending")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                     self?.isImageSendingEnabled = true
-                }
-            }
-        }
-
-        geminiService.onSpeechStarted = { [weak self] in
-            Task { @MainActor in
-                if let strongSelf = self,
-                   strongSelf.isImageSendingEnabled,
-                   let frame = strongSelf.currentVideoFrame {
-                    print("🎤📸 [LiveAIManager] User speech detected, sending current video frame")
-                    strongSelf.geminiService?.sendImageInput(frame)
+                    self?.startImageSendTimer()
+                    print("📸 [LiveAIManager] Periodic image sending started")
                 }
             }
         }
@@ -249,6 +241,25 @@ class LiveAIManager: ObservableObject {
         }
     }
 
+    private var imageSendInterval: TimeInterval = 1.0
+
+    private func startImageSendTimer() {
+        stopImageSendTimer()
+        imageSendTimer = Timer.scheduledTimer(withTimeInterval: imageSendInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self,
+                      self.isImageSendingEnabled,
+                      let frame = self.currentVideoFrame else { return }
+                self.geminiService?.sendImageInput(frame)
+            }
+        }
+    }
+
+    private func stopImageSendTimer() {
+        imageSendTimer?.invalidate()
+        imageSendTimer = nil
+    }
+
     // MARK: - Stop Session
 
     /// Stop Live AI session
@@ -257,7 +268,8 @@ class LiveAIManager: ObservableObject {
 
         print("🛑 [LiveAIManager] Stopping session...")
 
-        // Stop timer
+        // Stop timers
+        stopImageSendTimer()
         frameUpdateTimer?.invalidate()
         frameUpdateTimer = nil
 

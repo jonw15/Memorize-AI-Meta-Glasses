@@ -186,6 +186,24 @@ struct LiveAIView: View {
                         .foregroundColor(.white)
                 }
             }
+
+            // Image send interval toggle
+            Button {
+                let newInterval: TimeInterval = viewModel.imageSendInterval == 1.0 ? 3.0 : 1.0
+                viewModel.setImageSendInterval(newInterval)
+            } label: {
+                HStack(spacing: 2) {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 10))
+                    Text(viewModel.imageSendInterval == 1.0 ? "1s" : "3s")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(viewModel.imageSendInterval == 1.0 ? Color.green.opacity(0.6) : Color.orange.opacity(0.6))
+                .cornerRadius(12)
+            }
         }
         .padding(AppSpacing.md)
         .background(Color.black.opacity(0.7))

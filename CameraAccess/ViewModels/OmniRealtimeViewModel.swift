@@ -27,6 +27,8 @@ class OmniRealtimeViewModel: ObservableObject {
     // Video frame
     private var currentVideoFrame: UIImage?
     private var isImageSendingEnabled = false // Whether image sending is enabled (after first audio)
+    private var imageSendTimer: Timer?
+    @Published var imageSendInterval: TimeInterval = 1.0
 
     init(apiKey: String) {
         self.apiKey = apiKey
@@ -47,30 +49,12 @@ class OmniRealtimeViewModel: ObservableObject {
 
         geminiService.onFirstAudioSent = { [weak self] in
             Task { @MainActor in
-                print("✅ [LiveAI-VM] Received first audio send callback, enabling image sending")
+                print("✅ [LiveAI-VM] Received first audio send callback, starting periodic image sending")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                     self?.isImageSendingEnabled = true
-                    print("📸 [LiveAI-VM] Image sending enabled (voice-triggered mode)")
+                    self?.startImageSendTimer()
+                    print("📸 [LiveAI-VM] Periodic image sending started")
                 }
-            }
-        }
-
-        geminiService.onSpeechStarted = { [weak self] in
-            Task { @MainActor in
-                self?.isSpeaking = true
-
-                if let strongSelf = self,
-                   strongSelf.isImageSendingEnabled,
-                   let frame = strongSelf.currentVideoFrame {
-                    print("🎤📸 [LiveAI-VM] User speech detected, sending current video frame")
-                    strongSelf.geminiService?.sendImageInput(frame)
-                }
-            }
-        }
-
-        geminiService.onSpeechStopped = { [weak self] in
-            Task { @MainActor in
-                self?.isSpeaking = false
             }
         }
 
@@ -131,6 +115,7 @@ class OmniRealtimeViewModel: ObservableObject {
         // Save conversation before disconnecting
         saveConversation()
 
+        stopImageSendTimer()
         stopRecording()
         geminiService?.disconnect()
 
@@ -172,6 +157,7 @@ class OmniRealtimeViewModel: ObservableObject {
 
     func stopRecording() {
         print("🛑 [LiveAI] Stop recording")
+        stopImageSendTimer()
         geminiService?.stopRecording()
         isRecording = false
     }
@@ -180,6 +166,30 @@ class OmniRealtimeViewModel: ObservableObject {
 
     func updateVideoFrame(_ frame: UIImage) {
         currentVideoFrame = frame
+    }
+
+    func setImageSendInterval(_ interval: TimeInterval) {
+        imageSendInterval = interval
+        if isImageSendingEnabled {
+            startImageSendTimer()
+        }
+    }
+
+    private func startImageSendTimer() {
+        stopImageSendTimer()
+        imageSendTimer = Timer.scheduledTimer(withTimeInterval: imageSendInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self,
+                      self.isImageSendingEnabled,
+                      let frame = self.currentVideoFrame else { return }
+                self.geminiService?.sendImageInput(frame)
+            }
+        }
+    }
+
+    private func stopImageSendTimer() {
+        imageSendTimer?.invalidate()
+        imageSendTimer = nil
     }
 
     // MARK: - Cleanup
