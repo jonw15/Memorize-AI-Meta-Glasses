@@ -1,208 +1,194 @@
 # TurboMeta Ray-Ban AI - Android
 
-**Version 1.4.0**
+**Version 1.5.0**
 
-Ray-Ban Meta 智能眼镜 AI 助手 Android 版本。
+AI assistant for Ray-Ban Meta smart glasses - Android version.
 
-> **🎬 NEW: RTMP Live Streaming (Experimental) | RTMP 直播推流（实验性）**
+> **🎬 RTMP Live Streaming (Experimental)**
 >
 > Push live video from Ray-Ban Meta glasses to **any RTMP-compatible platform** - YouTube Live, Twitch, Bilibili, Douyin, TikTok, Facebook Live, and more!
->
-> 将 Ray-Ban Meta 眼镜的实时视频推送到**任意支持 RTMP 的直播平台** - YouTube Live、Twitch、B站、抖音、TikTok、Facebook Live 等！
 
-## Features | 功能
+## Features
 
-### Live AI | 实时 AI 对话
+### Live AI - Real-time AI Conversation
 - Real-time voice conversation with AI through Ray-Ban Meta glasses
-- Supports Alibaba Qwen Omni and Google Gemini Live
-- 通过 Ray-Ban Meta 眼镜与 AI 进行实时语音对话
-- 支持阿里云通义千问 Omni 和 Google Gemini Live
+- Powered by Google Gemini Live for real-time audio + video AI chat
+- Periodic image sending with adjustable interval (1s/3s)
+- Multiple conversation modes: Standard, Museum Guide, Accessibility, Reading, Translation, Custom
 
-### Quick Vision | 快速识图
+### Quick Vision
 - Take photos with glasses and get AI analysis
 - Wake word detection: Say "Jarvis" to trigger Quick Vision
-- 用眼镜拍照并获取 AI 分析
-- 唤醒词检测：说 "Jarvis" 触发快速识图
+- Multiple recognition modes: Standard, Health, Accessibility, Reading, Translation, Encyclopedia, Custom
 
-### Multi-Provider Support | 多提供商支持
-- **Vision API**: Alibaba Dashscope / OpenRouter (Gemini, Claude, etc.)
-- **Live AI**: Alibaba Qwen Omni / Google Gemini Live
-- **视觉 API**: 阿里云 Dashscope / OpenRouter (Gemini, Claude 等)
-- **实时 AI**: 阿里云通义千问 Omni / Google Gemini Live
+### Multi-Provider Support
+- **Vision API**: Google AI Studio / OpenRouter (Gemini, Claude, GPT, etc.)
+- **Live AI**: Google Gemini Live (real-time voice)
 
-### 🎬 RTMP Live Streaming (Experimental) | RTMP 直播推流（实验性）
+### LeanEat - Smart Nutrition Analysis
+- Take a photo of food to get nutrition analysis
+- Health scoring, calorie breakdown, and dietary suggestions
+
+### 🎬 RTMP Live Streaming (Experimental)
 - Stream first-person view from glasses to any RTMP server
 - Compatible with all major platforms: YouTube, Twitch, Bilibili, Douyin, TikTok, Facebook Live, etc.
 - H.264 hardware encoding for smooth streaming
 - Adjustable bitrate (1-4 Mbps)
 - Real-time preview on phone
-- 将眼镜的第一人称视角推流到任意 RTMP 服务器
-- 兼容所有主流直播平台：YouTube、Twitch、B站、抖音、TikTok、Facebook Live 等
-- H.264 硬件编码，流畅推流
-- 可调节码率（1-4 Mbps）
-- 手机实时预览
 
 ---
 
-## ⚠️ Important Notes | 重要说明
+## ⚠️ Important Notes
 
-### Wake Word Detection (Picovoice) | 唤醒词检测
+### Developer Mode Required
+
+Before using TurboMeta, you **must** enable developer mode in the Meta AI App:
+
+1. Update Ray-Ban Meta glasses firmware to version 20+
+2. Update Meta AI App to the latest version
+3. Open **Meta AI App** on your phone
+4. Go to **Settings** → **App Info**
+5. **Tap the version number 5 times rapidly**
+6. You'll see "Developer mode enabled" message
+
+### Wake Word Detection (Picovoice)
 
 The wake word detection feature ("Jarvis") uses **Picovoice Porcupine**. To use this feature:
 
-唤醒词检测功能（"Jarvis"）使用 **Picovoice Porcupine**。使用此功能需要：
-
-1. **Register at Picovoice Console | 注册 Picovoice 账号**
+1. **Register at Picovoice Console**
    - Go to https://console.picovoice.ai/
    - Create a free account
-   - 访问 https://console.picovoice.ai/
-   - 创建免费账号
 
-2. **Get Access Key | 获取 Access Key**
+2. **Get Access Key**
    - After registration, get your Access Key from the console
-   - 注册后，从控制台获取 Access Key
 
-3. **Configure in App | 在 App 中配置**
+3. **Configure in App**
    - Go to Settings → Quick Vision → Picovoice Access Key
    - Enter your Access Key
-   - 进入 设置 → 快速识图 → Picovoice Access Key
-   - 输入你的 Access Key
 
-4. **⚠️ Microphone Always On | 麦克风常开**
+4. **⚠️ Microphone Always On**
    - Wake word detection requires the microphone to be always listening
    - This runs as a foreground service with a notification
    - Battery optimization should be disabled for best performance
-   - 唤醒词检测需要麦克风一直处于监听状态
-   - 这会作为前台服务运行，并显示通知
-   - 建议关闭电池优化以获得最佳体验
-
-### Google Gemini Live | Google Gemini Live
-
-⚠️ **Not Fully Tested | 未完全测试**
-
-- Google Gemini Live has not been fully tested due to limited access
-- If you encounter issues, please provide feedback
-- Google Gemini Live 由于条件限制未能完全测试
-- 如遇问题，请反馈
 
 ---
 
-## Release Notes | 更新日志
+## Release Notes
+
+### v1.5.0
+
+#### New Features
+
+- **🧠 Live AI Multi-Mode**
+  - Museum Guide: Professional exhibition guide
+  - Accessibility: Environment description for visually impaired users
+  - Reading Assistant: Help read and understand text
+  - Translator: Real-time translation assistant
+  - Custom: Use your own system prompt
+
+- **👁️ Quick Vision Multi-Mode**
+  - Health: Analyze food nutrition and health
+  - Encyclopedia: Identify objects and provide knowledge
+  - Reading: Read and recognize text in images
+  - Translation: Recognize and translate text
+  - Custom: Use your own prompt
+
+- **🗣️ Siri Shortcuts**: Voice-activate Quick Vision and Live AI
+
+- **Google AI Studio Migration**
+  - Migrated from Alibaba Cloud to Google AI Studio as primary provider
+  - Vision API powered by Gemini 2.5 Flash
+  - Live AI powered by Gemini 2.5 Flash Native Audio
+  - Default output language changed to English
+
+- **Periodic Image Sending for Live AI**
+  - Automatically sends camera frames to AI during conversation
+  - Adjustable interval: 1 second (default) or 3 seconds
+  - Toggle in the Live AI screen header
 
 ### v1.4.0 (2024-12-31)
 
-#### New Features | 新功能
+#### New Features
 
-- **🎬 RTMP Live Streaming (Experimental) | RTMP 直播推流（实验性）**
+- **🎬 RTMP Live Streaming (Experimental)**
   - Stream first-person view from Ray-Ban Meta glasses to any RTMP server
   - Works with all major live streaming platforms worldwide
   - H.264 hardware encoding with adjustable bitrate
   - Real-time preview on phone while streaming
   - Timestamp smoothing for stable frame rate
-  - 将 Ray-Ban Meta 眼镜的第一人称视角推流到任意 RTMP 服务器
-  - 兼容全球所有主流直播平台
-  - H.264 硬件编码，支持码率调节
-  - 推流时手机可实时预览
-  - 时间戳平滑处理，帧率稳定
 
-#### Supported Platforms | 支持的平台
+#### Supported Platforms
 
 - YouTube Live
 - Twitch
-- Bilibili (B站)
-- Douyin (抖音)
+- Bilibili
+- Douyin
 - TikTok
 - Facebook Live
 - Any RTMP-compatible server (MediaMTX, nginx-rtmp, etc.)
-- 任意支持 RTMP 的服务器（MediaMTX、nginx-rtmp 等）
 
 ---
 
 ### v1.3.0 (2024-12-31)
 
-#### New Features | 新功能
+#### New Features
 
-- **Wake Word Detection | 唤醒词检测**
+- **Wake Word Detection**
   - Say "Jarvis" to trigger Quick Vision without touching the phone
   - Powered by Picovoice Porcupine
-  - 说 "Jarvis" 触发快速识图，无需触摸手机
-  - 基于 Picovoice Porcupine
 
-- **Vision Model Selection | 视觉模型选择**
+- **Vision Model Selection**
   - Choose from multiple vision models
-  - Alibaba: Qwen VL Flash/Plus/Max, Qwen 2.5 VL 72B
+  - Google AI Studio: Gemini 2.5 Flash, Gemini 2.5 Pro, Gemini 2.0 Flash
   - OpenRouter: Search and select from all available models
   - Filter by vision-capable models
-  - 支持选择多种视觉模型
-  - 阿里云: Qwen VL Flash/Plus/Max, Qwen 2.5 VL 72B
-  - OpenRouter: 搜索并选择所有可用模型
-  - 可筛选仅显示视觉模型
 
-- **App Language | 应用语言**
+- **App Language**
   - Switch app interface language (System/Chinese/English)
   - Auto-syncs output language when switching
-  - 切换应用界面语言（跟随系统/中文/英文）
-  - 切换时自动同步输出语言
 
-#### Improvements | 改进
+#### Improvements
 
-- **Quick Vision Flow | 快速识图流程**
+- **Quick Vision Flow**
   - Optimized capture flow: TTS → Start stream → Capture → Stop stream → Analyze → TTS result
   - Added debounce for wake word (prevents multiple triggers)
-  - 优化拍照流程：TTS → 启动流 → 拍照 → 停止流 → 分析 → TTS 结果
-  - 添加唤醒词防抖（防止多次触发）
 
-- **Bilingual Support | 双语支持**
+- **Bilingual Support**
   - Full English/Chinese translation for all UI elements
   - AI prompts follow output language setting
-  - 所有界面元素支持中英文
-  - AI 提示词跟随输出语言设置
 
-- **Default Models | 默认模型**
-  - Alibaba: qwen-vl-flash (fast response)
-  - OpenRouter: google/gemini-2.0-flash-001
-  - 阿里云: qwen-vl-flash（快速响应）
-  - OpenRouter: google/gemini-2.0-flash-001
-
-#### Bug Fixes | 修复
+#### Bug Fixes
 
 - Fixed language switching not taking effect
 - Fixed hardcoded Chinese strings in various screens
 - Fixed Live AI reconnection issues
-- 修复语言切换不生效的问题
-- 修复多处界面硬编码中文
-- 修复 Live AI 重连问题
 
 ---
 
-## Setup | 配置
+## Setup
 
-### API Keys | API 密钥
+### API Keys
 
-1. **Alibaba Dashscope** (for Vision & Live AI)
-   - Get API Key: https://help.aliyun.com/zh/model-studio/get-api-key
-
-2. **OpenRouter** (for Vision with various models)
-   - Get API Key: https://openrouter.ai/keys
-
-3. **Google AI Studio** (for Gemini Live)
+1. **Google AI Studio** (for Vision API & Live AI)
    - Get API Key: https://aistudio.google.com/apikey
 
-4. **Picovoice** (for Wake Word Detection)
+2. **OpenRouter** (optional, for Vision with various models)
+   - Get API Key: https://openrouter.ai/keys
+
+3. **Picovoice** (for Wake Word Detection)
    - Get Access Key: https://console.picovoice.ai/
 
 ---
 
-## Requirements | 要求
+## Requirements
 
 - Android 8.0 (API 26) or higher
-- Ray-Ban Meta glasses paired via Meta View app
-- Android 8.0 (API 26) 或更高版本
-- 通过 Meta View 应用配对的 Ray-Ban Meta 眼镜
+- Ray-Ban Meta glasses paired via Meta AI app
+- Developer mode enabled in Meta AI app
 
 ---
 
-## Build | 构建
+## Build
 
 ```bash
 # Debug build
@@ -214,24 +200,6 @@ The wake word detection feature ("Jarvis") uses **Picovoice Porcupine**. To use 
 # Install to device
 ./gradlew installDebug
 ```
-
----
-
-## Feedback | 反馈
-
-If you encounter any issues, especially with:
-- Google Gemini Live (not fully tested)
-- Wake word detection
-- Language switching
-
-Please report issues or provide feedback.
-
-如遇到任何问题，特别是：
-- Google Gemini Live（未完全测试）
-- 唤醒词检测
-- 语言切换
-
-请反馈问题或提供建议。
 
 ---
 
