@@ -78,7 +78,7 @@ class TTSService: NSObject, ObservableObject {
 
         let utterance = AVSpeechUtterance(string: text)
         // Select system voice based on current language setting
-        let voiceLanguage = LanguageManager.staticIsChinese ? "zh-CN" : "en-US"
+        let voiceLanguage = "en-US"
         utterance.voice = AVSpeechSynthesisVoice(language: voiceLanguage)
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 1.0
         utterance.volume = 1.0

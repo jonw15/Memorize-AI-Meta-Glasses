@@ -24,8 +24,8 @@ struct SettingsView: View {
     @State private var showLiveTranslateSettings = false
     @ObservedObject var quickVisionModeManager = QuickVisionModeManager.shared
     @ObservedObject var liveAIModeManager = LiveAIModeManager.shared
-    @State private var selectedModel = "gemini-2.0-flash-exp"
-    @State private var selectedLanguage = "zh-CN" // Default Chinese
+    @State private var selectedModel = "gemini-2.5-flash-native-audio-preview-12-2025"
+    @State private var selectedLanguage = "en-US" // Default English
     @State private var selectedQuality = UserDefaults.standard.string(forKey: "video_quality") ?? "medium"
     @State private var hasAPIKey = false // Changed to State variable
     @State private var hasGoogleAPIKey = false // Google API Key state
@@ -764,8 +764,8 @@ struct LanguageSettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     let languages = [
-        ("zh-CN", "Chinese"),
         ("en-US", "English"),
+        ("zh-CN", "Chinese"),
         ("ja-JP", "Japanese"),
         ("ko-KR", "Korean"),
         ("es-ES", "Spanish"),

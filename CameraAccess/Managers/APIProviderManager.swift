@@ -158,7 +158,7 @@ class APIProviderManager: ObservableObject {
     // MARK: - Live AI Configuration (always Google Gemini)
 
     static let liveAIWebSocketURL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
-    static let liveAIDefaultModel = "gemini-2.0-flash-exp"
+    static let liveAIDefaultModel = "gemini-2.5-flash-native-audio-preview-12-2025"
 
     var liveAIAPIKey: String {
         return APIKeyManager.shared.getGoogleAPIKey() ?? ""

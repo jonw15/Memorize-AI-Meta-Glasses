@@ -148,7 +148,7 @@ class OmniRealtimeViewModel: ObservableObject {
         let record = ConversationRecord(
             messages: conversationHistory,
             aiModel: APIProviderManager.liveAIDefaultModel,
-            language: "zh-CN" // TODO: Get from settings
+            language: "en-US"
         )
 
         ConversationStorage.shared.saveConversation(record)
