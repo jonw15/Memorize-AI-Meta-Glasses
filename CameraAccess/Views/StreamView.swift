@@ -180,6 +180,7 @@ struct StreamView: View {
 // Extracted controls for clarity
 struct ControlsView: View {
   @ObservedObject var viewModel: StreamSessionViewModel
+  @Environment(\.dismiss) private var dismiss
   var body: some View {
     // Controls row
     HStack(spacing: 8) {
@@ -190,6 +191,7 @@ struct ControlsView: View {
       ) {
         Task {
           await viewModel.stopSession()
+          dismiss()
         }
       }
 

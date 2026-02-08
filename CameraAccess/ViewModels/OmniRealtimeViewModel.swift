@@ -1,7 +1,7 @@
 /*
  * Omni Realtime ViewModel
  * Manages real-time multimodal conversation with AI
- * Supports both Alibaba Qwen Omni and Google Gemini Live
+ * Uses Google Gemini Live for real-time audio+video chat
  */
 
 import Foundation
@@ -20,10 +20,8 @@ class OmniRealtimeViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var showError = false
 
-    // Services (use one based on provider)
-    private var omniService: OmniRealtimeService?
+    // Service
     private var geminiService: GeminiLiveService?
-    private let provider: LiveAIProvider
     private let apiKey: String
 
     // Video frame
@@ -32,116 +30,13 @@ class OmniRealtimeViewModel: ObservableObject {
 
     init(apiKey: String) {
         self.apiKey = apiKey
-        self.provider = APIProviderManager.staticLiveAIProvider
-
-        // Initialize appropriate service based on provider
-        switch provider {
-        case .alibaba:
-            self.omniService = OmniRealtimeService(apiKey: apiKey)
-        case .google:
-            self.geminiService = GeminiLiveService(apiKey: apiKey)
-        }
-
+        self.geminiService = GeminiLiveService(apiKey: apiKey)
         setupCallbacks()
     }
 
     // MARK: - Setup
 
     private func setupCallbacks() {
-        switch provider {
-        case .alibaba:
-            setupOmniCallbacks()
-        case .google:
-            setupGeminiCallbacks()
-        }
-    }
-
-    private func setupOmniCallbacks() {
-        guard let omniService = omniService else { return }
-
-        omniService.onConnected = { [weak self] in
-            Task { @MainActor in
-                self?.isConnected = true
-            }
-        }
-
-        omniService.onFirstAudioSent = { [weak self] in
-            Task { @MainActor in
-                print("✅ [OmniVM] Received first audio send callback, enabling image sending")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    self?.isImageSendingEnabled = true
-                    print("📸 [OmniVM] Image sending enabled (voice-triggered mode)")
-                }
-            }
-        }
-
-        omniService.onSpeechStarted = { [weak self] in
-            Task { @MainActor in
-                self?.isSpeaking = true
-
-                if let strongSelf = self,
-                   strongSelf.isImageSendingEnabled,
-                   let frame = strongSelf.currentVideoFrame {
-                    print("🎤📸 [OmniVM] User speech detected, sending current video frame")
-                    strongSelf.omniService?.sendImageAppend(frame)
-                }
-            }
-        }
-
-        omniService.onSpeechStopped = { [weak self] in
-            Task { @MainActor in
-                self?.isSpeaking = false
-            }
-        }
-
-        omniService.onTranscriptDelta = { [weak self] delta in
-            Task { @MainActor in
-                print("📝 [OmniVM] AI response fragment: \(delta)")
-                self?.currentTranscript += delta
-            }
-        }
-
-        omniService.onUserTranscript = { [weak self] userText in
-            Task { @MainActor in
-                guard let self = self else { return }
-                print("💬 [OmniVM] Saving user speech: \(userText)")
-                self.conversationHistory.append(
-                    ConversationMessage(role: .user, content: userText)
-                )
-            }
-        }
-
-        omniService.onTranscriptDone = { [weak self] fullText in
-            Task { @MainActor in
-                guard let self = self else { return }
-                let textToSave = fullText.isEmpty ? self.currentTranscript : fullText
-                guard !textToSave.isEmpty else {
-                    print("⚠️ [OmniVM] AI response is empty, skipping save")
-                    return
-                }
-                print("💬 [OmniVM] Saving AI response: \(textToSave)")
-                self.conversationHistory.append(
-                    ConversationMessage(role: .assistant, content: textToSave)
-                )
-                self.currentTranscript = ""
-            }
-        }
-
-        omniService.onAudioDone = { [weak self] in
-            Task { @MainActor in
-                // Audio playback complete
-            }
-        }
-
-        omniService.onError = { [weak self] error in
-            Task { @MainActor in
-                self?.errorMessage = error
-                self?.showError = true
-            }
-        }
-    }
-
-    private func setupGeminiCallbacks() {
         guard let geminiService = geminiService else { return }
 
         geminiService.onConnected = { [weak self] in
@@ -152,10 +47,10 @@ class OmniRealtimeViewModel: ObservableObject {
 
         geminiService.onFirstAudioSent = { [weak self] in
             Task { @MainActor in
-                print("✅ [GeminiVM] Received first audio send callback, enabling image sending")
+                print("✅ [LiveAI-VM] Received first audio send callback, enabling image sending")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                     self?.isImageSendingEnabled = true
-                    print("📸 [GeminiVM] Image sending enabled (voice-triggered mode)")
+                    print("📸 [LiveAI-VM] Image sending enabled (voice-triggered mode)")
                 }
             }
         }
@@ -167,7 +62,7 @@ class OmniRealtimeViewModel: ObservableObject {
                 if let strongSelf = self,
                    strongSelf.isImageSendingEnabled,
                    let frame = strongSelf.currentVideoFrame {
-                    print("🎤📸 [GeminiVM] User speech detected, sending current video frame")
+                    print("🎤📸 [LiveAI-VM] User speech detected, sending current video frame")
                     strongSelf.geminiService?.sendImageInput(frame)
                 }
             }
@@ -181,7 +76,7 @@ class OmniRealtimeViewModel: ObservableObject {
 
         geminiService.onTranscriptDelta = { [weak self] (delta: String) in
             Task { @MainActor in
-                print("📝 [GeminiVM] AI response fragment: \(delta)")
+                print("📝 [LiveAI-VM] AI response fragment: \(delta)")
                 self?.currentTranscript += delta
             }
         }
@@ -189,7 +84,7 @@ class OmniRealtimeViewModel: ObservableObject {
         geminiService.onUserTranscript = { [weak self] (userText: String) in
             Task { @MainActor in
                 guard let self = self else { return }
-                print("💬 [GeminiVM] Saving user speech: \(userText)")
+                print("💬 [LiveAI-VM] Saving user speech: \(userText)")
                 self.conversationHistory.append(
                     ConversationMessage(role: .user, content: userText)
                 )
@@ -201,10 +96,10 @@ class OmniRealtimeViewModel: ObservableObject {
                 guard let self = self else { return }
                 let textToSave = fullText.isEmpty ? self.currentTranscript : fullText
                 guard !textToSave.isEmpty else {
-                    print("⚠️ [GeminiVM] AI response is empty, skipping save")
+                    print("⚠️ [LiveAI-VM] AI response is empty, skipping save")
                     return
                 }
-                print("💬 [GeminiVM] Saving AI response: \(textToSave)")
+                print("💬 [LiveAI-VM] Saving AI response: \(textToSave)")
                 self.conversationHistory.append(
                     ConversationMessage(role: .assistant, content: textToSave)
                 )
@@ -229,12 +124,7 @@ class OmniRealtimeViewModel: ObservableObject {
     // MARK: - Connection
 
     func connect() {
-        switch provider {
-        case .alibaba:
-            omniService?.connect()
-        case .google:
-            geminiService?.connect()
-        }
+        geminiService?.connect()
     }
 
     func disconnect() {
@@ -242,13 +132,7 @@ class OmniRealtimeViewModel: ObservableObject {
         saveConversation()
 
         stopRecording()
-
-        switch provider {
-        case .alibaba:
-            omniService?.disconnect()
-        case .google:
-            geminiService?.disconnect()
-        }
+        geminiService?.disconnect()
 
         isConnected = false
         isImageSendingEnabled = false
@@ -261,17 +145,9 @@ class OmniRealtimeViewModel: ObservableObject {
             return
         }
 
-        let aiModel: String
-        switch provider {
-        case .alibaba:
-            aiModel = "qwen3-omni-flash-realtime"
-        case .google:
-            aiModel = "gemini-2.0-flash-exp"
-        }
-
         let record = ConversationRecord(
             messages: conversationHistory,
-            aiModel: aiModel,
+            aiModel: APIProviderManager.liveAIDefaultModel,
             language: "zh-CN" // TODO: Get from settings
         )
 
@@ -289,28 +165,14 @@ class OmniRealtimeViewModel: ObservableObject {
             return
         }
 
-        print("🎤 [LiveAI] Start recording (voice-triggered mode) - Provider: \(provider.displayName)")
-
-        switch provider {
-        case .alibaba:
-            omniService?.startRecording()
-        case .google:
-            geminiService?.startRecording()
-        }
-
+        print("🎤 [LiveAI] Start recording (voice-triggered mode) - Provider: Google Gemini")
+        geminiService?.startRecording()
         isRecording = true
     }
 
     func stopRecording() {
         print("🛑 [LiveAI] Stop recording")
-
-        switch provider {
-        case .alibaba:
-            omniService?.stopRecording()
-        case .google:
-            geminiService?.stopRecording()
-        }
-
+        geminiService?.stopRecording()
         isRecording = false
     }
 
@@ -320,12 +182,6 @@ class OmniRealtimeViewModel: ObservableObject {
         currentVideoFrame = frame
     }
 
-    // MARK: - Manual Mode (if needed)
-
-    func sendMessage() {
-        omniService?.commitAudioBuffer()
-    }
-
     // MARK: - Cleanup
 
     func dismissError() {
@@ -333,8 +189,7 @@ class OmniRealtimeViewModel: ObservableObject {
     }
 
     nonisolated deinit {
-        Task { @MainActor [weak omniService, weak geminiService] in
-            omniService?.disconnect()
+        Task { @MainActor [weak geminiService] in
             geminiService?.disconnect()
         }
     }

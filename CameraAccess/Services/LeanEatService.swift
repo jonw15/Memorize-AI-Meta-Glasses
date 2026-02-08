@@ -8,8 +8,8 @@ import UIKit
 
 class LeanEatService {
     private let apiKey: String
-    private let baseURL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    private let model = "qwen3-vl-plus"
+    private let baseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
+    private let model = "gemini-2.5-flash"
 
     init(apiKey: String) {
         self.apiKey = apiKey

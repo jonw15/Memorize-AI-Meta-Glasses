@@ -95,7 +95,7 @@ class LiveTranslateViewModel: ObservableObject {
     // MARK: - Connection
 
     func connect() {
-        let apiKey = APIProviderManager.staticLiveAIAPIKey
+        let apiKey = APIKeyManager.shared.getGoogleAPIKey() ?? ""
         guard !apiKey.isEmpty else {
             errorMessage = "livetranslate.error.noApiKey".localized
             showError = true

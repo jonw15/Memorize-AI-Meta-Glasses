@@ -1,7 +1,7 @@
 /*
  * Vision API Configuration
  * Centralized configuration for Vision API
- * Supports multiple providers: Alibaba Cloud Dashscope, OpenRouter
+ * Supports multiple providers: Google AI Studio, OpenRouter
  */
 
 import Foundation
@@ -31,16 +31,15 @@ struct VisionAPIConfig {
 
     // MARK: - Provider-specific URLs
 
-    /// Alibaba Cloud Dashscope API URLs
-    static let alibabaBeijingURL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    static let alibabaSingaporeURL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    /// Google AI Studio API URL (OpenAI-compatible)
+    static let googleAIStudioURL = "https://generativelanguage.googleapis.com/v1beta/openai"
 
     /// OpenRouter API URL
     static let openRouterURL = "https://openrouter.ai/api/v1"
 
     // MARK: - Default Models
 
-    static let defaultAlibabaModel = "qwen3-vl-plus"
+    static let defaultGoogleModel = "gemini-2.5-flash"
     static let defaultOpenRouterModel = "google/gemini-3-flash-preview"
 
     // MARK: - Request Headers

@@ -61,7 +61,6 @@
 		4BA57AEB2EF8227E002EC214 /* GalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA57AAE2EF8227E002EC214 /* GalleryView.swift */; };
 		4BA57AEC2EF8227E002EC214 /* MockDeviceCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA57AA82EF8227E002EC214 /* MockDeviceCardView.swift */; };
 		4BA57AED2EF8227E002EC214 /* TurboMetaHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA57ABD2EF8227E002EC214 /* TurboMetaHomeView.swift */; };
-		4BA57AEE2EF8227E002EC214 /* OmniRealtimeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA57A8F2EF8227E002EC214 /* OmniRealtimeService.swift */; };
 		4BA57AEF2EF8227E002EC214 /* HomeScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA57AAF2EF8227E002EC214 /* HomeScreenView.swift */; };
 		4BA57AF02EF8227E002EC214 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4BA57A882EF8227E002EC214 /* Localizable.strings */; };
 		4BA57AF12EF8227E002EC214 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4BA57AC12EF8227E002EC214 /* Localizable.strings */; };
@@ -129,7 +128,6 @@
 		4BA57A8B2EF8227E002EC214 /* FoodNutritionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodNutritionModel.swift; sourceTree = "<group>"; };
 		4BA57A8D2EF8227E002EC214 /* ConversationStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStorage.swift; sourceTree = "<group>"; };
 		4BA57A8E2EF8227E002EC214 /* LeanEatService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeanEatService.swift; sourceTree = "<group>"; };
-		4BA57A8F2EF8227E002EC214 /* OmniRealtimeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniRealtimeService.swift; sourceTree = "<group>"; };
 		4BA57A902EF8227E002EC214 /* VisionAPIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionAPIConfig.swift; sourceTree = "<group>"; };
 		4BA57A912EF8227E002EC214 /* VisionAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionAPIService.swift; sourceTree = "<group>"; };
 		4BA57A932EF8227E002EC214 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
@@ -272,7 +270,6 @@
 				4B69CCC62F050D5D00D1D025 /* RTMPStreamingService.swift */,
 				4BA57A8D2EF8227E002EC214 /* ConversationStorage.swift */,
 				4BA57A8E2EF8227E002EC214 /* LeanEatService.swift */,
-				4BA57A8F2EF8227E002EC214 /* OmniRealtimeService.swift */,
 				4BA57A902EF8227E002EC214 /* VisionAPIConfig.swift */,
 				4BA57A912EF8227E002EC214 /* VisionAPIService.swift */,
 				069172850B30A2766C8BD4B5 /* TTSService.swift */,
@@ -602,7 +599,6 @@
 				4BA57AEB2EF8227E002EC214 /* GalleryView.swift in Sources */,
 				4BA57AEC2EF8227E002EC214 /* MockDeviceCardView.swift in Sources */,
 				4BA57AED2EF8227E002EC214 /* TurboMetaHomeView.swift in Sources */,
-				4BA57AEE2EF8227E002EC214 /* OmniRealtimeService.swift in Sources */,
 				4BA57AEF2EF8227E002EC214 /* HomeScreenView.swift in Sources */,
 				4BB5DFF32F06C07A00AF7BD0 /* LiveAISettingsView.swift in Sources */,
 				05043536CDB06C0B88B3C4D9 /* TTSService.swift in Sources */,

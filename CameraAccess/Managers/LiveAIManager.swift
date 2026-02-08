@@ -1,6 +1,7 @@
 /*
  * Live AI Manager
  * Background Live AI session manager - Supports Siri and Shortcuts without unlocking the phone
+ * Uses Google Gemini Live for real-time conversation
  */
 
 import Foundation
@@ -19,9 +20,7 @@ class LiveAIManager: ObservableObject {
 
     // Dependencies
     private(set) var streamViewModel: StreamSessionViewModel?
-    private var omniService: OmniRealtimeService?
     private var geminiService: GeminiLiveService?
-    private var provider: LiveAIProvider = .alibaba
 
     // Video frames
     private var currentVideoFrame: UIImage?
@@ -82,9 +81,6 @@ class LiveAIManager: ObservableObject {
         errorMessage = nil
         conversationHistory = []
 
-        // Get current provider
-        provider = APIProviderManager.staticLiveAIProvider
-
         print("🚀 [LiveAIManager] Starting Live AI session...")
 
         do {
@@ -116,11 +112,12 @@ class LiveAIManager: ObservableObject {
             try configureAudioSessionForBackground()
 
             // 4. Initialize AI service
-            initializeService(apiKey: apiKey)
+            geminiService = GeminiLiveService(apiKey: apiKey)
+            setupCallbacks()
 
-            // 4. Connect AI service
+            // 5. Connect AI service
             print("🔌 [LiveAIManager] Connecting to AI service...")
-            connectService()
+            geminiService?.connect()
 
             // Wait for connection (max 10 seconds)
             var connectWait = 0
@@ -134,13 +131,13 @@ class LiveAIManager: ObservableObject {
                 throw LiveAIError.connectionFailed
             }
 
-            // 5. Start video frame update timer
+            // 6. Start video frame update timer
             startFrameUpdateTimer()
             print("✅ [LiveAIManager] Frame update timer started")
 
-            // 6. Start recording directly (skip TTS to avoid audio session conflicts)
+            // 7. Start recording directly (skip TTS to avoid audio session conflicts)
             print("🎤 [LiveAIManager] About to start recording...")
-            startRecording()
+            geminiService?.startRecording()
 
             print("✅ [LiveAIManager] Live AI session started, ready to talk")
 
@@ -175,78 +172,9 @@ class LiveAIManager: ObservableObject {
         print("✅ [LiveAIManager] Background audio session configured: category=\(audioSession.category.rawValue), mode=\(audioSession.mode.rawValue)")
     }
 
-    // MARK: - Initialize Service
+    // MARK: - Callbacks
 
-    private func initializeService(apiKey: String) {
-        switch provider {
-        case .alibaba:
-            omniService = OmniRealtimeService(apiKey: apiKey)
-            setupOmniCallbacks()
-        case .google:
-            geminiService = GeminiLiveService(apiKey: apiKey)
-            setupGeminiCallbacks()
-        }
-    }
-
-    private func setupOmniCallbacks() {
-        guard let omniService = omniService else { return }
-
-        omniService.onConnected = { [weak self] in
-            Task { @MainActor in
-                self?.isConnected = true
-                print("✅ [LiveAIManager] Omni connected")
-            }
-        }
-
-        omniService.onFirstAudioSent = { [weak self] in
-            Task { @MainActor in
-                print("✅ [LiveAIManager] First audio send callback received, enabling image sending")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    self?.isImageSendingEnabled = true
-                }
-            }
-        }
-
-        omniService.onSpeechStarted = { [weak self] in
-            Task { @MainActor in
-                if let strongSelf = self,
-                   strongSelf.isImageSendingEnabled,
-                   let frame = strongSelf.currentVideoFrame {
-                    print("🎤📸 [LiveAIManager] User speech detected, sending current video frame")
-                    strongSelf.omniService?.sendImageAppend(frame)
-                }
-            }
-        }
-
-        omniService.onUserTranscript = { [weak self] userText in
-            Task { @MainActor in
-                guard let self = self else { return }
-                print("💬 [LiveAIManager] User: \(userText)")
-                self.conversationHistory.append(
-                    ConversationMessage(role: .user, content: userText)
-                )
-            }
-        }
-
-        omniService.onTranscriptDone = { [weak self] fullText in
-            Task { @MainActor in
-                guard let self = self, !fullText.isEmpty else { return }
-                print("💬 [LiveAIManager] AI: \(fullText)")
-                self.conversationHistory.append(
-                    ConversationMessage(role: .assistant, content: fullText)
-                )
-            }
-        }
-
-        omniService.onError = { [weak self] error in
-            Task { @MainActor in
-                self?.errorMessage = error
-                print("❌ [LiveAIManager] Omni error: \(error)")
-            }
-        }
-    }
-
-    private func setupGeminiCallbacks() {
+    private func setupCallbacks() {
         guard let geminiService = geminiService else { return }
 
         geminiService.onConnected = { [weak self] in
@@ -304,37 +232,6 @@ class LiveAIManager: ObservableObject {
         }
     }
 
-    // MARK: - Connection
-
-    private func connectService() {
-        switch provider {
-        case .alibaba:
-            omniService?.connect()
-        case .google:
-            geminiService?.connect()
-        }
-    }
-
-    private func startRecording() {
-        print("🎤 [LiveAIManager] Start recording")
-        switch provider {
-        case .alibaba:
-            omniService?.startRecording()
-        case .google:
-            geminiService?.startRecording()
-        }
-    }
-
-    private func stopRecording() {
-        print("🛑 [LiveAIManager] Stop recording")
-        switch provider {
-        case .alibaba:
-            omniService?.stopRecording()
-        case .google:
-            geminiService?.stopRecording()
-        }
-    }
-
     // MARK: - Frame Update
 
     private func startFrameUpdateTimer() {
@@ -365,24 +262,18 @@ class LiveAIManager: ObservableObject {
         frameUpdateTimer = nil
 
         // Stop recording
-        stopRecording()
+        geminiService?.stopRecording()
 
         // Save conversation
         saveConversation()
 
         // Disconnect
-        switch provider {
-        case .alibaba:
-            omniService?.disconnect()
-        case .google:
-            geminiService?.disconnect()
-        }
+        geminiService?.disconnect()
 
         // Stop video stream
         await streamViewModel?.stopSession()
 
         // Reset state
-        omniService = nil
         geminiService = nil
         isConnected = false
         isRunning = false
@@ -399,17 +290,9 @@ class LiveAIManager: ObservableObject {
             return
         }
 
-        let aiModel: String
-        switch provider {
-        case .alibaba:
-            aiModel = "qwen3-omni-flash-realtime"
-        case .google:
-            aiModel = "gemini-2.0-flash-exp"
-        }
-
         let record = ConversationRecord(
             messages: conversationHistory,
-            aiModel: aiModel,
+            aiModel: APIProviderManager.liveAIDefaultModel,
             language: "zh-CN"
         )
 

@@ -186,28 +186,3 @@ struct TranslateRecord: Codable, Identifiable {
         self.translatedText = translatedText
     }
 }
-
-// MARK: - WebSocket Events
-
-enum TranslateClientEvent: String {
-    case sessionUpdate = "session.update"
-    case inputAudioBufferAppend = "input_audio_buffer.append"
-    case inputImageBufferAppend = "input_image_buffer.append"
-}
-
-enum TranslateServerEvent: String {
-    case sessionCreated = "session.created"
-    case sessionUpdated = "session.updated"
-    case responseCreated = "response.created"
-    case responseOutputItemAdded = "response.output_item.added"
-    case responseContentPartAdded = "response.content_part.added"
-    case responseAudioTranscriptText = "response.audio_transcript.text"
-    case responseAudioTranscriptDone = "response.audio_transcript.done"
-    case responseTextDone = "response.text.done"
-    case responseAudioDelta = "response.audio.delta"
-    case responseAudioDone = "response.audio.done"
-    case responseContentPartDone = "response.content_part.done"
-    case responseOutputItemDone = "response.output_item.done"
-    case responseDone = "response.done"
-    case error = "error"
-}

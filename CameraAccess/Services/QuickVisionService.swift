@@ -1,6 +1,6 @@
 /*
  * Quick Vision Service
- * Quick image recognition service - supports multiple providers (Alibaba Cloud/OpenRouter)
+ * Quick image recognition service - supports multiple providers (Google AI Studio/OpenRouter)
  * Returns concise descriptions, suitable for TTS playback
  */
 

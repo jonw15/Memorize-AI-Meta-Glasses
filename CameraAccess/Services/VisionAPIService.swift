@@ -1,7 +1,7 @@
 /*
  * Vision API Service
  * Provides image recognition using configurable providers
- * Supports Alibaba Cloud Dashscope and OpenRouter
+ * Supports Google AI Studio and OpenRouter
  */
 
 import Foundation

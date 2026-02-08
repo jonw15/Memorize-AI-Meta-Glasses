@@ -18,14 +18,13 @@ struct SettingsView: View {
     @State private var showLanguageSettings = false
     @State private var showAppLanguageSettings = false
     @State private var showQualitySettings = false
-    @State private var showLiveAIProviderSettings = false
     @State private var showGoogleAPIKeySettings = false
     @State private var showQuickVisionSettings = false
     @State private var showLiveAISettings = false
     @State private var showLiveTranslateSettings = false
     @ObservedObject var quickVisionModeManager = QuickVisionModeManager.shared
     @ObservedObject var liveAIModeManager = LiveAIModeManager.shared
-    @State private var selectedModel = "qwen3-omni-flash-realtime"
+    @State private var selectedModel = "gemini-2.0-flash-exp"
     @State private var selectedLanguage = "zh-CN" // Default Chinese
     @State private var selectedQuality = UserDefaults.standard.string(forKey: "video_quality") ?? "medium"
     @State private var hasAPIKey = false // Changed to State variable
@@ -80,10 +79,6 @@ struct SettingsView: View {
                         } else {
                             InfoRow(title: "settings.device.stream".localized, value: "settings.device.stream.inactive".localized)
                         }
-
-                        // TODO: Get more device info from SDK
-                        // InfoRow(title: "Battery", value: "85%")
-                        // InfoRow(title: "Firmware Version", value: "v20.0")
                     }
                 } header: {
                     Text("settings.device".localized)
@@ -225,43 +220,22 @@ struct SettingsView: View {
 
                 // Live AI Settings
                 Section {
-                    // Live AI Provider
+                    // Google API Key for Live AI
                     Button {
-                        showLiveAIProviderSettings = true
+                        showGoogleAPIKeySettings = true
                     } label: {
                         HStack {
-                            Image(systemName: "waveform.circle.fill")
-                                .foregroundColor(AppColors.primary)
-                            Text("settings.liveai.provider".localized)
+                            Image(systemName: "key.fill")
+                                .foregroundColor(.orange)
+                            Text("Google API Key")
                                 .foregroundColor(AppColors.textPrimary)
                             Spacer()
-                            Text(providerManager.liveAIProvider.displayName)
+                            Text(hasGoogleAPIKey ? "settings.apikey.configured".localized : "settings.apikey.notconfigured".localized)
                                 .font(AppTypography.caption)
-                                .foregroundColor(AppColors.textSecondary)
+                                .foregroundColor(hasGoogleAPIKey ? .green : .red)
                             Image(systemName: "chevron.right")
                                 .font(AppTypography.caption)
                                 .foregroundColor(AppColors.textTertiary)
-                        }
-                    }
-
-                    // Google API Key (only show when Google is selected for Live AI)
-                    if providerManager.liveAIProvider == .google {
-                        Button {
-                            showGoogleAPIKeySettings = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "key.fill")
-                                    .foregroundColor(.orange)
-                                Text("Google API Key")
-                                    .foregroundColor(AppColors.textPrimary)
-                                Spacer()
-                                Text(hasGoogleAPIKey ? "settings.apikey.configured".localized : "settings.apikey.notconfigured".localized)
-                                    .font(AppTypography.caption)
-                                    .foregroundColor(hasGoogleAPIKey ? .green : .red)
-                                Image(systemName: "chevron.right")
-                                    .font(AppTypography.caption)
-                                    .foregroundColor(AppColors.textTertiary)
-                            }
                         }
                     }
 
@@ -313,11 +287,7 @@ struct SettingsView: View {
             }
             .navigationTitle("settings.title".localized)
             .sheet(isPresented: $showAPIKeySettings) {
-                if providerManager.currentProvider == .alibaba {
-                    APIKeySettingsView(provider: providerManager.currentProvider, endpoint: providerManager.alibabaEndpoint)
-                } else {
-                    APIKeySettingsView(provider: providerManager.currentProvider)
-                }
+                APIKeySettingsView(provider: providerManager.currentProvider)
             }
             .onChange(of: showAPIKeySettings) { isShowing in
                 // Refresh status when API Key settings view is dismissed
@@ -344,9 +314,6 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showAppLanguageSettings) {
                 AppLanguageSettingsView()
-            }
-            .sheet(isPresented: $showLiveAIProviderSettings) {
-                LiveAIProviderSettingsView()
             }
             .sheet(isPresented: $showGoogleAPIKeySettings) {
                 GoogleAPIKeySettingsView()
@@ -432,7 +399,7 @@ struct APIProviderSettingsView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(provider.displayName)
                                         .foregroundColor(.primary)
-                                    Text(provider == .alibaba ? "settings.provider.alibaba.desc".localized : "settings.provider.openrouter.desc".localized)
+                                    Text(providerDescription(provider))
                                         .font(AppTypography.caption)
                                         .foregroundColor(AppColors.textSecondary)
                                 }
@@ -448,36 +415,6 @@ struct APIProviderSettingsView: View {
                     Text("settings.provider.select".localized)
                 } footer: {
                     Text("settings.provider.description".localized)
-                }
-
-                // Alibaba endpoint selection (only show when Alibaba is selected)
-                if providerManager.currentProvider == .alibaba {
-                    Section {
-                        ForEach(AlibabaEndpoint.allCases, id: \.self) { endpoint in
-                            Button {
-                                providerManager.alibabaEndpoint = endpoint
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(endpoint.displayName)
-                                            .foregroundColor(.primary)
-                                        Text(endpoint == .beijing ? "settings.endpoint.beijing.desc".localized : "settings.endpoint.singapore.desc".localized)
-                                            .font(AppTypography.caption)
-                                            .foregroundColor(AppColors.textSecondary)
-                                    }
-                                    Spacer()
-                                    if providerManager.alibabaEndpoint == endpoint {
-                                        Image(systemName: "checkmark")
-                                            .foregroundColor(.blue)
-                                    }
-                                }
-                            }
-                        }
-                    } header: {
-                        Text("settings.endpoint".localized)
-                    } footer: {
-                        Text("settings.endpoint.description".localized)
-                    }
                 }
 
                 // API Key status for current provider
@@ -510,11 +447,7 @@ struct APIProviderSettingsView: View {
                         }
                     }
                 } header: {
-                    if providerManager.currentProvider == .alibaba {
-                        Text("\(providerManager.currentProvider.displayName) (\(providerManager.alibabaEndpoint.displayName)) API Key")
-                    } else {
-                        Text("\(providerManager.currentProvider.displayName) API Key")
-                    }
+                    Text("\(providerManager.currentProvider.displayName) API Key")
                 }
             }
             .navigationTitle("settings.provider".localized)
@@ -528,25 +461,26 @@ struct APIProviderSettingsView: View {
             }
         }
     }
+
+    private func providerDescription(_ provider: APIProvider) -> String {
+        switch provider {
+        case .google:
+            return "settings.provider.google.desc".localized
+        case .openrouter:
+            return "settings.provider.openrouter.desc".localized
+        }
+    }
 }
 
 // MARK: - API Key Settings
 
 struct APIKeySettingsView: View {
     let provider: APIProvider
-    var endpoint: AlibabaEndpoint? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var apiKey: String = ""
     @State private var showSaveSuccess = false
     @State private var showError = false
     @State private var errorMessage = ""
-
-    private var displayTitle: String {
-        if provider == .alibaba, let endpoint = endpoint {
-            return "\(provider.displayName) (\(endpoint.displayName))"
-        }
-        return provider.displayName
-    }
 
     var body: some View {
         NavigationView {
@@ -556,10 +490,10 @@ struct APIKeySettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 } header: {
-                    Text("\(displayTitle) API Key")
+                    Text("\(provider.displayName) API Key")
                 } footer: {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(provider == .alibaba ? "settings.apikey.alibaba.help".localized : "settings.apikey.openrouter.help".localized)
+                        Text(provider == .google ? "settings.apikey.google.help".localized : "settings.apikey.openrouter.help".localized)
                         Link("settings.apikey.get".localized, destination: URL(string: provider.apiKeyHelpURL)!)
                             .font(.caption)
                     }
@@ -572,7 +506,7 @@ struct APIKeySettingsView: View {
                     .frame(maxWidth: .infinity)
                     .disabled(apiKey.isEmpty)
 
-                    if APIKeyManager.shared.hasAPIKey(for: provider, endpoint: endpoint) {
+                    if APIKeyManager.shared.hasAPIKey(for: provider) {
                         Button("settings.apikey.delete".localized, role: .destructive) {
                             deleteAPIKey()
                         }
@@ -603,7 +537,7 @@ struct APIKeySettingsView: View {
             }
             .onAppear {
                 // Load existing key if available
-                if let existingKey = APIKeyManager.shared.getAPIKey(for: provider, endpoint: endpoint) {
+                if let existingKey = APIKeyManager.shared.getAPIKey(for: provider) {
                     apiKey = existingKey
                 }
             }
@@ -617,7 +551,7 @@ struct APIKeySettingsView: View {
             return
         }
 
-        if APIKeyManager.shared.saveAPIKey(apiKey, for: provider, endpoint: endpoint) {
+        if APIKeyManager.shared.saveAPIKey(apiKey, for: provider) {
             showSaveSuccess = true
         } else {
             errorMessage = "settings.apikey.savefailed".localized
@@ -626,7 +560,7 @@ struct APIKeySettingsView: View {
     }
 
     private func deleteAPIKey() {
-        if APIKeyManager.shared.deleteAPIKey(for: provider, endpoint: endpoint) {
+        if APIKeyManager.shared.deleteAPIKey(for: provider) {
             apiKey = ""
             dismiss()
         } else {
@@ -647,8 +581,8 @@ struct VisionModelSettingsView: View {
     var body: some View {
         NavigationView {
             Group {
-                if providerManager.currentProvider == .alibaba {
-                    alibabaModelList
+                if providerManager.currentProvider == .google {
+                    googleModelList
                 } else {
                     openRouterModelList
                 }
@@ -665,10 +599,11 @@ struct VisionModelSettingsView: View {
         }
     }
 
-    private var alibabaModelList: some View {
+    private var googleModelList: some View {
         let models = [
-            ("qwen3-vl-plus", "Qwen3 VL Plus", "settings.model.qwen3vlplus.desc".localized),
-            ("qwen3-vl-max", "Qwen3 VL Max", "settings.model.qwen3vlmax.desc".localized)
+            ("gemini-2.5-flash", "Gemini 2.5 Flash", "settings.model.gemini25flash.desc".localized),
+            ("gemini-2.5-pro", "Gemini 2.5 Pro", "settings.model.gemini25pro.desc".localized),
+            ("gemini-2.0-flash", "Gemini 2.0 Flash", "settings.model.gemini20flash.desc".localized)
         ]
 
         return List {
@@ -694,7 +629,7 @@ struct VisionModelSettingsView: View {
                     }
                 }
             } header: {
-                Text("settings.model.alibaba".localized)
+                Text("settings.model.google".localized)
             } footer: {
                 Text("settings.model.current".localized + ": \(providerManager.selectedModel)")
             }
@@ -995,97 +930,6 @@ struct AppLanguageSettingsView: View {
             } message: {
                 Text("settings.applanguage.restart.message".localized)
             }
-        }
-    }
-}
-
-// MARK: - Live AI Provider Settings
-
-struct LiveAIProviderSettingsView: View {
-    @ObservedObject var providerManager = APIProviderManager.shared
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationView {
-            List {
-                Section {
-                    ForEach(LiveAIProvider.allCases, id: \.self) { provider in
-                        Button {
-                            providerManager.liveAIProvider = provider
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(provider.displayName)
-                                        .foregroundColor(.primary)
-                                    Text(liveAIProviderDescription(provider))
-                                        .font(AppTypography.caption)
-                                        .foregroundColor(AppColors.textSecondary)
-                                }
-                                Spacer()
-                                if providerManager.liveAIProvider == provider {
-                                    Image(systemName: "checkmark")
-                                        .foregroundColor(.blue)
-                                }
-                            }
-                        }
-                    }
-                } header: {
-                    Text("settings.liveai.provider.select".localized)
-                } footer: {
-                    Text("settings.liveai.provider.description".localized)
-                }
-
-                // API Key status
-                Section {
-                    HStack {
-                        Text("settings.apikey.status".localized)
-                        Spacer()
-                        if providerManager.hasLiveAIAPIKey {
-                            HStack(spacing: 4) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
-                                Text("settings.apikey.configured".localized)
-                                    .foregroundColor(.green)
-                            }
-                        } else {
-                            HStack(spacing: 4) {
-                                Image(systemName: "exclamationmark.circle.fill")
-                                    .foregroundColor(.red)
-                                Text("settings.apikey.notconfigured".localized)
-                                    .foregroundColor(.red)
-                            }
-                        }
-                    }
-
-                    Link(destination: URL(string: providerManager.liveAIProvider.apiKeyHelpURL)!) {
-                        HStack {
-                            Text("settings.provider.getapikey".localized)
-                            Spacer()
-                            Image(systemName: "arrow.up.right.square")
-                        }
-                    }
-                } header: {
-                    Text("\(providerManager.liveAIProvider.displayName) API Key")
-                }
-            }
-            .navigationTitle("settings.liveai.provider".localized)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("done".localized) {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-
-    private func liveAIProviderDescription(_ provider: LiveAIProvider) -> String {
-        switch provider {
-        case .alibaba:
-            return "settings.liveai.alibaba.desc".localized
-        case .google:
-            return "settings.liveai.google.desc".localized
         }
     }
 }
