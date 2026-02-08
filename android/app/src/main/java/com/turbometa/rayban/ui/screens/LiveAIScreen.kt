@@ -58,6 +58,7 @@ fun LiveAIScreen(
     val isConnected by viewModel.isConnected.collectAsState()
     val isRecording by viewModel.isRecording.collectAsState()
     val isSpeaking by viewModel.isSpeaking.collectAsState()
+    val imageSendInterval by viewModel.imageSendInterval.collectAsState()
 
     // Wearables state
     val currentFrame by wearablesViewModel.currentFrame.collectAsState()
@@ -168,6 +169,40 @@ fun LiveAIScreen(
                         }
                     },
                     actions = {
+                        // Image send interval toggle
+                        if (isConnected) {
+                            val intervalText = if (imageSendInterval <= 1.5) "1s" else "3s"
+                            val intervalColor = if (imageSendInterval <= 1.5) Success else Warning
+                            Surface(
+                                onClick = {
+                                    val newInterval = if (imageSendInterval <= 1.5) 3.0 else 1.0
+                                    viewModel.setImageSendInterval(newInterval)
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = intervalColor.copy(alpha = 0.2f),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.CameraAlt,
+                                        contentDescription = "Image send interval",
+                                        tint = intervalColor,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = intervalText,
+                                        color = intervalColor,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
                         // Stream status indicator
                         if (streamState is WearablesViewModel.StreamState.Streaming) {
                             Icon(

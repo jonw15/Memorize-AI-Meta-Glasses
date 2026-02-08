@@ -14,81 +14,43 @@ import java.util.concurrent.TimeUnit
 
 /**
  * API Provider Manager
- * 管理不同的 API 提供商 (阿里云 Dashscope / OpenRouter / Google)
+ * Manages different API providers (Google AI Studio / OpenRouter)
  * 1:1 port from iOS APIProviderManager.swift
  */
-
-// MARK: - Alibaba Endpoint Enum
-
-enum class AlibabaEndpoint(val id: String) {
-    BEIJING("beijing"),
-    SINGAPORE("singapore");
-
-    val displayName: String
-        get() = when (this) {
-            BEIJING -> "北京 (中国大陆)"
-            SINGAPORE -> "新加坡 (国际)"
-        }
-
-    val displayNameEn: String
-        get() = when (this) {
-            BEIJING -> "Beijing (China)"
-            SINGAPORE -> "Singapore (International)"
-        }
-
-    val baseURL: String
-        get() = when (this) {
-            BEIJING -> "https://dashscope.aliyuncs.com/compatible-mode/v1"
-            SINGAPORE -> "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
-        }
-
-    val websocketURL: String
-        get() = when (this) {
-            BEIJING -> "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
-            SINGAPORE -> "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime"
-        }
-
-    companion object {
-        fun fromId(id: String): AlibabaEndpoint {
-            return entries.find { it.id == id } ?: BEIJING
-        }
-    }
-}
 
 // MARK: - API Provider Enum (Vision API)
 
 enum class APIProvider(val id: String) {
-    ALIBABA("alibaba"),
+    GOOGLE("google"),
     OPENROUTER("openrouter");
 
     val displayName: String
         get() = when (this) {
-            ALIBABA -> "阿里云 Dashscope"
+            GOOGLE -> "Google AI Studio"
             OPENROUTER -> "OpenRouter"
         }
 
     val displayNameEn: String
         get() = when (this) {
-            ALIBABA -> "Alibaba Dashscope"
+            GOOGLE -> "Google AI Studio"
             OPENROUTER -> "OpenRouter"
         }
 
-    fun baseURL(endpoint: AlibabaEndpoint = AlibabaEndpoint.BEIJING): String {
-        return when (this) {
-            ALIBABA -> endpoint.baseURL
+    val baseURL: String
+        get() = when (this) {
+            GOOGLE -> "https://generativelanguage.googleapis.com/v1beta/openai"
             OPENROUTER -> "https://openrouter.ai/api/v1"
         }
-    }
 
     val defaultModel: String
         get() = when (this) {
-            ALIBABA -> "qwen-vl-flash"
-            OPENROUTER -> "google/gemini-2.0-flash-001"
+            GOOGLE -> "gemini-2.5-flash"
+            OPENROUTER -> "google/gemini-3-flash-preview"
         }
 
     val apiKeyHelpURL: String
         get() = when (this) {
-            ALIBABA -> "https://help.aliyun.com/zh/model-studio/get-api-key"
+            GOOGLE -> "https://aistudio.google.com/apikey"
             OPENROUTER -> "https://openrouter.ai/keys"
         }
 
@@ -97,51 +59,9 @@ enum class APIProvider(val id: String) {
 
     companion object {
         fun fromId(id: String): APIProvider {
-            return entries.find { it.id == id } ?: ALIBABA
-        }
-    }
-}
-
-// MARK: - Live AI Provider Enum
-
-enum class LiveAIProvider(val id: String) {
-    ALIBABA("alibaba"),
-    GOOGLE("google");
-
-    val displayName: String
-        get() = when (this) {
-            ALIBABA -> "阿里云 Qwen Omni"
-            GOOGLE -> "Google Gemini Live"
-        }
-
-    val displayNameEn: String
-        get() = when (this) {
-            ALIBABA -> "Alibaba Qwen Omni"
-            GOOGLE -> "Google Gemini Live"
-        }
-
-    val defaultModel: String
-        get() = when (this) {
-            ALIBABA -> "qwen3-omni-flash-realtime"
-            GOOGLE -> "gemini-2.0-flash-exp"
-        }
-
-    val apiKeyHelpURL: String
-        get() = when (this) {
-            ALIBABA -> "https://help.aliyun.com/zh/model-studio/get-api-key"
-            GOOGLE -> "https://aistudio.google.com/apikey"
-        }
-
-    fun websocketURL(endpoint: AlibabaEndpoint = AlibabaEndpoint.BEIJING): String {
-        return when (this) {
-            ALIBABA -> endpoint.websocketURL
-            GOOGLE -> "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
-        }
-    }
-
-    companion object {
-        fun fromId(id: String): LiveAIProvider {
-            return entries.find { it.id == id } ?: ALIBABA
+            // Migrate old "alibaba" provider to "google"
+            if (id == "alibaba") return GOOGLE
+            return entries.find { it.id == id } ?: GOOGLE
         }
     }
 }
@@ -199,34 +119,29 @@ data class OpenRouterModelsResponse(
     val data: List<OpenRouterModel>
 )
 
-// MARK: - Alibaba Vision Model
+// MARK: - Google Vision Model
 
-data class AlibabaVisionModel(
+data class GoogleVisionModel(
     val id: String,
     val displayName: String,
     val description: String
 ) {
     companion object {
         val availableModels = listOf(
-            AlibabaVisionModel(
-                "qwen-vl-flash",
-                "Qwen VL Flash",
-                "快速响应，适合实时场景"
+            GoogleVisionModel(
+                "gemini-2.5-flash",
+                "Gemini 2.5 Flash",
+                "Default, fast responses"
             ),
-            AlibabaVisionModel(
-                "qwen-vl-plus",
-                "Qwen VL Plus",
-                "均衡性能，推荐日常使用"
+            GoogleVisionModel(
+                "gemini-2.5-pro",
+                "Gemini 2.5 Pro",
+                "Most capable model"
             ),
-            AlibabaVisionModel(
-                "qwen-vl-max",
-                "Qwen VL Max",
-                "最强性能，适合复杂任务"
-            ),
-            AlibabaVisionModel(
-                "qwen2.5-vl-72b-instruct",
-                "Qwen 2.5 VL 72B",
-                "大参数模型，高精度分析"
+            GoogleVisionModel(
+                "gemini-2.0-flash",
+                "Gemini 2.0 Flash",
+                "Legacy model"
             )
         )
     }
@@ -240,9 +155,10 @@ class APIProviderManager private constructor(context: Context) {
         private const val PREFS_NAME = "api_provider_prefs"
         private const val KEY_PROVIDER = "api_provider"
         private const val KEY_SELECTED_MODEL = "selected_vision_model"
-        private const val KEY_ALIBABA_ENDPOINT = "alibaba_endpoint"
-        private const val KEY_LIVE_AI_PROVIDER = "liveai_provider"
-        private const val KEY_LIVE_AI_MODEL = "liveai_model"
+
+        // Live AI Configuration (always Google Gemini)
+        const val liveAIDefaultModel = "gemini-2.5-flash-native-audio-preview-12-2025"
+        const val liveAIWebSocketURL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
 
         @Volatile
         private var instance: APIProviderManager? = null
@@ -258,20 +174,8 @@ class APIProviderManager private constructor(context: Context) {
 
         val staticCurrentProvider: APIProvider
             get() {
-                val id = prefs?.getString(KEY_PROVIDER, "alibaba") ?: "alibaba"
+                val id = prefs?.getString(KEY_PROVIDER, "google") ?: "google"
                 return APIProvider.fromId(id)
-            }
-
-        val staticAlibabaEndpoint: AlibabaEndpoint
-            get() {
-                val id = prefs?.getString(KEY_ALIBABA_ENDPOINT, "beijing") ?: "beijing"
-                return AlibabaEndpoint.fromId(id)
-            }
-
-        val staticLiveAIProvider: LiveAIProvider
-            get() {
-                val id = prefs?.getString(KEY_LIVE_AI_PROVIDER, "alibaba") ?: "alibaba"
-                return LiveAIProvider.fromId(id)
             }
 
         val staticCurrentModel: String
@@ -281,7 +185,7 @@ class APIProviderManager private constructor(context: Context) {
             }
 
         val staticBaseURL: String
-            get() = staticCurrentProvider.baseURL(staticAlibabaEndpoint)
+            get() = staticCurrentProvider.baseURL
     }
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -294,35 +198,24 @@ class APIProviderManager private constructor(context: Context) {
     init {
         // Set static prefs for non-context access
         Companion.prefs = this.prefs
+
+        // Migrate old "alibaba" provider to "google"
+        val savedProvider = prefs.getString(KEY_PROVIDER, null)
+        if (savedProvider == "alibaba") {
+            prefs.edit().putString(KEY_PROVIDER, "google").apply()
+        }
     }
 
     // Vision API Provider
     private val _currentProvider = MutableStateFlow(
-        APIProvider.fromId(prefs.getString(KEY_PROVIDER, "alibaba") ?: "alibaba")
+        APIProvider.fromId(prefs.getString(KEY_PROVIDER, "google") ?: "google")
     )
     val currentProvider: StateFlow<APIProvider> = _currentProvider
 
     private val _selectedModel = MutableStateFlow(
-        prefs.getString(KEY_SELECTED_MODEL, null) ?: APIProvider.ALIBABA.defaultModel
+        prefs.getString(KEY_SELECTED_MODEL, null) ?: APIProvider.GOOGLE.defaultModel
     )
     val selectedModel: StateFlow<String> = _selectedModel
-
-    // Alibaba Endpoint (Beijing/Singapore)
-    private val _alibabaEndpoint = MutableStateFlow(
-        AlibabaEndpoint.fromId(prefs.getString(KEY_ALIBABA_ENDPOINT, "beijing") ?: "beijing")
-    )
-    val alibabaEndpoint: StateFlow<AlibabaEndpoint> = _alibabaEndpoint
-
-    // Live AI Provider
-    private val _liveAIProvider = MutableStateFlow(
-        LiveAIProvider.fromId(prefs.getString(KEY_LIVE_AI_PROVIDER, "alibaba") ?: "alibaba")
-    )
-    val liveAIProvider: StateFlow<LiveAIProvider> = _liveAIProvider
-
-    private val _liveAIModel = MutableStateFlow(
-        prefs.getString(KEY_LIVE_AI_MODEL, null) ?: LiveAIProvider.ALIBABA.defaultModel
-    )
-    val liveAIModel: StateFlow<String> = _liveAIModel
 
     // OpenRouter Models
     private val _openRouterModels = MutableStateFlow<List<OpenRouterModel>>(emptyList())
@@ -352,36 +245,10 @@ class APIProviderManager private constructor(context: Context) {
         prefs.edit().putString(KEY_SELECTED_MODEL, model).apply()
     }
 
-    fun setAlibabaEndpoint(endpoint: AlibabaEndpoint) {
-        _alibabaEndpoint.value = endpoint
-        prefs.edit().putString(KEY_ALIBABA_ENDPOINT, endpoint.id).apply()
-    }
-
-    fun setLiveAIProvider(provider: LiveAIProvider) {
-        val oldValue = _liveAIProvider.value
-        _liveAIProvider.value = provider
-        prefs.edit().putString(KEY_LIVE_AI_PROVIDER, provider.id).apply()
-
-        if (oldValue != provider) {
-            setLiveAIModel(provider.defaultModel)
-        }
-    }
-
-    fun setLiveAIModel(model: String) {
-        _liveAIModel.value = model
-        prefs.edit().putString(KEY_LIVE_AI_MODEL, model).apply()
-    }
-
     // MARK: - Live AI Configuration
 
-    val liveAIWebSocketURL: String
-        get() = _liveAIProvider.value.websocketURL(_alibabaEndpoint.value)
-
     fun getLiveAIAPIKey(apiKeyManager: com.turbometa.rayban.utils.APIKeyManager): String {
-        return when (_liveAIProvider.value) {
-            LiveAIProvider.ALIBABA -> apiKeyManager.getAPIKey(APIProvider.ALIBABA, _alibabaEndpoint.value) ?: ""
-            LiveAIProvider.GOOGLE -> apiKeyManager.getGoogleAPIKey() ?: ""
-        }
+        return apiKeyManager.getGoogleAPIKey() ?: ""
     }
 
     fun hasLiveAIAPIKey(apiKeyManager: com.turbometa.rayban.utils.APIKeyManager): Boolean {
@@ -391,25 +258,17 @@ class APIProviderManager private constructor(context: Context) {
     // MARK: - Get Current Configuration
 
     val currentBaseURL: String
-        get() = _currentProvider.value.baseURL(_alibabaEndpoint.value)
+        get() = _currentProvider.value.baseURL
 
     fun getCurrentAPIKey(apiKeyManager: com.turbometa.rayban.utils.APIKeyManager): String {
-        return if (_currentProvider.value == APIProvider.ALIBABA) {
-            apiKeyManager.getAPIKey(_currentProvider.value, _alibabaEndpoint.value) ?: ""
-        } else {
-            apiKeyManager.getAPIKey(_currentProvider.value) ?: ""
-        }
+        return apiKeyManager.getAPIKey(_currentProvider.value) ?: ""
     }
 
     val currentModel: String
         get() = _selectedModel.value
 
     fun hasAPIKey(apiKeyManager: com.turbometa.rayban.utils.APIKeyManager): Boolean {
-        return if (_currentProvider.value == APIProvider.ALIBABA) {
-            apiKeyManager.hasAPIKey(_currentProvider.value, _alibabaEndpoint.value)
-        } else {
-            apiKeyManager.hasAPIKey(_currentProvider.value)
-        }
+        return apiKeyManager.hasAPIKey(_currentProvider.value)
     }
 
     // MARK: - OpenRouter Models
@@ -419,7 +278,7 @@ class APIProviderManager private constructor(context: Context) {
 
         val apiKey = apiKeyManager.getAPIKey(APIProvider.OPENROUTER)
         if (apiKey.isNullOrEmpty()) {
-            _modelsError.value = "请先配置 OpenRouter API Key"
+            _modelsError.value = "Please configure OpenRouter API Key first"
             return
         }
 
@@ -438,7 +297,7 @@ class APIProviderManager private constructor(context: Context) {
                 val response = httpClient.newCall(request).execute()
 
                 if (!response.isSuccessful) {
-                    _modelsError.value = "获取模型列表失败: ${response.code}"
+                    _modelsError.value = "Failed to fetch models: ${response.code}"
                     return@withContext
                 }
 

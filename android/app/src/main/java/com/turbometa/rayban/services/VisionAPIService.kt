@@ -6,7 +6,6 @@ import android.util.Base64
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
-import com.turbometa.rayban.managers.AlibabaEndpoint
 import com.turbometa.rayban.managers.APIProvider
 import com.turbometa.rayban.managers.APIProviderManager
 import com.turbometa.rayban.managers.QuickVisionModeManager
@@ -22,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Vision API Service
- * Supports multiple providers: Alibaba Cloud Dashscope (Beijing/Singapore), OpenRouter
+ * Supports Google AI Studio and OpenRouter
  * 1:1 port from iOS VisionAPIConfig + QuickVisionService
  */
 class VisionAPIService(
@@ -34,12 +33,11 @@ class VisionAPIService(
         private const val TAG = "VisionAPIService"
 
         // Provider-specific URLs
-        const val ALIBABA_BEIJING_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        const val ALIBABA_SINGAPORE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+        const val GOOGLE_AI_STUDIO_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
         const val OPENROUTER_URL = "https://openrouter.ai/api/v1"
 
         // Default Models
-        const val DEFAULT_ALIBABA_MODEL = "qwen-vl-plus"
+        const val DEFAULT_GOOGLE_MODEL = "gemini-2.5-flash"
         const val DEFAULT_OPENROUTER_MODEL = "google/gemini-3-flash-preview"
     }
 
@@ -56,23 +54,14 @@ class VisionAPIService(
     private val currentProvider: APIProvider
         get() = providerManager.currentProvider.value
 
-    private val alibabaEndpoint: AlibabaEndpoint
-        get() = providerManager.alibabaEndpoint.value
-
     private val baseURL: String
         get() = when (currentProvider) {
-            APIProvider.ALIBABA -> when (alibabaEndpoint) {
-                AlibabaEndpoint.BEIJING -> ALIBABA_BEIJING_URL
-                AlibabaEndpoint.SINGAPORE -> ALIBABA_SINGAPORE_URL
-            }
+            APIProvider.GOOGLE -> GOOGLE_AI_STUDIO_URL
             APIProvider.OPENROUTER -> OPENROUTER_URL
         }
 
     private val apiKey: String?
-        get() = when (currentProvider) {
-            APIProvider.ALIBABA -> apiKeyManager.getAPIKey(APIProvider.ALIBABA, alibabaEndpoint)
-            APIProvider.OPENROUTER -> apiKeyManager.getAPIKey(APIProvider.OPENROUTER)
-        }
+        get() = apiKeyManager.getAPIKey(currentProvider)
 
     private val model: String
         get() = providerManager.selectedModel.value
@@ -135,7 +124,7 @@ class VisionAPIService(
     // MARK: - Quick Vision (for background recognition)
     // Uses QuickVisionModeManager to get the prompt based on selected mode
 
-    suspend fun quickVision(image: Bitmap, language: String = "zh-CN"): Result<String> {
+    suspend fun quickVision(image: Bitmap, language: String = "en-US"): Result<String> {
         // Use mode manager if context is available, otherwise fall back to language-based prompt
         val prompt = context?.let {
             val modeManager = QuickVisionModeManager.getInstance(it)

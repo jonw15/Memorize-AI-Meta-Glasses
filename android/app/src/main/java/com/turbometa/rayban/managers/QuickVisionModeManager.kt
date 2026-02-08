@@ -31,8 +31,8 @@ class QuickVisionModeManager private constructor(private val context: Context) {
 
         // 支持的翻译目标语言
         val supportedLanguages: List<Pair<String, String>> = listOf(
-            "zh-CN" to "中文",
             "en-US" to "English",
+            "zh-CN" to "中文",
             "ja-JP" to "日本語",
             "ko-KR" to "한국어",
             "fr-FR" to "Français",
@@ -69,7 +69,7 @@ class QuickVisionModeManager private constructor(private val context: Context) {
     }
 
     private fun loadTranslateTargetLanguage(): String {
-        return prefs.getString(KEY_TRANSLATE_TARGET_LANGUAGE, "zh-CN") ?: "zh-CN"
+        return prefs.getString(KEY_TRANSLATE_TARGET_LANGUAGE, "en-US") ?: "en-US"
     }
 
     fun setMode(mode: QuickVisionMode) {

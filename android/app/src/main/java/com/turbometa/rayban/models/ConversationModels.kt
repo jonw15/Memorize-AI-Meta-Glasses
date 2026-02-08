@@ -7,8 +7,8 @@ data class ConversationRecord(
     val id: String = UUID.randomUUID().toString(),
     val timestamp: Long = System.currentTimeMillis(),
     val messages: List<ConversationMessage> = emptyList(),
-    val aiModel: String = "qwen3-omni-flash-realtime",
-    val language: String = "zh-CN"
+    val aiModel: String = "gemini-2.5-flash-native-audio-preview-12-2025",
+    val language: String = "en-US"
 ) {
     val title: String
         get() = messages.firstOrNull { it.role == MessageRole.USER }?.content?.take(30) ?: "New Conversation"

@@ -22,13 +22,14 @@ import java.util.concurrent.TimeUnit
 /**
  * Gemini Live WebSocket Service
  * Provides real-time audio chat with Google Gemini AI
- * Uses gemini-2.0-flash-exp model for real-time audio conversation
+ * Uses Gemini Live model for real-time audio conversation
  * 1:1 port from iOS GeminiLiveService.swift
  */
 class GeminiLiveService(
     private val apiKey: String,
-    private val model: String = "gemini-2.0-flash-exp",
-    private val outputLanguage: String = "zh-CN"
+    private val model: String = "gemini-2.5-flash-native-audio-preview-12-2025",
+    private val outputLanguage: String = "en-US",
+    private val context: android.content.Context? = null
 ) {
     companion object {
         private const val TAG = "GeminiLiveService"
@@ -153,8 +154,11 @@ class GeminiLiveService(
     private fun configureSession() {
         if (isSessionConfigured) return
 
-        // Matching iOS Live AI prompts exactly
-        val instructions = getLiveAIPrompt(outputLanguage)
+        // Use LiveAIModeManager if context is available, otherwise fall back to language-based prompt
+        val instructions = context?.let {
+            val modeManager = com.turbometa.rayban.managers.LiveAIModeManager.getInstance(it)
+            modeManager.getSystemPrompt()
+        } ?: getLiveAIPrompt(outputLanguage)
 
         // Gemini Live API setup message
         val setupMessage = mapOf(

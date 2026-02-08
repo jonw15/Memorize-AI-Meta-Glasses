@@ -4,14 +4,13 @@ import android.content.Context
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-import com.turbometa.rayban.managers.AlibabaEndpoint
 import com.turbometa.rayban.managers.APIProvider
 import com.turbometa.rayban.managers.APIProviderManager
 
 /**
  * API Key Manager
  * Secure storage and retrieval of API keys using EncryptedSharedPreferences
- * Supports multiple API providers (Alibaba Dashscope Beijing/Singapore, OpenRouter, Google)
+ * Supports multiple API providers (Google AI Studio, OpenRouter)
  * 1:1 port from iOS APIKeyManager.swift
  */
 class APIKeyManager(context: Context) {
@@ -21,11 +20,8 @@ class APIKeyManager(context: Context) {
         private const val PREFS_NAME = "turbometa_secure_prefs"
 
         // Account names for different providers
-        private const val KEY_ALIBABA_BEIJING = "alibaba-beijing-api-key"
-        private const val KEY_ALIBABA_SINGAPORE = "alibaba-singapore-api-key"
-        private const val KEY_OPENROUTER = "openrouter-api-key"
         private const val KEY_GOOGLE = "google-api-key"
-        private const val KEY_LEGACY = "qwen_api_key" // For backward compatibility
+        private const val KEY_OPENROUTER = "openrouter-api-key"
 
         // Settings keys
         private const val KEY_AI_MODEL = "ai_model"
@@ -55,34 +51,12 @@ class APIKeyManager(context: Context) {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
-    init {
-        migrateLegacyKey()
-    }
-
-    // MARK: - Migration
-
-    private fun migrateLegacyKey() {
-        try {
-            // Migrate old qwen key to new Alibaba Beijing format
-            val legacyKey = sharedPreferences.getString(KEY_LEGACY, null)
-            if (!legacyKey.isNullOrBlank() && sharedPreferences.getString(KEY_ALIBABA_BEIJING, null).isNullOrBlank()) {
-                sharedPreferences.edit()
-                    .putString(KEY_ALIBABA_BEIJING, legacyKey)
-                    .remove(KEY_LEGACY)
-                    .apply()
-                Log.i(TAG, "Migrated legacy qwen API key to Alibaba Beijing")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Migration error: ${e.message}")
-        }
-    }
-
     // MARK: - Provider-specific API Key Management
 
-    fun saveAPIKey(key: String, provider: APIProvider, endpoint: AlibabaEndpoint? = null): Boolean {
+    fun saveAPIKey(key: String, provider: APIProvider): Boolean {
         return try {
             if (key.isBlank()) return false
-            val accountKey = accountName(provider, endpoint)
+            val accountKey = accountName(provider)
             sharedPreferences.edit().putString(accountKey, key).apply()
             true
         } catch (e: Exception) {
@@ -91,9 +65,9 @@ class APIKeyManager(context: Context) {
         }
     }
 
-    fun getAPIKey(provider: APIProvider, endpoint: AlibabaEndpoint? = null): String? {
+    fun getAPIKey(provider: APIProvider): String? {
         return try {
-            val accountKey = accountName(provider, endpoint)
+            val accountKey = accountName(provider)
             sharedPreferences.getString(accountKey, null)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get API key: ${e.message}")
@@ -101,9 +75,9 @@ class APIKeyManager(context: Context) {
         }
     }
 
-    fun deleteAPIKey(provider: APIProvider, endpoint: AlibabaEndpoint? = null): Boolean {
+    fun deleteAPIKey(provider: APIProvider): Boolean {
         return try {
-            val accountKey = accountName(provider, endpoint)
+            val accountKey = accountName(provider)
             sharedPreferences.edit().remove(accountKey).apply()
             true
         } catch (e: Exception) {
@@ -112,75 +86,51 @@ class APIKeyManager(context: Context) {
         }
     }
 
-    fun hasAPIKey(provider: APIProvider, endpoint: AlibabaEndpoint? = null): Boolean {
-        return !getAPIKey(provider, endpoint).isNullOrBlank()
+    fun hasAPIKey(provider: APIProvider): Boolean {
+        return !getAPIKey(provider).isNullOrBlank()
     }
 
-    // MARK: - Google API Key (for Live AI)
+    // MARK: - Google API Key (convenience methods)
 
     fun saveGoogleAPIKey(key: String): Boolean {
-        return try {
-            if (key.isBlank()) return false
-            sharedPreferences.edit().putString(KEY_GOOGLE, key).apply()
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to save Google API key: ${e.message}")
-            false
-        }
+        return saveAPIKey(key, APIProvider.GOOGLE)
     }
 
     fun getGoogleAPIKey(): String? {
-        return try {
-            sharedPreferences.getString(KEY_GOOGLE, null)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to get Google API key: ${e.message}")
-            null
-        }
+        return getAPIKey(APIProvider.GOOGLE)
     }
 
     fun deleteGoogleAPIKey(): Boolean {
-        return try {
-            sharedPreferences.edit().remove(KEY_GOOGLE).apply()
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to delete Google API key: ${e.message}")
-            false
-        }
+        return deleteAPIKey(APIProvider.GOOGLE)
     }
 
     fun hasGoogleAPIKey(): Boolean {
-        return !getGoogleAPIKey().isNullOrBlank()
+        return hasAPIKey(APIProvider.GOOGLE)
     }
 
     // MARK: - Backward Compatible Methods (defaults to current provider)
 
     fun saveAPIKey(key: String): Boolean {
-        return saveAPIKey(key, APIProviderManager.staticCurrentProvider, APIProviderManager.staticAlibabaEndpoint)
+        return saveAPIKey(key, APIProviderManager.staticCurrentProvider)
     }
 
     fun getAPIKey(): String? {
-        return getAPIKey(APIProviderManager.staticCurrentProvider, APIProviderManager.staticAlibabaEndpoint)
+        return getAPIKey(APIProviderManager.staticCurrentProvider)
     }
 
     fun deleteAPIKey(): Boolean {
-        return deleteAPIKey(APIProviderManager.staticCurrentProvider, APIProviderManager.staticAlibabaEndpoint)
+        return deleteAPIKey(APIProviderManager.staticCurrentProvider)
     }
 
     fun hasAPIKey(): Boolean {
-        return hasAPIKey(APIProviderManager.staticCurrentProvider, APIProviderManager.staticAlibabaEndpoint)
+        return hasAPIKey(APIProviderManager.staticCurrentProvider)
     }
 
     // MARK: - Private Helpers
 
-    private fun accountName(provider: APIProvider, endpoint: AlibabaEndpoint?): String {
+    private fun accountName(provider: APIProvider): String {
         return when (provider) {
-            APIProvider.ALIBABA -> {
-                val effectiveEndpoint = endpoint ?: APIProviderManager.staticAlibabaEndpoint
-                when (effectiveEndpoint) {
-                    AlibabaEndpoint.BEIJING -> KEY_ALIBABA_BEIJING
-                    AlibabaEndpoint.SINGAPORE -> KEY_ALIBABA_SINGAPORE
-                }
-            }
+            APIProvider.GOOGLE -> KEY_GOOGLE
             APIProvider.OPENROUTER -> KEY_OPENROUTER
         }
     }
@@ -193,7 +143,7 @@ class APIKeyManager(context: Context) {
     }
 
     fun getAIModel(): String {
-        return sharedPreferences.getString(KEY_AI_MODEL, "qwen3-omni-flash-realtime") ?: "qwen3-omni-flash-realtime"
+        return sharedPreferences.getString(KEY_AI_MODEL, "gemini-2.5-flash-native-audio-preview-12-2025") ?: "gemini-2.5-flash-native-audio-preview-12-2025"
     }
 
     // Output Language
@@ -202,7 +152,7 @@ class APIKeyManager(context: Context) {
     }
 
     fun getOutputLanguage(): String {
-        return sharedPreferences.getString(KEY_OUTPUT_LANGUAGE, "zh-CN") ?: "zh-CN"
+        return sharedPreferences.getString(KEY_OUTPUT_LANGUAGE, "en-US") ?: "en-US"
     }
 
     // Video Quality
@@ -224,19 +174,10 @@ class APIKeyManager(context: Context) {
     }
 }
 
-// Available AI models for Live AI
-enum class AIModel(val id: String, val displayName: String) {
-    // Alibaba Qwen Omni
-    QWEN_FLASH_REALTIME("qwen3-omni-flash-realtime", "Qwen3 Omni Flash (Realtime)"),
-    QWEN_STANDARD_REALTIME("qwen3-omni-standard-realtime", "Qwen3 Omni Standard (Realtime)"),
-    // Google Gemini
-    GEMINI_FLASH("gemini-2.0-flash-exp", "Gemini 2.0 Flash")
-}
-
 // Available output languages
 enum class OutputLanguage(val code: String, val displayName: String, val nativeName: String) {
-    CHINESE("zh-CN", "Chinese", "\u4e2d\u6587"),
     ENGLISH("en-US", "English", "English"),
+    CHINESE("zh-CN", "Chinese", "\u4e2d\u6587"),
     JAPANESE("ja-JP", "Japanese", "\u65e5\u672c\u8a9e"),
     KOREAN("ko-KR", "Korean", "\ud55c\uad6d\uc5b4"),
     SPANISH("es-ES", "Spanish", "Espa\u00f1ol"),

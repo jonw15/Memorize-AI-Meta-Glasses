@@ -18,8 +18,8 @@ import java.util.concurrent.TimeUnit
 class LeanEatService(private val apiKey: String) {
 
     companion object {
-        private const val BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
-        private const val MODEL = "qwen-vl-plus"
+        private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        private const val MODEL = "gemini-2.5-flash"
 
         private val NUTRITION_PROMPT = """
 请分析这张图片中的食物，并以JSON格式返回营养分析结果。

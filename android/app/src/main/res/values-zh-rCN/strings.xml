@@ -203,10 +203,10 @@
 
     <!-- API Key Settings -->
     <string name="apikey_title">API Key 设置</string>
-    <string name="apikey_hint">请输入您的阿里云 API Key</string>
+    <string name="apikey_hint">请输入您的 API Key</string>
     <string name="apikey_save">保存</string>
     <string name="apikey_delete">删除 API Key</string>
-    <string name="apikey_footer">前往阿里云控制台获取 API Key</string>
+    <string name="apikey_footer">前往 Google AI Studio 获取 API Key</string>
     <string name="apikey_get_key">获取 API Key</string>
     <string name="apikey_saved">API Key 保存成功</string>
     <string name="apikey_deleted">API Key 已删除</string>
@@ -226,7 +226,7 @@
 
     <!-- Dialogs -->
     <string name="api_key_required">需要配置 API Key</string>
-    <string name="api_key_required_desc">请前往阿里云百炼控制台获取 API Key，然后在设置中配置。</string>
+    <string name="api_key_required_desc">请前往 Google AI Studio 获取 API Key，然后在设置中配置。</string>
     <string name="go_to_settings">去设置</string>
     <string name="device_required">需要连接设备</string>
     <string name="device_required_desc">请先连接 Ray-Ban Meta 眼镜后再使用此功能。</string>
@@ -276,22 +276,12 @@
 
     <!-- API Provider Settings -->
     <string name="settings_provider">Vision API 提供商</string>
-    <string name="settings_endpoint">服务区域</string>
-    <string name="settings_liveai_provider">Live AI 提供商</string>
-    <string name="provider_alibaba">阿里云 Dashscope</string>
+    <string name="provider_google">Google AI Studio</string>
     <string name="provider_openrouter">OpenRouter</string>
-    <string name="provider_google">Google Gemini</string>
-    <string name="endpoint_beijing">北京 (中国)</string>
-    <string name="endpoint_singapore">新加坡 (国际)</string>
-    <string name="liveai_alibaba">阿里云 通义千问 Omni</string>
-    <string name="liveai_google">Google Gemini Live</string>
 
     <!-- API Key Types -->
-    <string name="apikey_alibaba_beijing">阿里云北京 API Key</string>
-    <string name="apikey_alibaba_singapore">阿里云新加坡 API Key</string>
     <string name="apikey_openrouter">OpenRouter API Key</string>
     <string name="apikey_google">Google AI Studio API Key</string>
-    <string name="apikey_get_alibaba">前往阿里云获取</string>
     <string name="apikey_get_openrouter">前往 OpenRouter 获取</string>
     <string name="apikey_get_google">前往 Google AI Studio 获取</string>
 

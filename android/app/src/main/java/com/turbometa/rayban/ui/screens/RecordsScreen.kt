@@ -389,7 +389,7 @@ private fun QuickVisionCard(
                         color = Primary
                     )
                     StatusBadge(
-                        text = record.visionModel.replace("qwen-", ""),
+                        text = record.visionModel,
                         color = Secondary
                     )
                 }

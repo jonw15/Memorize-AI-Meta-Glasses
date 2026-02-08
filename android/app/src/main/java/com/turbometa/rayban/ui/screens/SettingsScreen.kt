@@ -40,16 +40,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.turbometa.rayban.R
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import com.turbometa.rayban.managers.AlibabaEndpoint
-import com.turbometa.rayban.managers.AlibabaVisionModel
 import com.turbometa.rayban.managers.APIProvider
 import com.turbometa.rayban.managers.AppLanguage
-import com.turbometa.rayban.managers.LiveAIProvider
+import com.turbometa.rayban.managers.GoogleVisionModel
 import com.turbometa.rayban.managers.OpenRouterModel
 import com.turbometa.rayban.services.PorcupineWakeWordService
 import com.turbometa.rayban.ui.components.*
 import com.turbometa.rayban.ui.theme.*
-import com.turbometa.rayban.utils.AIModel
 import com.turbometa.rayban.utils.OutputLanguage
 import com.turbometa.rayban.utils.StreamQuality
 import com.turbometa.rayban.viewmodels.SettingsViewModel
@@ -67,12 +64,8 @@ fun SettingsScreen(
 
     // Provider states
     val visionProvider by viewModel.visionProvider.collectAsState()
-    val alibabaEndpoint by viewModel.alibabaEndpoint.collectAsState()
-    val liveAIProvider by viewModel.liveAIProvider.collectAsState()
 
     // API Key states
-    val hasAlibabaBeijingKey by viewModel.hasAlibabaBeijingKey.collectAsState()
-    val hasAlibabaSingaporeKey by viewModel.hasAlibabaSingaporeKey.collectAsState()
     val hasOpenRouterKey by viewModel.hasOpenRouterKey.collectAsState()
     val hasGoogleKey by viewModel.hasGoogleKey.collectAsState()
 
@@ -90,8 +83,6 @@ fun SettingsScreen(
     val showQualityDialog by viewModel.showQualityDialog.collectAsState()
     val showDeleteConfirmDialog by viewModel.showDeleteConfirmDialog.collectAsState()
     val showVisionProviderDialog by viewModel.showVisionProviderDialog.collectAsState()
-    val showEndpointDialog by viewModel.showEndpointDialog.collectAsState()
-    val showLiveAIProviderDialog by viewModel.showLiveAIProviderDialog.collectAsState()
     val showAppLanguageDialog by viewModel.showAppLanguageDialog.collectAsState()
     val appLanguage by viewModel.appLanguage.collectAsState()
     val editingKeyType by viewModel.editingKeyType.collectAsState()
@@ -205,41 +196,23 @@ fun SettingsScreen(
                 SettingsItem(
                     icon = Icons.Default.Cloud,
                     title = stringResource(R.string.settings_provider),
-                    subtitle = if (visionProvider == APIProvider.ALIBABA)
-                        stringResource(R.string.provider_alibaba)
+                    subtitle = if (visionProvider == APIProvider.GOOGLE)
+                        stringResource(R.string.provider_google)
                     else
                         stringResource(R.string.provider_openrouter),
                     onClick = { viewModel.showVisionProviderDialog() }
                 )
 
-                // Alibaba Endpoint (only when Alibaba selected)
-                if (visionProvider == APIProvider.ALIBABA) {
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = AppSpacing.medium))
-                    SettingsItem(
-                        icon = Icons.Default.Public,
-                        title = stringResource(R.string.settings_endpoint),
-                        subtitle = if (alibabaEndpoint == AlibabaEndpoint.BEIJING)
-                            stringResource(R.string.endpoint_beijing)
-                        else
-                            stringResource(R.string.endpoint_singapore),
-                        onClick = { viewModel.showEndpointDialog() }
-                    )
-                }
-
                 HorizontalDivider(modifier = Modifier.padding(horizontal = AppSpacing.medium))
 
                 // Current Provider API Key
-                val currentKeyTitle = when {
-                    visionProvider == APIProvider.ALIBABA && alibabaEndpoint == AlibabaEndpoint.BEIJING ->
-                        stringResource(R.string.apikey_alibaba_beijing)
-                    visionProvider == APIProvider.ALIBABA && alibabaEndpoint == AlibabaEndpoint.SINGAPORE ->
-                        stringResource(R.string.apikey_alibaba_singapore)
-                    else -> stringResource(R.string.apikey_openrouter)
+                val currentKeyTitle = when (visionProvider) {
+                    APIProvider.GOOGLE -> stringResource(R.string.apikey_google)
+                    APIProvider.OPENROUTER -> stringResource(R.string.apikey_openrouter)
                 }
-                val hasCurrentKey = when {
-                    visionProvider == APIProvider.ALIBABA && alibabaEndpoint == AlibabaEndpoint.BEIJING -> hasAlibabaBeijingKey
-                    visionProvider == APIProvider.ALIBABA && alibabaEndpoint == AlibabaEndpoint.SINGAPORE -> hasAlibabaSingaporeKey
-                    else -> hasOpenRouterKey
+                val hasCurrentKey = when (visionProvider) {
+                    APIProvider.GOOGLE -> hasGoogleKey
+                    APIProvider.OPENROUTER -> hasOpenRouterKey
                 }
                 SettingsItem(
                     icon = Icons.Default.Key,
@@ -250,12 +223,9 @@ fun SettingsScreen(
                         stringResource(R.string.settings_apikey_not_configured),
                     subtitleColor = if (hasCurrentKey) Success else Error,
                     onClick = {
-                        val keyType = when {
-                            visionProvider == APIProvider.ALIBABA && alibabaEndpoint == AlibabaEndpoint.BEIJING ->
-                                SettingsViewModel.EditingKeyType.ALIBABA_BEIJING
-                            visionProvider == APIProvider.ALIBABA && alibabaEndpoint == AlibabaEndpoint.SINGAPORE ->
-                                SettingsViewModel.EditingKeyType.ALIBABA_SINGAPORE
-                            else -> SettingsViewModel.EditingKeyType.OPENROUTER
+                        val keyType = when (visionProvider) {
+                            APIProvider.GOOGLE -> SettingsViewModel.EditingKeyType.GOOGLE
+                            APIProvider.OPENROUTER -> SettingsViewModel.EditingKeyType.OPENROUTER
                         }
                         viewModel.showApiKeyDialogForType(keyType)
                     }
@@ -273,7 +243,7 @@ fun SettingsScreen(
             }
 
             // Live AI Settings Section
-            SettingsSection(title = stringResource(R.string.settings_liveai_provider)) {
+            SettingsSection(title = stringResource(R.string.live_ai)) {
                 // Live AI Mode Settings
                 SettingsItem(
                     icon = Icons.Default.Psychology,
@@ -284,32 +254,19 @@ fun SettingsScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(horizontal = AppSpacing.medium))
 
+                // Google API Key (always shown — Live AI always uses Google)
                 SettingsItem(
-                    icon = Icons.Default.RecordVoiceOver,
-                    title = stringResource(R.string.settings_liveai_provider),
-                    subtitle = if (liveAIProvider == LiveAIProvider.ALIBABA)
-                        stringResource(R.string.liveai_alibaba)
+                    icon = Icons.Default.Key,
+                    title = stringResource(R.string.apikey_google),
+                    subtitle = if (hasGoogleKey)
+                        stringResource(R.string.settings_apikey_configured)
                     else
-                        stringResource(R.string.liveai_google),
-                    onClick = { viewModel.showLiveAIProviderDialog() }
+                        stringResource(R.string.settings_apikey_not_configured),
+                    subtitleColor = if (hasGoogleKey) Success else Error,
+                    onClick = {
+                        viewModel.showApiKeyDialogForType(SettingsViewModel.EditingKeyType.GOOGLE)
+                    }
                 )
-
-                // Google API Key (only when Google selected for Live AI)
-                if (liveAIProvider == LiveAIProvider.GOOGLE) {
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = AppSpacing.medium))
-                    SettingsItem(
-                        icon = Icons.Default.Key,
-                        title = stringResource(R.string.apikey_google),
-                        subtitle = if (hasGoogleKey)
-                            stringResource(R.string.settings_apikey_configured)
-                        else
-                            stringResource(R.string.settings_apikey_not_configured),
-                        subtitleColor = if (hasGoogleKey) Success else Error,
-                        onClick = {
-                            viewModel.showApiKeyDialogForType(SettingsViewModel.EditingKeyType.GOOGLE)
-                        }
-                    )
-                }
             }
 
             // Quick Vision / Picovoice Section
@@ -367,7 +324,7 @@ fun SettingsScreen(
 
             // AI Settings Section
             SettingsSection(title = stringResource(R.string.settings_ai)) {
-                // App Language (界面语言)
+                // App Language
                 SettingsItem(
                     icon = Icons.Default.Translate,
                     title = stringResource(R.string.settings_applanguage),
@@ -377,7 +334,7 @@ fun SettingsScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(horizontal = AppSpacing.medium))
 
-                // Output Language (AI输出语言)
+                // Output Language (AI output language)
                 SettingsItem(
                     icon = Icons.Default.Language,
                     title = stringResource(R.string.output_language),
@@ -470,7 +427,7 @@ fun SettingsScreen(
         ProviderSelectionDialog(
             title = stringResource(R.string.settings_provider),
             options = listOf(
-                APIProvider.ALIBABA to stringResource(R.string.provider_alibaba),
+                APIProvider.GOOGLE to stringResource(R.string.provider_google),
                 APIProvider.OPENROUTER to stringResource(R.string.provider_openrouter)
             ),
             selected = visionProvider,
@@ -479,49 +436,17 @@ fun SettingsScreen(
         )
     }
 
-    // Endpoint Dialog
-    if (showEndpointDialog) {
-        ProviderSelectionDialog(
-            title = stringResource(R.string.settings_endpoint),
-            options = listOf(
-                AlibabaEndpoint.BEIJING to stringResource(R.string.endpoint_beijing),
-                AlibabaEndpoint.SINGAPORE to stringResource(R.string.endpoint_singapore)
-            ),
-            selected = alibabaEndpoint,
-            onSelect = { viewModel.selectEndpoint(it) },
-            onDismiss = { viewModel.hideEndpointDialog() }
-        )
-    }
-
-    // Live AI Provider Dialog
-    if (showLiveAIProviderDialog) {
-        ProviderSelectionDialog(
-            title = stringResource(R.string.settings_liveai_provider),
-            options = listOf(
-                LiveAIProvider.ALIBABA to stringResource(R.string.liveai_alibaba),
-                LiveAIProvider.GOOGLE to stringResource(R.string.liveai_google)
-            ),
-            selected = liveAIProvider,
-            onSelect = { viewModel.selectLiveAIProvider(it) },
-            onDismiss = { viewModel.hideLiveAIProviderDialog() }
-        )
-    }
-
     // API Key Dialog
     if (showApiKeyDialog) {
         val keyType = editingKeyType
         val title = when (keyType) {
-            SettingsViewModel.EditingKeyType.ALIBABA_BEIJING -> stringResource(R.string.apikey_alibaba_beijing)
-            SettingsViewModel.EditingKeyType.ALIBABA_SINGAPORE -> stringResource(R.string.apikey_alibaba_singapore)
-            SettingsViewModel.EditingKeyType.OPENROUTER -> stringResource(R.string.apikey_openrouter)
             SettingsViewModel.EditingKeyType.GOOGLE -> stringResource(R.string.apikey_google)
+            SettingsViewModel.EditingKeyType.OPENROUTER -> stringResource(R.string.apikey_openrouter)
             else -> stringResource(R.string.api_key)
         }
         val helpUrl = when (keyType) {
-            SettingsViewModel.EditingKeyType.ALIBABA_BEIJING,
-            SettingsViewModel.EditingKeyType.ALIBABA_SINGAPORE -> "https://help.aliyun.com/zh/model-studio/get-api-key"
-            SettingsViewModel.EditingKeyType.OPENROUTER -> "https://openrouter.ai/keys"
             SettingsViewModel.EditingKeyType.GOOGLE -> "https://aistudio.google.com/apikey"
+            SettingsViewModel.EditingKeyType.OPENROUTER -> "https://openrouter.ai/keys"
             else -> null
         }
 
@@ -553,7 +478,7 @@ fun SettingsScreen(
         VisionModelSelectionDialog(
             visionProvider = visionProvider,
             selectedModel = selectedVisionModel,
-            alibabaModels = viewModel.getAlibabaVisionModels(),
+            googleModels = viewModel.getGoogleVisionModels(),
             openRouterModels = openRouterModels,
             isLoading = isLoadingModels,
             error = modelsError,
@@ -908,7 +833,7 @@ private fun PicovoiceKeyDialog(
 private fun VisionModelSelectionDialog(
     visionProvider: APIProvider,
     selectedModel: String,
-    alibabaModels: List<AlibabaVisionModel>,
+    googleModels: List<GoogleVisionModel>,
     openRouterModels: List<OpenRouterModel>,
     isLoading: Boolean,
     error: String?,
@@ -928,10 +853,10 @@ private fun VisionModelSelectionDialog(
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                if (visionProvider == APIProvider.ALIBABA) {
-                    // Alibaba models - static list
+                if (visionProvider == APIProvider.GOOGLE) {
+                    // Google models - static list
                     LazyColumn {
-                        items(alibabaModels) { model ->
+                        items(googleModels) { model ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()

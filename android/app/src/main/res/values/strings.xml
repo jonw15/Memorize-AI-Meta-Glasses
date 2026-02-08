@@ -205,10 +205,10 @@
 
     <!-- API Key Settings -->
     <string name="apikey_title">API Key Settings</string>
-    <string name="apikey_hint">Enter your Dashscope API Key</string>
+    <string name="apikey_hint">Enter your API Key</string>
     <string name="apikey_save">Save</string>
     <string name="apikey_delete">Delete API Key</string>
-    <string name="apikey_footer">Get your API Key from Alibaba Cloud Dashscope</string>
+    <string name="apikey_footer">Get your API Key from Google AI Studio</string>
     <string name="apikey_get_key">Get API Key</string>
     <string name="apikey_saved">API Key saved successfully</string>
     <string name="apikey_deleted">API Key deleted</string>
@@ -228,7 +228,7 @@
 
     <!-- Dialogs -->
     <string name="api_key_required">API Key Required</string>
-    <string name="api_key_required_desc">Please get your API Key from Alibaba Cloud Dashscope console and configure it in Settings.</string>
+    <string name="api_key_required_desc">Please get your API Key from Google AI Studio and configure it in Settings.</string>
     <string name="go_to_settings">Go to Settings</string>
     <string name="device_required">Device Required</string>
     <string name="device_required_desc">Please connect your Ray-Ban Meta glasses first before using this feature.</string>
@@ -278,22 +278,12 @@
 
     <!-- API Provider Settings -->
     <string name="settings_provider">Vision API Provider</string>
-    <string name="settings_endpoint">Service Region</string>
-    <string name="settings_liveai_provider">Live AI Provider</string>
-    <string name="provider_alibaba">Alibaba Dashscope</string>
+    <string name="provider_google">Google AI Studio</string>
     <string name="provider_openrouter">OpenRouter</string>
-    <string name="provider_google">Google Gemini</string>
-    <string name="endpoint_beijing">Beijing (China)</string>
-    <string name="endpoint_singapore">Singapore (International)</string>
-    <string name="liveai_alibaba">Alibaba Qwen Omni</string>
-    <string name="liveai_google">Google Gemini Live</string>
 
     <!-- API Key Types -->
-    <string name="apikey_alibaba_beijing">Alibaba Beijing API Key</string>
-    <string name="apikey_alibaba_singapore">Alibaba Singapore API Key</string>
     <string name="apikey_openrouter">OpenRouter API Key</string>
     <string name="apikey_google">Google AI Studio API Key</string>
-    <string name="apikey_get_alibaba">Get key from Alibaba Cloud</string>
     <string name="apikey_get_openrouter">Get key from OpenRouter</string>
     <string name="apikey_get_google">Get key from Google AI Studio</string>
 
