@@ -42,6 +42,21 @@
     <string name="feature_livestream_subtitle">抖音 · 快手 · 小红书</string>
     <string name="feature_rtmp_title">RTMP 推流</string>
     <string name="feature_rtmp_subtitle">直接推流到 RTMP 服务器（实验性）</string>
+    <string name="feature_livechat_title">视频聊天</string>
+    <string name="feature_livechat_subtitle">通过眼镜进行 WebRTC 视频通话</string>
+
+    <!-- Live Chat -->
+    <string name="livechat_new">新建房间</string>
+    <string name="livechat_join">加入房间</string>
+    <string name="livechat_room_code">房间号</string>
+    <string name="livechat_start">开始</string>
+    <string name="livechat_share_code">分享此房间号给对方加入</string>
+    <string name="livechat_enter_code">输入房间号</string>
+    <string name="livechat_mute">静音</string>
+    <string name="livechat_unmute">取消静音</string>
+    <string name="livechat_hangup">挂断</string>
+    <string name="livechat_video_off">关闭视频</string>
+    <string name="livechat_video_on">开启视频</string>
 
     <!-- Connection States -->
     <string name="disconnected">未连接</string>

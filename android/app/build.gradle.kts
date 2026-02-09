@@ -130,4 +130,7 @@ dependencies {
 
     // RTMP Streaming (RootEncoder old version without Compose dependencies)
     implementation(libs.rtmp.client)
+
+    // QR Code Generation
+    implementation(libs.zxing.core)
 }

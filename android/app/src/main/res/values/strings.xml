@@ -44,6 +44,21 @@
     <string name="feature_livestream_subtitle">Stream to Social Platforms</string>
     <string name="feature_rtmp_title">RTMP Stream</string>
     <string name="feature_rtmp_subtitle">Direct Push to RTMP Server (Experimental)</string>
+    <string name="feature_livechat_title">Live Chat</string>
+    <string name="feature_livechat_subtitle">WebRTC Video Call via Glasses</string>
+
+    <!-- Live Chat -->
+    <string name="livechat_new">New Room</string>
+    <string name="livechat_join">Join Room</string>
+    <string name="livechat_room_code">Room Code</string>
+    <string name="livechat_start">Start</string>
+    <string name="livechat_share_code">Share this code with others to join</string>
+    <string name="livechat_enter_code">Enter room code</string>
+    <string name="livechat_mute">Mute</string>
+    <string name="livechat_unmute">Unmute</string>
+    <string name="livechat_hangup">Hang Up</string>
+    <string name="livechat_video_off">Video Off</string>
+    <string name="livechat_video_on">Video On</string>
 
     <!-- Connection States -->
     <string name="disconnected">Disconnected</string>

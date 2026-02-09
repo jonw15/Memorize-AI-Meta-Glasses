@@ -49,7 +49,8 @@ fun HomeScreen(
     onNavigateToVision: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToLiveStream: () -> Unit = {},
-    onNavigateToRTMPStream: () -> Unit = {}
+    onNavigateToRTMPStream: () -> Unit = {},
+    onNavigateToLiveChat: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
@@ -267,6 +268,22 @@ fun HomeScreen(
                     .padding(horizontal = AppSpacing.large),
                 verticalArrangement = Arrangement.spacedBy(AppSpacing.medium)
             ) {
+                // Live Chat (wide card)
+                FeatureCardWide(
+                    title = stringResource(R.string.feature_livechat_title),
+                    subtitle = stringResource(R.string.feature_livechat_subtitle),
+                    icon = Icons.Default.VideoChat,
+                    gradientColors = listOf(LiveChatColor, LiveChatColor.copy(alpha = 0.7f)),
+                    isLoading = isCheckingPermission,
+                    onClick = {
+                        if (!hasActiveDevice) {
+                            showDeviceNotConnectedDialog = true
+                            return@FeatureCardWide
+                        }
+                        checkCameraPermissionAndNavigate { onNavigateToLiveChat() }
+                    }
+                )
+
                 // Row 1: LiveAI + Quick Vision
                 Row(
                     modifier = Modifier.fillMaxWidth(),

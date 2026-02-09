@@ -17,6 +17,7 @@ val LeanEatColorLight = Color(0xFFFF8E8E)
 val WordLearnColor = Color(0xFFFFA07A)
 val LiveStreamColor = Color(0xFFF38181)
 val QuickVisionColor = Color(0xFF9B59B6) // Purple for Quick Vision
+val LiveChatColor = Color(0xFF00C853)
 
 // Nutrition Colors
 val NutritionProtein = Color(0xFF4CAF50)
