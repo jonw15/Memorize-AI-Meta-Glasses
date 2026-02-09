@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TurboMeta is a multimodal AI assistant for RayBan Meta smart glasses. It has two native apps — iOS (Swift/SwiftUI) and Android (Kotlin/Jetpack Compose) — that connect to the glasses via Meta's DAT SDK and integrate with AI services (Google AI Studio Gemini, OpenRouter) for features like live AI conversations, image recognition, nutrition analysis, RTMP live streaming, and Quick Vision (Siri-triggered recognition).
+Aria Spark is a multimodal AI assistant for RayBan Meta smart glasses. It has two native apps — iOS (Swift/SwiftUI) and Android (Kotlin/Jetpack Compose) — that connect to the glasses via Meta's DAT SDK and integrate with AI services (Google AI Studio Gemini, OpenRouter) for features like live AI conversations, image recognition, nutrition analysis, RTMP live streaming, Quick Vision (Siri-triggered recognition), and Live Chat (WebRTC video calls streamed through the glasses camera).
 
 ## Build & Run
 
@@ -29,6 +29,7 @@ Both platforms follow **MVVM** with matching layer structures:
 ### iOS (CameraAccess/)
 - **Entry**: `TurboMetaApp.swift` → configures `Wearables` SDK → `MainAppView` → `RegistrationView` (pairing) or `MainTabView` (4 tabs: Home, Records, Gallery, Settings)
 - **ViewModels/**: `WearablesViewModel` (device connection), `StreamSessionViewModel` (camera stream), `OmniRealtimeViewModel` (Live AI), `LeanEatViewModel`, `VisionRecognitionViewModel`, `RTMPStreamingViewModel`, `LiveTranslateViewModel`
+- **Views/**: `LiveChatView.swift` (room create/join UI) + `LiveChatWebView.swift` (WKWebView with JS getUserMedia override, streams glasses frames via canvas.captureStream, routes audio through Bluetooth AVAudioSession)
 - **Services/**: Each feature has a dedicated service — `GeminiLiveService` (Gemini Live real-time voice API), `VisionAPIService`, `LeanEatService`, `QuickVisionService`, `TTSService`, `RTMPStreamingService`, `LiveTranslateService`, `ConversationStorage`, `QuickVisionStorage`
 - **Managers/**: `APIProviderManager` (switch between Google AI Studio/OpenRouter), `APIKeyManager` (Keychain storage), `LanguageManager` (zh-Hans/en), `LiveAIModeManager`, `QuickVisionModeManager`, `LiveAIManager`
 - **Models/**: Data models for each feature domain
@@ -42,7 +43,7 @@ Both platforms follow **MVVM** with matching layer structures:
 - **services/**: `GeminiLiveService`, `VisionAPIService`, `LeanEatService`, `QuickVisionService`, `RTMPStreamingService`, `PorcupineWakeWordService`
 - **managers/**: `APIProviderManager`, `LanguageManager`, `LiveAIModeManager`, `QuickVisionModeManager`
 - **data/**: `ConversationStorage`, `QuickVisionStorage`
-- **ui/screens/**: Compose screens for each feature
+- **ui/screens/**: Compose screens for each feature — includes `LiveChatScreen.kt` (WebRTC video chat with WebView JS override, QR code via zxing, Bluetooth audio routing via AudioManager.setCommunicationDevice)
 - **ui/theme/**: Material 3 theme (Color, Theme, Type)
 
 ### Key SDK Integration
@@ -59,6 +60,14 @@ Both platforms follow **MVVM** with matching layer structures:
 - `VisionAPIConfig.swift` / `APIProviderManager` controls provider selection and endpoint routing
 - Google AI Studio at `generativelanguage.googleapis.com/v1beta/openai`
 - OpenRouter at `openrouter.ai/api/v1`
+
+### Live Chat (WebRTC Video Calls)
+- Embeds a WebView loading `https://app.ariaspark.com/webrtc/?a=<room_code>&autostart=true`
+- JavaScript override replaces browser camera with glasses frames via `canvas.captureStream(30)` and routes audio through a `GainNode` for mute control
+- Native UI overlay controls (mute, hangup, video toggle) call `window.__toggleAudio()` / `window.__toggleVideo()` in the WebView
+- Glasses frames are sent as Base64 JPEG at ~10fps via `window.__updateGlassesFrame(b64)`
+- iOS: `LiveChatView.swift` + `LiveChatWebView.swift`, Bluetooth audio via `AVAudioSession` with `.allowBluetoothHFP`
+- Android: `LiveChatScreen.kt`, Bluetooth audio via `AudioManager.setCommunicationDevice()` (API 31+), QR codes via `com.google.zxing:core`
 
 ## Localization
 
