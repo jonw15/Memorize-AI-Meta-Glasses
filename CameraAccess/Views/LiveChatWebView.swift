@@ -15,15 +15,11 @@ class WebViewBridge: ObservableObject {
     weak var webView: WKWebView?
 
     func toggleAudio() {
-        webView?.evaluateJavaScript("document.getElementById('toggle-audio').click();", completionHandler: nil)
+        webView?.evaluateJavaScript("window.__toggleAudio();", completionHandler: nil)
     }
 
     func toggleVideo() {
-        webView?.evaluateJavaScript("document.getElementById('toggle-video').click();", completionHandler: nil)
-    }
-
-    func hangup() {
-        webView?.evaluateJavaScript("document.querySelector('.callapp_button').click();", completionHandler: nil)
+        webView?.evaluateJavaScript("window.__toggleVideo();", completionHandler: nil)
     }
 }
 
@@ -172,6 +168,8 @@ struct WebRTCWebView: UIViewRepresentable {
         var _stream = _canvas.captureStream(30);
 
         var _localStreamId = null;
+        var _gainNode = null;
+        var _videoPaused = false;
 
         var _origGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
 
@@ -181,9 +179,18 @@ struct WebRTCWebView: UIViewRepresentable {
 
             if (needsVideo && needsAudio) {
                 return _origGUM({ audio: constraints.audio }).then(function(audioStream) {
+                    // Pipe audio through GainNode for mute control
+                    // Keeps track alive so WebRTC echo cancellation stays active
+                    var ac = new (window.AudioContext || window.webkitAudioContext)();
+                    _gainNode = ac.createGain();
+                    var src = ac.createMediaStreamSource(audioStream);
+                    var dest = ac.createMediaStreamDestination();
+                    src.connect(_gainNode);
+                    _gainNode.connect(dest);
+
                     var combined = new MediaStream();
                     _stream.getVideoTracks().forEach(function(t) { combined.addTrack(t); });
-                    audioStream.getAudioTracks().forEach(function(t) { combined.addTrack(t); });
+                    dest.stream.getAudioTracks().forEach(function(t) { combined.addTrack(t); });
                     _localStreamId = combined.id;
                     return combined;
                 });
@@ -214,7 +221,24 @@ struct WebRTCWebView: UIViewRepresentable {
             });
         }
 
+        // Toggle audio mute via GainNode (0 = muted, 1 = unmuted)
+        window.__toggleAudio = function() {
+            if (_gainNode) {
+                _gainNode.gain.value = _gainNode.gain.value > 0 ? 0 : 1;
+            }
+        };
+
+        // Toggle video pause by stopping/resuming frame drawing
+        window.__toggleVideo = function() {
+            _videoPaused = !_videoPaused;
+            if (_videoPaused) {
+                _ctx.fillStyle = '#000';
+                _ctx.fillRect(0, 0, _canvas.width, _canvas.height);
+            }
+        };
+
         window.__updateGlassesFrame = function(b64) {
+            if (_videoPaused) return;
             var img = new Image();
             img.onload = function() {
                 if (_canvas.width !== img.width || _canvas.height !== img.height) {
