@@ -418,8 +418,8 @@
 "home.livechat.title" = "视频通话";
 "home.livechat.subtitle" = "视频聊天";
 "livechat.title" = "视频通话";
-"livechat.new" = "新建房间";
-"livechat.join" = "加入房间";
+"livechat.new" = "新建";
+"livechat.join" = "加入";
 "livechat.roomcode" = "房间号";
 "livechat.entercode" = "输入房间号";
 "livechat.start" = "开始";

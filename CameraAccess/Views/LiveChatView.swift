@@ -32,7 +32,7 @@ struct LiveChatView: View {
                     streamViewModel: streamViewModel,
                     onDismiss: {
                         Task { await streamViewModel.stopSession() }
-                        mode = roomCode.isEmpty ? .joinRoom : .newRoom
+                        dismiss()
                     }
                 )
                 .ignoresSafeArea()

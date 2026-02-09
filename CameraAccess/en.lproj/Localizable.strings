@@ -417,8 +417,8 @@
 "home.livechat.title" = "Live Chat";
 "home.livechat.subtitle" = "Video Chat";
 "livechat.title" = "Live Chat";
-"livechat.new" = "New Room";
-"livechat.join" = "Join Room";
+"livechat.new" = "New";
+"livechat.join" = "Join";
 "livechat.roomcode" = "Room Code";
 "livechat.entercode" = "Enter Room Code";
 "livechat.start" = "Start";
