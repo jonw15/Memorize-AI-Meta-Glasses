@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>TurboMeta</string>
+	<string>Aria Spark</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -51,11 +51,11 @@
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Needed to connect to Meta AI Glasses</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>TurboMeta needs microphone access for real-time voice conversations with smart glasses.</string>
+	<string>Aria Spark needs microphone access for real-time voice conversations with smart glasses.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>TurboMeta needs photo library access to save photos captured from smart glasses.</string>
+	<string>Aria Spark needs photo library access to save photos captured from smart glasses.</string>
 	<key>NSSiriUsageDescription</key>
-	<string>TurboMeta needs Siri access to support voice shortcuts for Quick Vision.</string>
+	<string>Aria Spark needs Siri access to support voice shortcuts for Quick Vision.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

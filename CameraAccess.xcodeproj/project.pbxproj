@@ -83,6 +83,8 @@
 		D83E4BD577765733E71A0068 /* QuickVisionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B037E0156E90DE2314A9F47 /* QuickVisionView.swift */; };
 		E699CCA12E8150670052C240 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = E699CCA42E8150670052C240 /* MWDATCore */; };
 		E699CCA22E8150670052C240 /* MWDATMockDevice in Frameworks */ = {isa = PBXBuildFile; productRef = E699CCA52E8150670052C240 /* MWDATMockDevice */; };
+		LC0001000100010001 /* LiveChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LC1001000100010001 /* LiveChatView.swift */; };
+		LC0002000200020002 /* LiveChatWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LC1002000200020002 /* LiveChatWebView.swift */; };
 		LT0001000100010001 /* LiveTranslateModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1001000100010001 /* LiveTranslateModels.swift */; };
 		LT0002000200020002 /* LiveTranslateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1002000200020002 /* LiveTranslateService.swift */; };
 		LT0003000300030003 /* LiveTranslateViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1003000300030003 /* LiveTranslateViewModel.swift */; };
@@ -187,6 +189,8 @@
 		CA3E36CE337855A7F17F2AC8 /* QuickVisionService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickVisionService.swift; sourceTree = "<group>"; };
 		DC72379319F7F8AAF8019018 /* LiveAIManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LiveAIManager.swift; path = Managers/LiveAIManager.swift; sourceTree = "<group>"; };
 		E699CC952E8150670052C240 /* CameraAccessTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CameraAccessTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		LC1001000100010001 /* LiveChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatView.swift; sourceTree = "<group>"; };
+		LC1002000200020002 /* LiveChatWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatWebView.swift; sourceTree = "<group>"; };
 		LT1001000100010001 /* LiveTranslateModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateModels.swift; sourceTree = "<group>"; };
 		LT1002000200020002 /* LiveTranslateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateService.swift; sourceTree = "<group>"; };
 		LT1003000300030003 /* LiveTranslateViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateViewModel.swift; sourceTree = "<group>"; };
@@ -377,6 +381,8 @@
 				330AF93394A09D97C504F568 /* QuickVisionSettingsView.swift */,
 				LT1004000400040004 /* LiveTranslateView.swift */,
 				LT1005000500050005 /* LiveTranslateSettingsView.swift */,
+				LC1001000100010001 /* LiveChatView.swift */,
+				LC1002000200020002 /* LiveChatWebView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -621,6 +627,8 @@
 				LT0003000300030003 /* LiveTranslateViewModel.swift in Sources */,
 				LT0004000400040004 /* LiveTranslateView.swift in Sources */,
 				LT0005000500050005 /* LiveTranslateSettingsView.swift in Sources */,
+				LC0001000100010001 /* LiveChatView.swift in Sources */,
+				LC0002000200020002 /* LiveChatWebView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -676,13 +684,14 @@
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
 				INFOPLIST_FILE = CameraAccess/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Meta Ray Ban";
+				INFOPLIST_KEY_CFBundleDisplayName = "Aria Spark";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.4.0;
+				MARKETING_VERSION = 0.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.meta.wearables.external.CameraAccess;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -709,13 +718,14 @@
 				DEVELOPMENT_TEAM = 3DQL2FN458;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = CameraAccess/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Meta Ray Ban";
+				INFOPLIST_KEY_CFBundleDisplayName = "Aria Spark";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.4.0;
+				MARKETING_VERSION = 0.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.meta.wearables.external.CameraAccess;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -747,12 +757,14 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CameraAccess.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CameraAccess";
 			};
 			name = Debug;
@@ -776,11 +788,13 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CameraAccess.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CameraAccess";
 			};
 			name = Release;

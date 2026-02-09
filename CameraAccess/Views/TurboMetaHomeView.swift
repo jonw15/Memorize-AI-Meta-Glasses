@@ -18,6 +18,7 @@ struct TurboMetaHomeView: View {
     @State private var showLeanEat = false
     @State private var showQuickVision = false
     @State private var showLiveTranslate = false
+    @State private var showLiveChat = false
 
     var body: some View {
         NavigationView {
@@ -49,6 +50,16 @@ struct TurboMetaHomeView: View {
 
                         // Feature Grid
                         VStack(spacing: AppSpacing.md) {
+                            // Live Chat
+                            FeatureCardWide(
+                                title: "home.livechat.title".localized,
+                                subtitle: "home.livechat.subtitle".localized,
+                                icon: "video.bubble.fill",
+                                gradient: [AppColors.liveChat, AppColors.liveChat.opacity(0.7)]
+                            ) {
+                                showLiveChat = true
+                            }
+
                             // Row 1
                             HStack(spacing: AppSpacing.md) {
                                 FeatureCard(
@@ -135,6 +146,9 @@ struct TurboMetaHomeView: View {
             }
             .fullScreenCover(isPresented: $showLiveTranslate) {
                 LiveTranslateView(streamViewModel: streamViewModel)
+            }
+            .fullScreenCover(isPresented: $showLiveChat) {
+                LiveChatView(streamViewModel: streamViewModel)
             }
         }
         .onAppear {

@@ -1,11 +1,10 @@
 /*
  * English Localization Strings
- * English Localization
  */
 
 // MARK: - App General
-"app.name" = "TurboMeta";
-"app.subtitle" = "RayBan Meta Assistant";
+"app.name" = "Aria Spark";
+"app.subtitle" = "DIY Assistant";
 "ok" = "OK";
 "cancel" = "Cancel";
 "close" = "Close";
@@ -413,3 +412,14 @@
 // Live Translate Home Card
 "home.translate.title" = "Live Translate";
 "home.translate.subtitle" = "18 Languages";
+
+// MARK: - Live Chat
+"home.livechat.title" = "Live Chat";
+"home.livechat.subtitle" = "Video Chat";
+"livechat.title" = "Live Chat";
+"livechat.new" = "New Room";
+"livechat.join" = "Join Room";
+"livechat.roomcode" = "Room Code";
+"livechat.entercode" = "Enter Room Code";
+"livechat.start" = "Start";
+"livechat.scanning" = "Scan to join";
