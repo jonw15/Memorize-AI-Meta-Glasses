@@ -89,6 +89,8 @@ struct WebRTCWebView: UIViewRepresentable {
         _ctx.fillRect(0, 0, 640, 480);
         var _stream = _canvas.captureStream(30);
 
+        var _localStreamId = null;
+
         var _origGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
 
         navigator.mediaDevices.getUserMedia = function(constraints) {
@@ -100,14 +102,35 @@ struct WebRTCWebView: UIViewRepresentable {
                     var combined = new MediaStream();
                     _stream.getVideoTracks().forEach(function(t) { combined.addTrack(t); });
                     audioStream.getAudioTracks().forEach(function(t) { combined.addTrack(t); });
+                    _localStreamId = combined.id;
                     return combined;
                 });
             } else if (needsVideo) {
-                return Promise.resolve(new MediaStream(_stream.getVideoTracks()));
+                var vs = new MediaStream(_stream.getVideoTracks());
+                _localStreamId = vs.id;
+                return Promise.resolve(vs);
             } else {
                 return _origGUM(constraints);
             }
         };
+
+        // Auto-mute any media element that receives the local stream
+        // to prevent mic audio from playing back through the phone speaker (echo)
+        var _srcObjDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'srcObject');
+        if (_srcObjDesc && _srcObjDesc.set) {
+            var _origSet = _srcObjDesc.set;
+            Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
+                set: function(stream) {
+                    _origSet.call(this, stream);
+                    if (stream && _localStreamId && stream.id === _localStreamId) {
+                        this.muted = true;
+                        this.volume = 0;
+                    }
+                },
+                get: _srcObjDesc.get,
+                configurable: true
+            });
+        }
 
         window.__updateGlassesFrame = function(b64) {
             var img = new Image();
@@ -129,13 +152,27 @@ struct WebRTCWebView: UIViewRepresentable {
         weak var webView: WKWebView?
         let streamViewModel: StreamSessionViewModel
         var frameTimer: Timer?
+        var routeChangeObserver: NSObjectProtocol?
 
         init(streamViewModel: StreamSessionViewModel) {
             self.streamViewModel = streamViewModel
+            super.init()
+
+            // Monitor audio route changes — WKWebView may override our Bluetooth route
+            routeChangeObserver = NotificationCenter.default.addObserver(
+                forName: AVAudioSession.routeChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.selectBluetoothRoute()
+            }
         }
 
         deinit {
             frameTimer?.invalidate()
+            if let observer = routeChangeObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
         }
 
         /// Route audio I/O through Bluetooth (glasses mic and speaker)
@@ -148,8 +185,30 @@ struct WebRTCWebView: UIViewRepresentable {
                     options: [.allowBluetooth]
                 )
                 try session.setActive(true)
+                selectBluetoothRoute()
             } catch {
                 print("⚠️ [LiveChat] Audio session config failed: \(error)")
+            }
+
+            // Re-apply after WKWebView has started WebRTC (it may override the route)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                self?.selectBluetoothRoute()
+            }
+        }
+
+        /// Explicitly select the Bluetooth HFP device as preferred audio input
+        private func selectBluetoothRoute() {
+            let session = AVAudioSession.sharedInstance()
+            guard let inputs = session.availableInputs else { return }
+            for input in inputs {
+                if input.portType == .bluetoothHFP {
+                    do {
+                        try session.setPreferredInput(input)
+                    } catch {
+                        print("⚠️ [LiveChat] Failed to set Bluetooth input: \(error)")
+                    }
+                    return
+                }
             }
         }
 
