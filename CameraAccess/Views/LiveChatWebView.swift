@@ -155,8 +155,14 @@ struct WebRTCWebView: UIViewRepresentable {
     static let getUserMediaOverrideJS = """
     (function() {
         // Hide web page controls — native SwiftUI buttons replace them
+        // Keep .callapp_local_video visible as a small preview in the top-right
         var _style = document.createElement('style');
-        _style.textContent = '.header, .callapp_local_video { display: none !important; }';
+        _style.textContent = '.header { display: none !important; }' +
+            '.callapp_local_video { position: fixed !important; top: 50px !important; right: 12px !important;' +
+            ' width: 120px !important; height: 90px !important; border-radius: 10px !important;' +
+            ' overflow: hidden !important; z-index: 9999 !important; border: 2px solid rgba(255,255,255,0.5) !important; }' +
+            '.callapp_local_video video, .callapp_local_video canvas' +
+            ' { width: 100% !important; height: 100% !important; object-fit: cover !important; }';
         document.documentElement.appendChild(_style);
 
         var _canvas = document.createElement('canvas');
