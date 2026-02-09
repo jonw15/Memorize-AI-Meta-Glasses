@@ -9,24 +9,99 @@ import SwiftUI
 import WebKit
 import AVFoundation
 
+// MARK: - WebView Bridge
+
+class WebViewBridge: ObservableObject {
+    weak var webView: WKWebView?
+
+    func toggleAudio() {
+        webView?.evaluateJavaScript("document.getElementById('toggle-audio').click();", completionHandler: nil)
+    }
+
+    func toggleVideo() {
+        webView?.evaluateJavaScript("document.getElementById('toggle-video').click();", completionHandler: nil)
+    }
+
+    func hangup() {
+        webView?.evaluateJavaScript("document.querySelector('.callapp_button').click();", completionHandler: nil)
+    }
+}
+
+// MARK: - Live Chat Web View
+
 struct LiveChatWebView: View {
     let roomCode: String
     @ObservedObject var streamViewModel: StreamSessionViewModel
     var onDismiss: () -> Void
+    @StateObject private var bridge = WebViewBridge()
+    @State private var isAudioMuted = false
+    @State private var isVideoPaused = false
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            WebRTCWebView(roomCode: roomCode, streamViewModel: streamViewModel)
+        ZStack {
+            WebRTCWebView(roomCode: roomCode, streamViewModel: streamViewModel, bridge: bridge)
                 .ignoresSafeArea()
 
-            Button(action: { onDismiss() }) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 32))
-                    .foregroundColor(.white)
-                    .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
+            // Top-left close button
+            VStack {
+                HStack {
+                    Button(action: { onDismiss() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 32))
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
+                    }
+                    .padding(.top, 56)
+                    .padding(.leading, AppSpacing.md)
+                    Spacer()
+                }
+                Spacer()
             }
-            .padding(.top, 56)
-            .padding(.leading, AppSpacing.md)
+
+            // Bottom call controls
+            VStack {
+                Spacer()
+                HStack(spacing: 32) {
+                    // Mute / Unmute Audio
+                    Button {
+                        bridge.toggleAudio()
+                        isAudioMuted.toggle()
+                    } label: {
+                        Image(systemName: isAudioMuted ? "mic.slash.fill" : "mic.fill")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 56, height: 56)
+                            .background(isAudioMuted ? Color.red.opacity(0.8) : Color.white.opacity(0.25))
+                            .clipShape(Circle())
+                    }
+
+                    // Hangup
+                    Button {
+                        onDismiss()
+                    } label: {
+                        Image(systemName: "phone.down.fill")
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 64, height: 64)
+                            .background(Color.red)
+                            .clipShape(Circle())
+                    }
+
+                    // Pause / Resume Video
+                    Button {
+                        bridge.toggleVideo()
+                        isVideoPaused.toggle()
+                    } label: {
+                        Image(systemName: isVideoPaused ? "video.slash.fill" : "video.fill")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 56, height: 56)
+                            .background(isVideoPaused ? Color.red.opacity(0.8) : Color.white.opacity(0.25))
+                            .clipShape(Circle())
+                    }
+                }
+                .padding(.bottom, 48)
+            }
         }
     }
 }
@@ -36,6 +111,7 @@ struct LiveChatWebView: View {
 struct WebRTCWebView: UIViewRepresentable {
     let roomCode: String
     let streamViewModel: StreamSessionViewModel
+    let bridge: WebViewBridge
 
     func makeCoordinator() -> Coordinator {
         Coordinator(streamViewModel: streamViewModel)
@@ -49,7 +125,7 @@ struct WebRTCWebView: UIViewRepresentable {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
 
-        // Inject getUserMedia override before page JS runs
+        // Inject getUserMedia override + CSS hiding before page JS runs
         let script = WKUserScript(
             source: Self.getUserMediaOverrideJS,
             injectionTime: .atDocumentStart,
@@ -62,6 +138,7 @@ struct WebRTCWebView: UIViewRepresentable {
         webView.navigationDelegate = context.coordinator
 
         context.coordinator.webView = webView
+        bridge.webView = webView
         context.coordinator.startFrameTimer()
 
         let urlString = "https://app.ariaspark.com/webrtc/?a=\(roomCode)&autostart=true"
@@ -81,6 +158,11 @@ struct WebRTCWebView: UIViewRepresentable {
     /// - Audio track comes from the glasses microphone (via Bluetooth, handled by AVAudioSession)
     static let getUserMediaOverrideJS = """
     (function() {
+        // Hide web page controls — native SwiftUI buttons replace them
+        var _style = document.createElement('style');
+        _style.textContent = '.header, .callapp_local_video { display: none !important; }';
+        document.documentElement.appendChild(_style);
+
         var _canvas = document.createElement('canvas');
         _canvas.width = 640;
         _canvas.height = 480;
@@ -182,7 +264,7 @@ struct WebRTCWebView: UIViewRepresentable {
                 try session.setCategory(
                     .playAndRecord,
                     mode: .voiceChat,
-                    options: [.allowBluetooth]
+                    options: [.allowBluetoothHFP]
                 )
                 try session.setActive(true)
                 selectBluetoothRoute()
