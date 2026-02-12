@@ -202,13 +202,6 @@ struct SettingsView: View {
                     Text("settings.liveai".localized)
                 }
 
-                // About
-                Section {
-                    InfoRow(title: "settings.version".localized, value: "1.5.0")
-                    InfoRow(title: "settings.sdkversion".localized, value: "0.3.0")
-                } header: {
-                    Text("settings.about".localized)
-                }
             }
             .navigationTitle("settings.title".localized)
             .sheet(isPresented: $showAPIKeySettings) {

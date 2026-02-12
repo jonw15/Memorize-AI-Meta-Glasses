@@ -27,7 +27,7 @@ Aria Spark is a multimodal AI assistant for RayBan Meta smart glasses. It has tw
 Both platforms follow **MVVM** with matching layer structures:
 
 ### iOS (CameraAccess/)
-- **Entry**: `TurboMetaApp.swift` → configures `Wearables` SDK → `MainAppView` → `RegistrationView` (pairing) or `MainTabView` (4 tabs: Home, Records, Gallery, Settings)
+- **Entry**: `AriaApp.swift` → configures `Wearables` SDK → `MainAppView` → `RegistrationView` (pairing) or `MainTabView` (4 tabs: Home, Records, Gallery, Settings)
 - **ViewModels/**: `WearablesViewModel` (device connection), `StreamSessionViewModel` (camera stream), `OmniRealtimeViewModel` (Live AI), `LeanEatViewModel`, `VisionRecognitionViewModel`, `RTMPStreamingViewModel`, `LiveTranslateViewModel`
 - **Views/**: `LiveChatView.swift` (room create/join UI) + `LiveChatWebView.swift` (WKWebView with JS getUserMedia override, streams glasses frames via canvas.captureStream, routes audio through Bluetooth AVAudioSession)
 - **Services/**: Each feature has a dedicated service — `GeminiLiveService` (Gemini Live real-time voice API), `VisionAPIService`, `LeanEatService`, `QuickVisionService`, `TTSService`, `RTMPStreamingService`, `LiveTranslateService`, `ConversationStorage`, `QuickVisionStorage`
@@ -37,8 +37,8 @@ Both platforms follow **MVVM** with matching layer structures:
 - **Utilities/**: `DesignSystem.swift` defines `AppColors` and shared UI constants
 - **Localization**: `en.lproj/Localizable.strings` and `zh-Hans.lproj/Localizable.strings`, accessed via `"key".localized`
 
-### Android (android/app/src/main/java/com/turbometa/rayban/)
-- **Entry**: `MainActivity` → initializes DAT SDK, requests permissions → `TurboMetaNavigation` (Compose navigation)
+### Android (android/app/src/main/java/com/ariaspark/metawearables/)
+- **Entry**: `MainActivity` → initializes DAT SDK, requests permissions → `AriaNavigation` (Compose navigation)
 - **viewmodels/**: Mirrors iOS ViewModels — `WearablesViewModel`, `OmniRealtimeViewModel`, `LeanEatViewModel`, `VisionViewModel`, `RTMPStreamingViewModel`, `RecordsViewModel`, `SettingsViewModel`
 - **services/**: `GeminiLiveService`, `VisionAPIService`, `LeanEatService`, `QuickVisionService`, `RTMPStreamingService`, `PorcupineWakeWordService`
 - **managers/**: `APIProviderManager`, `LanguageManager`, `LiveAIModeManager`, `QuickVisionModeManager`
@@ -104,7 +104,7 @@ Strings use key-based localization (`"key".localized` on iOS). When adding user-
 ## Important Notes
 
 - The Xcode project is `CameraAccess.xcodeproj` (not a workspace) — the original project name from Meta's sample code
-- The app module is called `CameraAccess` in Xcode but the app itself is `TurboMeta`
+- The app module is called `CameraAccess` in Xcode but the app itself is `Aria`
 - Android DAT SDK dependency requires GitHub Packages authentication (see `android/settings.gradle.kts`)
 - `.gitignore` blocks `*APIKey*.swift` and `*Secret*.swift` files — API keys must not be committed
 - Some comments in the codebase are in Chinese (the primary audience is Chinese-speaking users)

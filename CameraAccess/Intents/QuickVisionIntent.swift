@@ -132,7 +132,7 @@ private func formatResult(_ manager: QuickVisionManager) -> some IntentResult & 
 // MARK: - App Shortcuts Provider
 
 @available(iOS 16.0, *)
-struct TurboMetaShortcuts: AppShortcutsProvider {
+struct AriaShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         // Quick Vision
         AppShortcut(

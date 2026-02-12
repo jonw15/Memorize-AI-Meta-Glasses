@@ -1,4 +1,4 @@
-# TurboMeta - RayBan Meta Smart Glasses AI Assistant
+# Aria - RayBan Meta Smart Glasses AI Assistant
 ---
 
 ## 🎉 Major Update v1.5.0
@@ -8,8 +8,6 @@
 ### 🧠 Live AI Multi-Mode + Quick Vision Multi-Mode
 
 **Museum guide, accessibility assistant, reading mode, real-time translation - one pair of glasses, endless possibilities!**
-
-✅ **iOS v1.5.0** | 📱 **Android v1.5.0** [Download](https://github.com/Turbo1123/turbometa-rayban-ai/releases)
 
 </div>
 
@@ -47,7 +45,7 @@
 
 Due to Meta DAT SDK limitations, the app cannot directly access the glasses camera in the background. We innovatively combined **Siri Shortcuts + App Intent + TTS** to achieve this feature:
 
-- 📱 **Siri Voice Wake-up**: Just say "Hey Siri, TurboMeta Quick Vision"
+- 📱 **Siri Voice Wake-up**: Just say "Hey Siri, Aria Quick Vision"
 - ⌚ **Action Button Trigger** (iPhone 15 Pro+): One-tap Quick Vision
 - 🔊 **Voice Result Announcement**: High-quality text-to-speech result announcement
 - 🎯 **Fully Automated**: Start stream → Capture → Stop stream → AI Recognition → TTS Announcement
@@ -89,7 +87,7 @@ Due to Meta DAT SDK limitations, the app cannot directly access the glasses came
 
 ### ⚠️ Important: Enable Developer Mode First!
 
-Before using TurboMeta, you **MUST** enable developer mode in Meta AI App:
+Before using Aria, you **MUST** enable developer mode in Meta AI App:
 
 1. **Update RayBan Meta glasses firmware to version 20+** (required for DAT SDK)
 2. **Update Meta AI App to the latest version**
@@ -105,8 +103,6 @@ Before using TurboMeta, you **MUST** enable developer mode in Meta AI App:
 
 ### 📱 Android
 
-👉 [**Go to Downloads**](https://github.com/Turbo1123/turbometa-rayban-ai/releases)
-
 **Android Installation:**
 1. Download APK file
 2. Enable "Install from unknown sources" in Settings
@@ -119,8 +115,6 @@ Before using TurboMeta, you **MUST** enable developer mode in Meta AI App:
 ### 🍎 iOS (Recommended)
 
 > ✅ Supports bilingual UI, OpenRouter, Gemini, RTMP streaming
-
-👉 [**Go to Downloads**](https://github.com/Turbo1123/turbometa-rayban-ai/releases)
 
 **iOS Installation Methods:**
 
@@ -147,13 +141,13 @@ Before using TurboMeta, you **MUST** enable developer mode in Meta AI App:
 
 **Step 4**: On iPhone, go to **Settings → General → VPN & Device Management**, trust the developer certificate
 
-**Step 5**: Open TurboMeta and configure your Google AI Studio API Key in Settings 👉 [See Configuration Guide](#api-key-config)
+**Step 5**: Open Aria and configure your Google AI Studio API Key in Settings 👉 [See Configuration Guide](#api-key-config)
 
 ---
 
 ## 📖 Introduction
 
-TurboMeta is a full-featured multimodal AI assistant built exclusively for RayBan Meta smart glasses, powered by Google AI Studio's Gemini multimodal AI models:
+Aria is a full-featured multimodal AI assistant built exclusively for RayBan Meta smart glasses, powered by Google AI Studio's Gemini multimodal AI models:
 
 - 🎯 **Live AI Conversations**: Real-time multimodal interaction through glasses camera and microphone
 - 🍎 **Smart Nutrition Analysis**: Capture food photos and get detailed nutritional information and health recommendations
@@ -288,13 +282,13 @@ ios-deploy --bundle YourApp.app
 1. Open Meta View App
 2. Pair your RayBan Meta glasses
 3. Ensure Bluetooth is enabled
-4. Return to TurboMeta App and wait for connection success
+4. Return to Aria App and wait for connection success
 
 ## 📱 Usage Guide
 
 ### First-time Use
 
-1. Launch TurboMeta App
+1. Launch Aria App
 2. Ensure RayBan Meta glasses are paired and turned on
 3. Wait for device connection (status shown at top)
 4. Select the feature you want to use
@@ -342,9 +336,9 @@ Quick Vision allows you to quickly identify objects in front of you through Siri
 
 ### 📋 Prerequisites
 
-1. ✅ TurboMeta App installed and API Key configured
+1. ✅ Aria App installed and API Key configured
 2. ✅ RayBan Meta glasses paired and turned on
-3. ✅ Open TurboMeta App once for first-time initialization
+3. ✅ Open Aria App once for first-time initialization
 
 ### 🔧 Setting Up Shortcuts
 
@@ -353,7 +347,7 @@ Quick Vision allows you to quickly identify objects in front of you through Siri
 1. Open the **Shortcuts** app on iPhone
 2. Tap **+** in the top right to create a new shortcut
 3. Tap **Add Action**
-4. Search for **TurboMeta** or **Turbo Meta**
+4. Search for **Aria**
 5. Select **Quick Vision** action
 6. Tap the shortcut name at the top to rename it (e.g., "Quick Vision", "What's This")
 7. Tap **Done** to save
@@ -365,7 +359,7 @@ Quick Vision allows you to quickly identify objects in front of you through Siri
 <details>
 <summary>📸 Click to view setup screenshots</summary>
 
-1. Search for TurboMeta in Shortcuts app
+1. Search for Aria in Shortcuts app
 2. Add "Quick Vision" action
 3. Rename the shortcut
 
@@ -377,7 +371,7 @@ If you have iPhone 15 Pro / 15 Pro Max / 16 series, you can bind Quick Vision to
 
 1. Open **Settings** → **Action Button**
 2. Select **Shortcut**
-3. Choose your TurboMeta Quick Vision shortcut
+3. Choose your Aria Quick Vision shortcut
 4. Done!
 
 **How to Use**:
@@ -389,7 +383,7 @@ If you have iPhone 15 Pro / 15 Pro Max / 16 series, you can bind Quick Vision to
 1. Long press on the lock screen to enter edit mode
 2. Tap **Customize**
 3. Add **Shortcuts** widget to the lock screen widget area
-4. Select TurboMeta Quick Vision shortcut
+4. Select Aria Quick Vision shortcut
 5. Tap Done
 
 **How to Use**:
@@ -423,15 +417,15 @@ Siri/Shortcut Trigger
 **Q: Why does it say "Glasses not connected"?**
 - Ensure glasses are on and paired with Meta View App
 - Make sure developer mode is enabled
-- Try reopening TurboMeta App
+- Try reopening Aria App
 
 **Q: Why is there no sound?**
 - Check if phone is on silent mode
 - Check Bluetooth audio output settings
 - TTS requires network connection
 
-**Q: Can't find TurboMeta in Shortcuts?**
-- Open TurboMeta App at least once after installation
+**Q: Can't find Aria in Shortcuts?**
+- Open Aria App at least once after installation
 - Try restarting your phone
 
 ---
@@ -456,7 +450,7 @@ Customize AI response style through **Settings** → **Live AI Settings** or **Q
 **Solutions**:
 1. Ensure glasses are successfully paired in Meta View App
 2. Check if Bluetooth is enabled
-3. Restart TurboMeta App
+3. Restart Aria App
 4. Restart glasses (place in charging case)
 5. Ensure developer mode is enabled
 
@@ -564,7 +558,7 @@ Please see [LICENSE](LICENSE) file for details.
 # Then execute in your project directory:
 git init
 git add .
-git commit -m "Initial commit: TurboMeta - RayBan Meta AI Assistant"
+git commit -m "Initial commit: Aria - RayBan Meta AI Assistant"
 git branch -M main
 git remote add origin https://github.com/your-username/your-repo.git
 git push -u origin main
@@ -632,7 +626,7 @@ This project is based on Meta DAT SDK sample code and follows the original proje
 4. Copy the generated API Key
 
 #### Step 3: Configure in App
-1. Open TurboMeta App
+1. Open Aria App
 2. Go to "**Settings**" → "**API Key Management**"
 3. Paste your API Key and save
 

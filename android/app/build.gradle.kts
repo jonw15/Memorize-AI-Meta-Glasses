@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.turbometa.rayban"
+    namespace = "com.ariaspark.metawearables"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.turbometa.rayban"
+        applicationId = "com.ariaspark.metawearables"
         minSdk = 31
         targetSdk = 34
         versionCode = 4

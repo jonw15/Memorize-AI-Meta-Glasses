@@ -4,7 +4,7 @@
  */
 
 // MARK: - App General
-"app.name" = "TurboMeta";
+"app.name" = "Aria";
 "app.subtitle" = "RayBan Meta助手";
 "ok" = "确定";
 "cancel" = "取消";
@@ -59,7 +59,7 @@
 "quickvision.glasses.notconnected" = "眼镜未连接";
 "quickvision.siri.tip.title" = "Siri 快捷指令";
 "quickvision.siri.tip.description" = "你可以通过以下方式触发快速识图：";
-"quickvision.siri.tip.voice" = "嘿 Siri，用 TurboMeta 识图";
+"quickvision.siri.tip.voice" = "嘿 Siri，用 Aria 识图";
 "quickvision.siri.tip.action" = "添加到快捷指令 App 的锁屏小组件";
 "quickvision.siri.support" = "支持 Siri 和快捷指令";
 "quickvision.stop.speaking" = "停止播报";

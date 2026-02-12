@@ -14,7 +14,7 @@ import HaishinKit
 import RTMPHaishinKit
 import os.log
 
-private let logger = Logger(subsystem: "com.turbometa.rayban", category: "RTMPStreaming")
+private let logger = Logger(subsystem: "com.ariaspark.metawearables", category: "RTMPStreaming")
 
 // MARK: - Streaming State
 

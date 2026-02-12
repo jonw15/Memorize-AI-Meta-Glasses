@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>TurboMeta</string>
+	<string>Aria</string>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
@@ -27,7 +27,7 @@
 			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>turbometa</string>
+				<string>aria</string>
 			</array>
 		</dict>
 	</array>
@@ -40,7 +40,7 @@
 	<key>MWDAT</key>
 	<dict>
 		<key>AppLinkURLScheme</key>
-		<string>turbometa://</string>
+		<string>aria://</string>
 		<key>ClientToken</key>
 		<string>$(CLIENT_TOKEN)</string>
 		<key>MetaAppID</key>

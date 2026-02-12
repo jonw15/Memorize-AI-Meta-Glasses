@@ -9,7 +9,7 @@
 //
 // StatusText.swift
 //
-// Reusable UI component for displaying conditional status text throughout the TurboMeta app.
+// Reusable UI component for displaying conditional status text throughout the Aria app.
 //
 
 import SwiftUI

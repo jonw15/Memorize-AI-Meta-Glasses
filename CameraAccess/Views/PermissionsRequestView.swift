@@ -35,7 +35,7 @@ struct PermissionsRequestView: View {
                         .font(AppTypography.title)
                         .foregroundColor(AppColors.textPrimary)
 
-                    Text("TurboMeta needs the following permissions to work properly")
+                    Text("Aria needs the following permissions to work properly")
                         .font(AppTypography.body)
                         .foregroundColor(AppColors.textSecondary)
                         .multilineTextAlignment(.center)

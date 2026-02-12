@@ -9,7 +9,7 @@
 //
 // TimeUtils.swift
 //
-// Utility for managing streaming time limits in the TurboMeta app.
+// Utility for managing streaming time limits in the Aria app.
 //
 
 import Foundation

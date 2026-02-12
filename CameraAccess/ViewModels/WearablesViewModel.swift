@@ -9,7 +9,7 @@
 //
 // WearablesViewModel.swift
 //
-// Primary view model for the TurboMeta app that manages DAT SDK integration.
+// Primary view model for the Aria app that manages DAT SDK integration.
 // Demonstrates how to listen to device availability changes using the DAT SDK's
 // device stream functionality and handle permission requests.
 //

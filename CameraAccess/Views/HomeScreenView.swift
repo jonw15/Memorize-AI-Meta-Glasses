@@ -37,7 +37,7 @@ struct HomeScreenView: View {
       VStack(spacing: AppSpacing.xl) {
         Spacer()
 
-        // TurboMeta Logo
+        // Aria Logo
         VStack(spacing: AppSpacing.md) {
           Image(.cameraAccessIcon)
             .resizable()
@@ -45,7 +45,7 @@ struct HomeScreenView: View {
             .frame(width: 100)
             .shadow(color: AppShadow.medium(), radius: 10, x: 0, y: 5)
 
-          Text("TurboMeta")
+          Text("Aria")
             .font(AppTypography.largeTitle)
             .foregroundColor(AppColors.textPrimary)
 
@@ -132,7 +132,7 @@ struct HomeScreenView: View {
               Text("Connected Successfully")
                 .font(AppTypography.headline)
                 .foregroundColor(.white)
-              Text("Entering TurboMeta...")
+              Text("Entering Aria...")
                 .font(AppTypography.caption)
                 .foregroundColor(.white.opacity(0.9))
             }

@@ -26,7 +26,7 @@
 -keep class * implements com.google.gson.JsonDeserializer
 
 # Keep data models
--keep class com.turbometa.rayban.models.** { *; }
+-keep class com.ariaspark.metawearables.models.** { *; }
 
 # Keep OkHttp
 -dontwarn okhttp3.**

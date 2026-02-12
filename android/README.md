@@ -1,4 +1,4 @@
-# TurboMeta Ray-Ban AI - Android
+# Aria Ray-Ban AI - Android
 
 **Version 1.5.0**
 
@@ -42,7 +42,7 @@ AI assistant for Ray-Ban Meta smart glasses - Android version.
 
 ### Developer Mode Required
 
-Before using TurboMeta, you **must** enable developer mode in the Meta AI App:
+Before using Aria, you **must** enable developer mode in the Meta AI App:
 
 1. Update Ray-Ban Meta glasses firmware to version 20+
 2. Update Meta AI App to the latest version

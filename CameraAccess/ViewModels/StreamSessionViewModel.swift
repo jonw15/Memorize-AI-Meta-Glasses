@@ -19,7 +19,7 @@ import MWDATCore
 import SwiftUI
 import os.log
 
-private let logger = Logger(subsystem: "com.turbometa.rayban", category: "StreamSession")
+private let logger = Logger(subsystem: "com.ariaspark.metawearables", category: "StreamSession")
 
 enum StreamingStatus {
   case streaming

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">TurboMeta</string>
+    <string name="app_name">Aria</string>
 
     <!-- Navigation / Tabs -->
     <string name="home">首页</string>
@@ -14,7 +14,7 @@
     <string name="vision_recognition">视觉识别</string>
 
     <!-- Home Screen -->
-    <string name="home_welcome">欢迎使用 TurboMeta</string>
+    <string name="home_welcome">欢迎使用 Aria</string>
     <string name="home_subtitle">RayBan Meta助手</string>
     <string name="home_connect_glasses">连接 Ray-Ban Meta</string>
     <string name="features">功能</string>

@@ -60,7 +60,7 @@
 		4BA57AEA2EF8227E002EC214 /* OmniRealtimeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA57A9D2EF8227E002EC214 /* OmniRealtimeViewModel.swift */; };
 		4BA57AEB2EF8227E002EC214 /* GalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA57AAE2EF8227E002EC214 /* GalleryView.swift */; };
 		4BA57AEC2EF8227E002EC214 /* MockDeviceCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA57AA82EF8227E002EC214 /* MockDeviceCardView.swift */; };
-		4BA57AED2EF8227E002EC214 /* TurboMetaHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA57ABD2EF8227E002EC214 /* TurboMetaHomeView.swift */; };
+		4BA57AED2EF8227E002EC214 /* AriaHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA57ABD2EF8227E002EC214 /* AriaHomeView.swift */; };
 		4BA57AEF2EF8227E002EC214 /* HomeScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA57AAF2EF8227E002EC214 /* HomeScreenView.swift */; };
 		4BA57AF02EF8227E002EC214 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4BA57A882EF8227E002EC214 /* Localizable.strings */; };
 		4BA57AF12EF8227E002EC214 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4BA57AC12EF8227E002EC214 /* Localizable.strings */; };
@@ -73,7 +73,7 @@
 		6FE225749B8E795D8D265971 /* QuickVisionStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F490219E64EC144DAF8A8C /* QuickVisionStorage.swift */; };
 		759D8C3F84F44478678CA613 /* LiveAIManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC72379319F7F8AAF8019018 /* LiveAIManager.swift */; };
 		8AAC01AA9E2C673BDDD9C7C5 /* QuickVisionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 414A2AC7E8B825BC1B4DB93F /* QuickVisionModels.swift */; };
-		8FD96B7F2E6F0A9800F56AB1 /* TurboMetaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FD96B792E6F0A9800F56AB1 /* TurboMetaApp.swift */; };
+		8FD96B7F2E6F0A9800F56AB1 /* AriaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FD96B792E6F0A9800F56AB1 /* AriaApp.swift */; };
 		8FD96B8D2E6F0A9800F56AB1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8FD96B772E6F0A9800F56AB1 /* Assets.xcassets */; };
 		8FD96B952E6F0F7D00F56AB1 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8FD96B942E6F0F7D00F56AB1 /* MWDATCore */; };
 		8FD96B952E6F0F7D00F56AB2 /* MWDATCamera in Frameworks */ = {isa = PBXBuildFile; productRef = 8FD96B942E6F0F7D00F56AB2 /* MWDATCamera */; };
@@ -170,7 +170,7 @@
 		4BA57ABA2EF8227E002EC214 /* SimpleLiveStreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleLiveStreamView.swift; sourceTree = "<group>"; };
 		4BA57ABB2EF8227E002EC214 /* StreamSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamSessionView.swift; sourceTree = "<group>"; };
 		4BA57ABC2EF8227E002EC214 /* StreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamView.swift; sourceTree = "<group>"; };
-		4BA57ABD2EF8227E002EC214 /* TurboMetaHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurboMetaHomeView.swift; sourceTree = "<group>"; };
+		4BA57ABD2EF8227E002EC214 /* AriaHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AriaHomeView.swift; sourceTree = "<group>"; };
 		4BA57ABE2EF8227E002EC214 /* VisionRecognitionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionRecognitionView.swift; sourceTree = "<group>"; };
 		4BA57AC02EF8227E002EC214 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = Localizable.strings; sourceTree = "<group>"; };
 		4BA57AF22EF823ED002EC214 /* PermissionsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsManager.swift; sourceTree = "<group>"; };
@@ -184,8 +184,8 @@
 		63EB4C91D8E0C8AC944DF95A /* GeminiLiveService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GeminiLiveService.swift; sourceTree = "<group>"; };
 		6B037E0156E90DE2314A9F47 /* QuickVisionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickVisionView.swift; sourceTree = "<group>"; };
 		8FD96B772E6F0A9800F56AB1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		8FD96B782E6F0A9800F56AB1 /* TurboMeta.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TurboMeta.entitlements; sourceTree = "<group>"; };
-		8FD96B792E6F0A9800F56AB1 /* TurboMetaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurboMetaApp.swift; sourceTree = "<group>"; };
+		8FD96B782E6F0A9800F56AB1 /* Aria.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Aria.entitlements; sourceTree = "<group>"; };
+		8FD96B792E6F0A9800F56AB1 /* AriaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AriaApp.swift; sourceTree = "<group>"; };
 		8FD96B7B2E6F0A9800F56AB1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C7F490219E64EC144DAF8A8C /* QuickVisionStorage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickVisionStorage.swift; sourceTree = "<group>"; };
 		CA3E36CE337855A7F17F2AC8 /* QuickVisionService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickVisionService.swift; sourceTree = "<group>"; };
@@ -381,7 +381,7 @@
 				4BA57ABA2EF8227E002EC214 /* SimpleLiveStreamView.swift */,
 				4BA57ABB2EF8227E002EC214 /* StreamSessionView.swift */,
 				4BA57ABC2EF8227E002EC214 /* StreamView.swift */,
-				4BA57ABD2EF8227E002EC214 /* TurboMetaHomeView.swift */,
+				4BA57ABD2EF8227E002EC214 /* AriaHomeView.swift */,
 				4BA57ABE2EF8227E002EC214 /* VisionRecognitionView.swift */,
 				6B037E0156E90DE2314A9F47 /* QuickVisionView.swift */,
 				330AF93394A09D97C504F568 /* QuickVisionSettingsView.swift */,
@@ -439,8 +439,8 @@
 				4BA57ABF2EF8227E002EC214 /* Views */,
 				4BA57AC22EF8227E002EC214 /* zh-Hans.lproj */,
 				8FD96B772E6F0A9800F56AB1 /* Assets.xcassets */,
-				8FD96B782E6F0A9800F56AB1 /* TurboMeta.entitlements */,
-				8FD96B792E6F0A9800F56AB1 /* TurboMetaApp.swift */,
+				8FD96B782E6F0A9800F56AB1 /* Aria.entitlements */,
+				8FD96B792E6F0A9800F56AB1 /* AriaApp.swift */,
 				8FD96B7B2E6F0A9800F56AB1 /* Info.plist */,
 				2BDC3665CD11E348EEEBA8F7 /* Intents */,
 				1F487DDEA091C1D0291D50B1 /* Managers */,
@@ -562,7 +562,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8FD96B7F2E6F0A9800F56AB1 /* TurboMetaApp.swift in Sources */,
+				8FD96B7F2E6F0A9800F56AB1 /* AriaApp.swift in Sources */,
 				4BA57AC32EF8227E002EC214 /* ConversationDetailView.swift in Sources */,
 				4BA57AC42EF8227E002EC214 /* CircleButton.swift in Sources */,
 				4BA57AC52EF8227E002EC214 /* CustomButton.swift in Sources */,
@@ -610,7 +610,7 @@
 				4BA57AEA2EF8227E002EC214 /* OmniRealtimeViewModel.swift in Sources */,
 				4BA57AEB2EF8227E002EC214 /* GalleryView.swift in Sources */,
 				4BA57AEC2EF8227E002EC214 /* MockDeviceCardView.swift in Sources */,
-				4BA57AED2EF8227E002EC214 /* TurboMetaHomeView.swift in Sources */,
+				4BA57AED2EF8227E002EC214 /* AriaHomeView.swift in Sources */,
 				4BA57AEF2EF8227E002EC214 /* HomeScreenView.swift in Sources */,
 				4BB5DFF32F06C07A00AF7BD0 /* LiveAISettingsView.swift in Sources */,
 				05043536CDB06C0B88B3C4D9 /* TTSService.swift in Sources */,
@@ -683,7 +683,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = CameraAccess/TurboMeta.entitlements;
+				CODE_SIGN_ENTITLEMENTS = CameraAccess/Aria.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -718,7 +718,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = CameraAccess/TurboMeta.entitlements;
+				CODE_SIGN_ENTITLEMENTS = CameraAccess/Aria.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
