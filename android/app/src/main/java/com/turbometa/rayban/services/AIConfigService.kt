@@ -7,7 +7,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.turbometa.rayban.managers.APIProviderManager
 import com.turbometa.rayban.utils.APIKeyManager
-import com.turbometa.rayban.utils.LiveAIConfig
+import com.turbometa.rayban.utils.AIConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -20,13 +20,13 @@ import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * Live AI Config Service
- * Fetches encrypted Live AI configuration from server and decrypts it
+ * AI Config Service
+ * Fetches encrypted AI configuration from server and decrypts it
  * Protocol: POST {API_APP}/config/get → AES-256-CBC decrypt → { key, url, model }
  */
-object LiveAIConfigService {
+object AIConfigService {
 
-    private const val TAG = "LiveAIConfig"
+    private const val TAG = "AIConfig"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -42,13 +42,13 @@ object LiveAIConfigService {
     )
 
     /**
-     * Fetches and decrypts Live AI config from the server, then stores it.
+     * Fetches and decrypts AI config from the server, then stores it.
      */
     suspend fun fetchConfig(context: Context): ConfigResult? = withContext(Dispatchers.IO) {
         try {
-            val url = "${LiveAIConfig.API_APP}/config/get"
+            val url = "${AIConfig.API_APP}/config/get"
 
-            val body = gson.toJson(mapOf("id" to LiveAIConfig.CONFIG_ID_AI_LIVE))
+            val body = gson.toJson(mapOf("id" to AIConfig.CONFIG_ID_AI_LIVE))
             val requestBody = body.toRequestBody("application/json".toMediaType())
 
             val request = Request.Builder()
@@ -77,7 +77,7 @@ object LiveAIConfigService {
             val encryptedBase64 = content.substring(44)
 
             // Decrypt
-            val decrypted = decrypt(encryptedBase64, keyBase64, LiveAIConfig.CONFIG_IV)
+            val decrypted = decrypt(encryptedBase64, keyBase64, AIConfig.CONFIG_IV)
             if (decrypted == null) {
                 Log.e(TAG, "Decryption failed")
                 return@withContext null

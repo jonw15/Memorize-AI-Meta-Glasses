@@ -2,7 +2,7 @@ package com.turbometa.rayban
 
 import android.app.Application
 import android.util.Log
-import com.turbometa.rayban.services.LiveAIConfigService
+import com.turbometa.rayban.services.AIConfigService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -12,12 +12,12 @@ class TurboMetaApplication : Application() {
         super.onCreate()
         instance = this
 
-        // Auto-fetch Live AI config from server
+        // Auto-fetch AI config from server
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                LiveAIConfigService.fetchConfig(this@TurboMetaApplication)
+                AIConfigService.fetchConfig(this@TurboMetaApplication)
             } catch (e: Exception) {
-                Log.e("TurboMeta", "Live AI config fetch failed: ${e.message}")
+                Log.e("TurboMeta", "AI config fetch failed: ${e.message}")
             }
         }
     }

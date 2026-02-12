@@ -90,8 +90,8 @@
 		LT0003000300030003 /* LiveTranslateViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1003000300030003 /* LiveTranslateViewModel.swift */; };
 		LT0004000400040004 /* LiveTranslateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1004000400040004 /* LiveTranslateView.swift */; };
 		LT0005000500050005 /* LiveTranslateSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1005000500050005 /* LiveTranslateSettingsView.swift */; };
-		LA0001000100010001 /* LiveAIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA1001000100010001 /* LiveAIConfig.swift */; };
-		LA0002000200020002 /* LiveAIConfigService.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA1002000200020002 /* LiveAIConfigService.swift */; };
+		LA0001000100010001 /* AIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA1001000100010001 /* AIConfig.swift */; };
+		LA0002000200020002 /* AIConfigService.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA1002000200020002 /* AIConfigService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -198,8 +198,8 @@
 		LT1003000300030003 /* LiveTranslateViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateViewModel.swift; sourceTree = "<group>"; };
 		LT1004000400040004 /* LiveTranslateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateView.swift; sourceTree = "<group>"; };
 		LT1005000500050005 /* LiveTranslateSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateSettingsView.swift; sourceTree = "<group>"; };
-		LA1001000100010001 /* LiveAIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAIConfig.swift; sourceTree = "<group>"; };
-		LA1002000200020002 /* LiveAIConfigService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAIConfigService.swift; sourceTree = "<group>"; };
+		LA1001000100010001 /* AIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfig.swift; sourceTree = "<group>"; };
+		LA1002000200020002 /* AIConfigService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfigService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -285,7 +285,7 @@
 				63EB4C91D8E0C8AC944DF95A /* GeminiLiveService.swift */,
 				C7F490219E64EC144DAF8A8C /* QuickVisionStorage.swift */,
 				LT1002000200020002 /* LiveTranslateService.swift */,
-				LA1002000200020002 /* LiveAIConfigService.swift */,
+				LA1002000200020002 /* AIConfigService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -304,7 +304,7 @@
 				4BA57AF22EF823ED002EC214 /* PermissionsManager.swift */,
 				4BA57A952EF8227E002EC214 /* APIKeyManager.swift */,
 				4BA57A962EF8227E002EC214 /* TimeUtils.swift */,
-				LA1001000100010001 /* LiveAIConfig.swift */,
+				LA1001000100010001 /* AIConfig.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -635,8 +635,8 @@
 				LT0005000500050005 /* LiveTranslateSettingsView.swift in Sources */,
 				LC0001000100010001 /* LiveChatView.swift in Sources */,
 				LC0002000200020002 /* LiveChatWebView.swift in Sources */,
-				LA0001000100010001 /* LiveAIConfig.swift in Sources */,
-				LA0002000200020002 /* LiveAIConfigService.swift in Sources */,
+				LA0001000100010001 /* AIConfig.swift in Sources */,
+				LA0002000200020002 /* AIConfigService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

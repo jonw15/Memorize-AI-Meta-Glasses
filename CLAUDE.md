@@ -52,20 +52,19 @@ Both platforms follow **MVVM** with matching layer structures:
 - `WearablesViewModel` is the central hub for device state across both platforms
 
 ### AI Service Communication
-- **GeminiLiveService**: WebSocket connection to Gemini Live API for real-time audio+video AI chat. The API key, WebSocket URL, and model are auto-fetched from a config server on app launch (`LiveAIConfigService`), decrypted via AES-256-CBC, and stored in `APIProviderManager`. Falls back to hardcoded defaults if server is unreachable.
-- **LiveAIConfigService**: Fetches encrypted config from `{API_APP}/config/get`, decrypts it (AES-256-CBC with PKCS7), extracts `key`, `url`, `model`. To configure, set the three placeholder values in `CameraAccess/Utils/LiveAIConfig.swift` (iOS) and `android/.../utils/LiveAIConfig.kt` (Android) — both files must have identical values:
+- **GeminiLiveService**: WebSocket connection to Gemini Live API for real-time audio+video AI chat
+- **AIConfigService**: Fetches encrypted config from `{API_APP}/config/get`, decrypts it (AES-256-CBC with PKCS7), extracts `key`, `url`, `model`. All Gemini AI services (Live AI, Vision, LeanEat, QuickVision) share the same auto-fetched API key. To configure, set the three constants in `CameraAccess/Utils/AIConfig.swift` (iOS) and `android/.../utils/AIConfig.kt` (Android) — both files must have identical values:
   - `apiApp` / `API_APP` — server base URL (the part before `/config/get`)
   - `configIdAILive` / `CONFIG_ID_AI_LIVE` — the config ID sent as `{ "id": "..." }` in the POST body
   - `configIV` / `CONFIG_IV` — pre-shared AES IV (Base64), corresponds to `configKey.key` in the C# reference
 - **VisionAPIService**: REST calls to Google AI Studio or OpenRouter (OpenAI-compatible `/v1/chat/completions` endpoint) using `gemini-2.5-flash` or configurable models
-- Vision API keys stored in iOS Keychain (`APIKeyManager`) / Android EncryptedSharedPreferences; Live AI key auto-fetched from server
 
 ### API Configuration
-- Live AI config (API key, WebSocket URL, model) is auto-fetched from a config server on app launch via `LiveAIConfigService` — there is no manual key entry UI
-- The API key has **no fallback** — if the server fetch fails, Live AI will not work
-- The WebSocket URL and model have hardcoded fallback defaults in `APIProviderManager` (standard Gemini endpoint and model)
+- A single API key is auto-fetched from a config server on app launch via `AIConfigService` and shared by all Gemini AI services (Live AI, Vision, LeanEat, QuickVision)
+- The API key has **no fallback** — if the server fetch fails, AI features will not work
+- The Live AI WebSocket URL and model have hardcoded fallback defaults in `APIProviderManager` (standard Gemini endpoint and model)
 - Provider selection, model settings, and API key management are all hidden from end users in Settings
-- The three configurable server constants live in `LiveAIConfig.swift` (iOS) / `LiveAIConfig.kt` (Android) — see `LiveAIConfigService` above for details
+- The three configurable server constants live in `AIConfig.swift` (iOS) / `AIConfig.kt` (Android) — see `AIConfigService` above for details
 
 ### Live Chat (WebRTC Video Calls)
 - Embeds a WebView loading `https://app.ariaspark.com/webrtc/?a=<room_code>&autostart=true`
@@ -96,4 +95,4 @@ The `xcodeproj` Ruby gem is too old for this project's format (`PBXFileSystemSyn
 3. **PBXGroup children** — add `ID2 /* File.swift */,` to the correct group (e.g. `Services`, `Utils`, `Views`)
 4. **PBXSourcesBuildPhase files** — add `ID1 /* File.swift in Sources */,`
 
-Use a readable ID convention: prefix `LA` for LiveAI, `LC` for LiveChat, `LT` for LiveTranslate, etc. Build file IDs use `XX0001...` and file reference IDs use `XX1001...`. To remove a file, delete the same 4 entries.
+Use a readable ID convention: prefix `LA` for AI config, `LC` for LiveChat, `LT` for LiveTranslate, etc. Build file IDs use `XX0001...` and file reference IDs use `XX1001...`. To remove a file, delete the same 4 entries.

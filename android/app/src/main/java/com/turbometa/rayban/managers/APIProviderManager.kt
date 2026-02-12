@@ -156,12 +156,12 @@ class APIProviderManager private constructor(context: Context) {
         private const val KEY_PROVIDER = "api_provider"
         private const val KEY_SELECTED_MODEL = "selected_vision_model"
 
-        // Live AI Configuration — defaults (overridden by server fetch)
+        // AI Configuration — defaults (overridden by server fetch)
         private const val DEFAULT_LIVE_AI_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
         private const val DEFAULT_LIVE_AI_WS_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
 
-        // Dynamic values set by LiveAIConfigService
-        @Volatile var liveAIFetchedKey: String? = null
+        // Dynamic values set by AIConfigService
+        @Volatile var fetchedAPIKey: String? = null
             private set
         @Volatile var liveAIFetchedURL: String? = null
             private set
@@ -259,10 +259,10 @@ class APIProviderManager private constructor(context: Context) {
         prefs.edit().putString(KEY_SELECTED_MODEL, model).apply()
     }
 
-    // MARK: - Live AI Configuration
+    // MARK: - AI Configuration (fetched from server)
 
     fun getLiveAIAPIKey(apiKeyManager: com.turbometa.rayban.utils.APIKeyManager): String {
-        return liveAIFetchedKey ?: apiKeyManager.getGoogleAPIKey() ?: ""
+        return fetchedAPIKey ?: apiKeyManager.getGoogleAPIKey() ?: ""
     }
 
     fun hasLiveAIAPIKey(apiKeyManager: com.turbometa.rayban.utils.APIKeyManager): Boolean {
@@ -270,7 +270,7 @@ class APIProviderManager private constructor(context: Context) {
     }
 
     fun applyFetchedConfig(key: String, url: String, model: String) {
-        liveAIFetchedKey = key
+        fetchedAPIKey = key
         liveAIFetchedURL = url
         liveAIFetchedModel = model
     }
@@ -281,7 +281,8 @@ class APIProviderManager private constructor(context: Context) {
         get() = _currentProvider.value.baseURL
 
     fun getCurrentAPIKey(apiKeyManager: com.turbometa.rayban.utils.APIKeyManager): String {
-        return apiKeyManager.getAPIKey(_currentProvider.value) ?: ""
+        // Use fetched key first, fall back to Keychain
+        return fetchedAPIKey ?: apiKeyManager.getAPIKey(_currentProvider.value) ?: ""
     }
 
     val currentModel: String

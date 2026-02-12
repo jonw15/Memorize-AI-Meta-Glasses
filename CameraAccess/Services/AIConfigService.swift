@@ -1,19 +1,19 @@
 /*
- * Live AI Config Service
- * Fetches encrypted Live AI configuration from server and decrypts it
+ * AI Config Service
+ * Fetches encrypted AI configuration from server and decrypts it
  * Protocol: POST {API_APP}/config/get → AES-256-CBC decrypt → { key, url, model }
  */
 
 import Foundation
 import CommonCrypto
 
-struct LiveAIConfigResult {
+struct AIConfigResult {
     let key: String
     let url: String
     let model: String
 }
 
-enum LiveAIConfigError: Error, LocalizedError {
+enum AIConfigError: Error, LocalizedError {
     case invalidURL
     case networkError(String)
     case invalidResponse
@@ -31,14 +31,14 @@ enum LiveAIConfigError: Error, LocalizedError {
     }
 }
 
-class LiveAIConfigService {
+class AIConfigService {
 
-    /// Fetches and decrypts Live AI config from the server, then stores it in APIProviderManager
+    /// Fetches and decrypts AI config from the server, then stores it in APIProviderManager
     @discardableResult
-    static func fetchConfig() async throws -> LiveAIConfigResult {
-        let urlString = "\(LiveAIConfig.apiApp)/config/get"
+    static func fetchConfig() async throws -> AIConfigResult {
+        let urlString = "\(AIConfig.apiApp)/config/get"
         guard let url = URL(string: urlString) else {
-            throw LiveAIConfigError.invalidURL
+            throw AIConfigError.invalidURL
         }
 
         // Build request
@@ -47,25 +47,25 @@ class LiveAIConfigService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 15
 
-        let body: [String: String] = ["id": LiveAIConfig.configIdAILive]
+        let body: [String: String] = ["id": AIConfig.configIdAILive]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         // Fetch
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw LiveAIConfigError.networkError("HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+            throw AIConfigError.networkError("HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
         }
 
         // Parse response JSON to get "content" field
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let content = json["content"] as? String else {
-            throw LiveAIConfigError.invalidResponse
+            throw AIConfigError.invalidResponse
         }
 
         // Split content: first 44 chars = AES key (Base64), rest = encrypted data (Base64)
         guard content.count > 44 else {
-            throw LiveAIConfigError.invalidResponse
+            throw AIConfigError.invalidResponse
         }
         let keyBase64 = String(content.prefix(44))
         let encryptedBase64 = String(content.dropFirst(44))
@@ -74,9 +74,9 @@ class LiveAIConfigService {
         guard let decrypted = decrypt(
             encryptedBase64: encryptedBase64,
             keyBase64: keyBase64,
-            ivBase64: LiveAIConfig.configIV
+            ivBase64: AIConfig.configIV
         ) else {
-            throw LiveAIConfigError.decryptionFailed
+            throw AIConfigError.decryptionFailed
         }
 
         // Parse decrypted JSON
@@ -85,15 +85,15 @@ class LiveAIConfigService {
               let key = configJson["key"] as? String,
               let configUrl = configJson["url"] as? String,
               let model = configJson["model"] as? String else {
-            throw LiveAIConfigError.parseError
+            throw AIConfigError.parseError
         }
 
-        let result = LiveAIConfigResult(key: key, url: configUrl, model: model)
+        let result = AIConfigResult(key: key, url: configUrl, model: model)
 
         // Store in APIProviderManager
         await APIProviderManager.shared.applyFetchedConfig(key: key, url: configUrl, model: model)
 
-        print("✅ [LiveAIConfig] Successfully fetched and applied config")
+        print("✅ [AIConfig] Successfully fetched and applied config")
         return result
     }
 
@@ -103,17 +103,17 @@ class LiveAIConfigService {
         guard let keyData = Data(base64Encoded: keyBase64),
               let ivData = Data(base64Encoded: ivBase64),
               let encryptedData = Data(base64Encoded: encryptedBase64) else {
-            print("⚠️ [LiveAIConfig] Failed to decode Base64 inputs")
+            print("⚠️ [AIConfig] Failed to decode Base64 inputs")
             return nil
         }
 
         guard keyData.count == kCCKeySizeAES256 else {
-            print("⚠️ [LiveAIConfig] Invalid key size: \(keyData.count), expected \(kCCKeySizeAES256)")
+            print("⚠️ [AIConfig] Invalid key size: \(keyData.count), expected \(kCCKeySizeAES256)")
             return nil
         }
 
         guard ivData.count == kCCBlockSizeAES128 else {
-            print("⚠️ [LiveAIConfig] Invalid IV size: \(ivData.count), expected \(kCCBlockSizeAES128)")
+            print("⚠️ [AIConfig] Invalid IV size: \(ivData.count), expected \(kCCBlockSizeAES128)")
             return nil
         }
 
@@ -139,7 +139,7 @@ class LiveAIConfigService {
         }
 
         guard status == kCCSuccess else {
-            print("⚠️ [LiveAIConfig] Decryption failed with status: \(status)")
+            print("⚠️ [AIConfig] Decryption failed with status: \(status)")
             return nil
         }
 

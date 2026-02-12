@@ -155,13 +155,13 @@ class APIProviderManager: ObservableObject {
         self.selectedModel = savedModel ?? provider.defaultModel
     }
 
-    // MARK: - Live AI Configuration
+    // MARK: - AI Configuration (fetched from server)
 
     private static let defaultLiveAIWebSocketURL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
     private static let defaultLiveAIModel = "gemini-2.5-flash-native-audio-preview-12-2025"
 
-    // Fetched config from server (set by LiveAIConfigService)
-    private(set) var liveAIFetchedKey: String?
+    // Fetched config from server (set by AIConfigService)
+    private(set) var fetchedAPIKey: String?
     private(set) var liveAIFetchedURL: String?
     private(set) var liveAIFetchedModel: String?
 
@@ -174,7 +174,7 @@ class APIProviderManager: ObservableObject {
     }
 
     var liveAIAPIKey: String {
-        return liveAIFetchedKey ?? APIKeyManager.shared.getGoogleAPIKey() ?? ""
+        return fetchedAPIKey ?? APIKeyManager.shared.getGoogleAPIKey() ?? ""
     }
 
     var hasLiveAIAPIKey: Bool {
@@ -182,7 +182,7 @@ class APIProviderManager: ObservableObject {
     }
 
     func applyFetchedConfig(key: String, url: String, model: String) {
-        liveAIFetchedKey = key
+        fetchedAPIKey = key
         liveAIFetchedURL = url
         liveAIFetchedModel = model
         updateStaticCache()
@@ -195,7 +195,8 @@ class APIProviderManager: ObservableObject {
     }
 
     var currentAPIKey: String {
-        return APIKeyManager.shared.getAPIKey(for: currentProvider) ?? ""
+        // Use fetched key first, fall back to Keychain
+        return fetchedAPIKey ?? APIKeyManager.shared.getAPIKey(for: currentProvider) ?? ""
     }
 
     var currentModel: String {
@@ -287,12 +288,12 @@ extension APIProviderManager {
     }
 
     nonisolated static var staticAPIKey: String {
-        return APIKeyManager.shared.getAPIKey(for: staticCurrentProvider) ?? ""
+        // Use fetched key first, fall back to Keychain
+        return _fetchedAPIKeyCache ?? APIKeyManager.shared.getAPIKey(for: staticCurrentProvider) ?? ""
     }
 
     nonisolated static var staticLiveAIAPIKey: String {
-        // Fetched key stored in-memory on shared instance; fall back to Keychain
-        return _liveAIFetchedKeyCache ?? APIKeyManager.shared.getGoogleAPIKey() ?? ""
+        return _fetchedAPIKeyCache ?? APIKeyManager.shared.getGoogleAPIKey() ?? ""
     }
 
     nonisolated static var staticLiveAIWebsocketURL: String {
@@ -304,12 +305,12 @@ extension APIProviderManager {
     }
 
     // Thread-safe cache for nonisolated static access
-    private nonisolated(unsafe) static var _liveAIFetchedKeyCache: String?
+    private nonisolated(unsafe) static var _fetchedAPIKeyCache: String?
     private nonisolated(unsafe) static var _liveAIFetchedURLCache: String?
     private nonisolated(unsafe) static var _liveAIFetchedModelCache: String?
 
     func updateStaticCache() {
-        APIProviderManager._liveAIFetchedKeyCache = liveAIFetchedKey
+        APIProviderManager._fetchedAPIKeyCache = fetchedAPIKey
         APIProviderManager._liveAIFetchedURLCache = liveAIFetchedURL
         APIProviderManager._liveAIFetchedModelCache = liveAIFetchedModel
     }

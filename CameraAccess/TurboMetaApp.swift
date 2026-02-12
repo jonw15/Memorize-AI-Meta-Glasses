@@ -44,13 +44,13 @@ struct TurboMetaApp: App {
     self.wearables = wearables
     self._wearablesViewModel = StateObject(wrappedValue: WearablesViewModel(wearables: wearables))
 
-    // Auto-fetch Live AI config from server
+    // Auto-fetch AI config from server
     Task {
       do {
-        try await LiveAIConfigService.fetchConfig()
+        try await AIConfigService.fetchConfig()
       } catch {
         #if DEBUG
-        NSLog("[TurboMeta] Live AI config fetch failed: \(error)")
+        NSLog("[TurboMeta] AI config fetch failed: \(error)")
         #endif
       }
     }

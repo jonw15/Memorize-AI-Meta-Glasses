@@ -1,14 +1,14 @@
 package com.turbometa.rayban.utils
 
 /**
- * Live AI Configuration
- * Server API and encryption constants for auto-fetching Live AI config
+ * AI Configuration
+ * Server API and encryption constants for auto-fetching AI config
  */
-object LiveAIConfig {
+object AIConfig {
     /** Base URL of the config server API */
     const val API_APP = "https://yp3pqak8l7.execute-api.us-east-1.amazonaws.com/prod/"
 
-    /** Config ID for Live AI configuration */
+    /** Config ID for AI configuration */
     const val CONFIG_ID_AI_LIVE = "ai_live_google"
 
     /** AES-256-CBC IV (Base64 encoded) */
