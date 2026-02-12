@@ -61,9 +61,11 @@ Both platforms follow **MVVM** with matching layer structures:
 - Vision API keys stored in iOS Keychain (`APIKeyManager`) / Android EncryptedSharedPreferences; Live AI key auto-fetched from server
 
 ### API Configuration
-- `VisionAPIConfig.swift` / `APIProviderManager` controls provider selection and endpoint routing
-- Google AI Studio at `generativelanguage.googleapis.com/v1beta/openai`
-- OpenRouter at `openrouter.ai/api/v1`
+- Live AI config (API key, WebSocket URL, model) is auto-fetched from a config server on app launch via `LiveAIConfigService` — there is no manual key entry UI
+- The API key has **no fallback** — if the server fetch fails, Live AI will not work
+- The WebSocket URL and model have hardcoded fallback defaults in `APIProviderManager` (standard Gemini endpoint and model)
+- Provider selection, model settings, and API key management are all hidden from end users in Settings
+- The three configurable server constants live in `LiveAIConfig.swift` (iOS) / `LiveAIConfig.kt` (Android) — see `LiveAIConfigService` above for details
 
 ### Live Chat (WebRTC Video Calls)
 - Embeds a WebView loading `https://app.ariaspark.com/webrtc/?a=<room_code>&autostart=true`
