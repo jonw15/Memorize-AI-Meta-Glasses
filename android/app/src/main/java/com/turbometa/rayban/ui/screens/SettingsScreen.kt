@@ -190,58 +190,6 @@ fun SettingsScreen(
                 )
             }
 
-            // Vision API Provider Section
-            SettingsSection(title = stringResource(R.string.settings_provider)) {
-                // Vision Provider
-                SettingsItem(
-                    icon = Icons.Default.Cloud,
-                    title = stringResource(R.string.settings_provider),
-                    subtitle = if (visionProvider == APIProvider.GOOGLE)
-                        stringResource(R.string.provider_google)
-                    else
-                        stringResource(R.string.provider_openrouter),
-                    onClick = { viewModel.showVisionProviderDialog() }
-                )
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = AppSpacing.medium))
-
-                // Current Provider API Key
-                val currentKeyTitle = when (visionProvider) {
-                    APIProvider.GOOGLE -> stringResource(R.string.apikey_google)
-                    APIProvider.OPENROUTER -> stringResource(R.string.apikey_openrouter)
-                }
-                val hasCurrentKey = when (visionProvider) {
-                    APIProvider.GOOGLE -> hasGoogleKey
-                    APIProvider.OPENROUTER -> hasOpenRouterKey
-                }
-                SettingsItem(
-                    icon = Icons.Default.Key,
-                    title = currentKeyTitle,
-                    subtitle = if (hasCurrentKey)
-                        stringResource(R.string.settings_apikey_configured)
-                    else
-                        stringResource(R.string.settings_apikey_not_configured),
-                    subtitleColor = if (hasCurrentKey) Success else Error,
-                    onClick = {
-                        val keyType = when (visionProvider) {
-                            APIProvider.GOOGLE -> SettingsViewModel.EditingKeyType.GOOGLE
-                            APIProvider.OPENROUTER -> SettingsViewModel.EditingKeyType.OPENROUTER
-                        }
-                        viewModel.showApiKeyDialogForType(keyType)
-                    }
-                )
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = AppSpacing.medium))
-
-                // Vision Model Selection
-                SettingsItem(
-                    icon = Icons.Default.SmartToy,
-                    title = stringResource(R.string.vision_model),
-                    subtitle = viewModel.getSelectedVisionModelDisplayName(),
-                    onClick = { viewModel.showVisionModelDialog() }
-                )
-            }
-
             // Live AI Settings Section
             SettingsSection(title = stringResource(R.string.live_ai)) {
                 // Live AI Mode Settings
@@ -252,21 +200,6 @@ fun SettingsScreen(
                     onClick = onNavigateToLiveAIMode
                 )
 
-                HorizontalDivider(modifier = Modifier.padding(horizontal = AppSpacing.medium))
-
-                // Google API Key (always shown — Live AI always uses Google)
-                SettingsItem(
-                    icon = Icons.Default.Key,
-                    title = stringResource(R.string.apikey_google),
-                    subtitle = if (hasGoogleKey)
-                        stringResource(R.string.settings_apikey_configured)
-                    else
-                        stringResource(R.string.settings_apikey_not_configured),
-                    subtitleColor = if (hasGoogleKey) Success else Error,
-                    onClick = {
-                        viewModel.showApiKeyDialogForType(SettingsViewModel.EditingKeyType.GOOGLE)
-                    }
-                )
             }
 
             // Quick Vision / Picovoice Section

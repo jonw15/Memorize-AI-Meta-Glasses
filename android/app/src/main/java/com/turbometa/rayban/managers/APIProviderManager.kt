@@ -156,9 +156,23 @@ class APIProviderManager private constructor(context: Context) {
         private const val KEY_PROVIDER = "api_provider"
         private const val KEY_SELECTED_MODEL = "selected_vision_model"
 
-        // Live AI Configuration (always Google Gemini)
-        const val liveAIDefaultModel = "gemini-2.5-flash-native-audio-preview-12-2025"
-        const val liveAIWebSocketURL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+        // Live AI Configuration — defaults (overridden by server fetch)
+        private const val DEFAULT_LIVE_AI_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
+        private const val DEFAULT_LIVE_AI_WS_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+
+        // Dynamic values set by LiveAIConfigService
+        @Volatile var liveAIFetchedKey: String? = null
+            private set
+        @Volatile var liveAIFetchedURL: String? = null
+            private set
+        @Volatile var liveAIFetchedModel: String? = null
+            private set
+
+        val liveAIDefaultModel: String
+            get() = liveAIFetchedModel ?: DEFAULT_LIVE_AI_MODEL
+
+        val liveAIWebSocketURL: String
+            get() = liveAIFetchedURL ?: DEFAULT_LIVE_AI_WS_URL
 
         @Volatile
         private var instance: APIProviderManager? = null
@@ -248,11 +262,17 @@ class APIProviderManager private constructor(context: Context) {
     // MARK: - Live AI Configuration
 
     fun getLiveAIAPIKey(apiKeyManager: com.turbometa.rayban.utils.APIKeyManager): String {
-        return apiKeyManager.getGoogleAPIKey() ?: ""
+        return liveAIFetchedKey ?: apiKeyManager.getGoogleAPIKey() ?: ""
     }
 
     fun hasLiveAIAPIKey(apiKeyManager: com.turbometa.rayban.utils.APIKeyManager): Boolean {
         return getLiveAIAPIKey(apiKeyManager).isNotEmpty()
+    }
+
+    fun applyFetchedConfig(key: String, url: String, model: String) {
+        liveAIFetchedKey = key
+        liveAIFetchedURL = url
+        liveAIFetchedModel = model
     }
 
     // MARK: - Get Current Configuration

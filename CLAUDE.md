@@ -52,9 +52,13 @@ Both platforms follow **MVVM** with matching layer structures:
 - `WearablesViewModel` is the central hub for device state across both platforms
 
 ### AI Service Communication
-- **GeminiLiveService**: WebSocket connection to Gemini Live API (`wss://generativelanguage.googleapis.com/ws/...`) for real-time audio+video AI chat using `gemini-2.5-flash-native-audio-preview-12-2025`
+- **GeminiLiveService**: WebSocket connection to Gemini Live API for real-time audio+video AI chat. The API key, WebSocket URL, and model are auto-fetched from a config server on app launch (`LiveAIConfigService`), decrypted via AES-256-CBC, and stored in `APIProviderManager`. Falls back to hardcoded defaults if server is unreachable.
+- **LiveAIConfigService**: Fetches encrypted config from `{API_APP}/config/get`, decrypts it (AES-256-CBC with PKCS7), extracts `key`, `url`, `model`. To configure, set the three placeholder values in `CameraAccess/Utils/LiveAIConfig.swift` (iOS) and `android/.../utils/LiveAIConfig.kt` (Android) — both files must have identical values:
+  - `apiApp` / `API_APP` — server base URL (the part before `/config/get`)
+  - `configIdAILive` / `CONFIG_ID_AI_LIVE` — the config ID sent as `{ "id": "..." }` in the POST body
+  - `configIV` / `CONFIG_IV` — pre-shared AES IV (Base64), corresponds to `configKey.key` in the C# reference
 - **VisionAPIService**: REST calls to Google AI Studio or OpenRouter (OpenAI-compatible `/v1/chat/completions` endpoint) using `gemini-2.5-flash` or configurable models
-- API keys stored in iOS Keychain (`APIKeyManager`) / Android EncryptedSharedPreferences
+- Vision API keys stored in iOS Keychain (`APIKeyManager`) / Android EncryptedSharedPreferences; Live AI key auto-fetched from server
 
 ### API Configuration
 - `VisionAPIConfig.swift` / `APIProviderManager` controls provider selection and endpoint routing
@@ -80,3 +84,14 @@ Strings use key-based localization (`"key".localized` on iOS). When adding user-
 - Android DAT SDK dependency requires GitHub Packages authentication (see `android/settings.gradle.kts`)
 - `.gitignore` blocks `*APIKey*.swift` and `*Secret*.swift` files — API keys must not be committed
 - Some comments in the codebase are in Chinese (the primary audience is Chinese-speaking users)
+
+## Adding/Removing Swift Files to the Xcode Project
+
+The `xcodeproj` Ruby gem is too old for this project's format (`PBXFileSystemSynchronizedRootGroup`), so edit `CameraAccess.xcodeproj/project.pbxproj` directly. Four edits are needed per file:
+
+1. **PBXBuildFile section** — add: `ID1 /* File.swift in Sources */ = {isa = PBXBuildFile; fileRef = ID2 /* File.swift */; };`
+2. **PBXFileReference section** — add: `ID2 /* File.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = File.swift; sourceTree = "<group>"; };`
+3. **PBXGroup children** — add `ID2 /* File.swift */,` to the correct group (e.g. `Services`, `Utils`, `Views`)
+4. **PBXSourcesBuildPhase files** — add `ID1 /* File.swift in Sources */,`
+
+Use a readable ID convention: prefix `LA` for LiveAI, `LC` for LiveChat, `LT` for LiveTranslate, etc. Build file IDs use `XX0001...` and file reference IDs use `XX1001...`. To remove a file, delete the same 4 entries.

@@ -104,44 +104,6 @@ struct SettingsView: View {
                         }
                     }
 
-                    // API Provider
-                    Button {
-                        showProviderSettings = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "server.rack")
-                                .foregroundColor(AppColors.accent)
-                            Text("settings.provider".localized)
-                                .foregroundColor(AppColors.textPrimary)
-                            Spacer()
-                            Text(providerManager.currentProvider.displayName)
-                                .font(AppTypography.caption)
-                                .foregroundColor(AppColors.textSecondary)
-                            Image(systemName: "chevron.right")
-                                .font(AppTypography.caption)
-                                .foregroundColor(AppColors.textTertiary)
-                        }
-                    }
-
-                    Button {
-                        showModelSettings = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "cpu")
-                                .foregroundColor(AppColors.accent)
-                            Text("settings.model".localized)
-                                .foregroundColor(AppColors.textPrimary)
-                            Spacer()
-                            Text(providerManager.selectedModel)
-                                .font(AppTypography.caption)
-                                .foregroundColor(AppColors.textSecondary)
-                                .lineLimit(1)
-                            Image(systemName: "chevron.right")
-                                .font(AppTypography.caption)
-                                .foregroundColor(AppColors.textTertiary)
-                        }
-                    }
-
                     Button {
                         showLanguageSettings = true
                     } label: {
@@ -154,24 +116,6 @@ struct SettingsView: View {
                             Text(languageDisplayName(selectedLanguage))
                                 .font(AppTypography.caption)
                                 .foregroundColor(AppColors.textSecondary)
-                            Image(systemName: "chevron.right")
-                                .font(AppTypography.caption)
-                                .foregroundColor(AppColors.textTertiary)
-                        }
-                    }
-
-                    Button {
-                        showAPIKeySettings = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "key.fill")
-                                .foregroundColor(AppColors.wordLearn)
-                            Text("settings.apikey".localized)
-                                .foregroundColor(AppColors.textPrimary)
-                            Spacer()
-                            Text(hasAPIKey ? "settings.apikey.configured".localized : "settings.apikey.notconfigured".localized)
-                                .font(AppTypography.caption)
-                                .foregroundColor(hasAPIKey ? .green : .red)
                             Image(systemName: "chevron.right")
                                 .font(AppTypography.caption)
                                 .foregroundColor(AppColors.textTertiary)
@@ -220,25 +164,6 @@ struct SettingsView: View {
 
                 // Live AI Settings
                 Section {
-                    // Google API Key for Live AI
-                    Button {
-                        showGoogleAPIKeySettings = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "key.fill")
-                                .foregroundColor(.orange)
-                            Text("Google API Key")
-                                .foregroundColor(AppColors.textPrimary)
-                            Spacer()
-                            Text(hasGoogleAPIKey ? "settings.apikey.configured".localized : "settings.apikey.notconfigured".localized)
-                                .font(AppTypography.caption)
-                                .foregroundColor(hasGoogleAPIKey ? .green : .red)
-                            Image(systemName: "chevron.right")
-                                .font(AppTypography.caption)
-                                .foregroundColor(AppColors.textTertiary)
-                        }
-                    }
-
                     // Live AI Mode Settings
                     Button {
                         showLiveAISettings = true

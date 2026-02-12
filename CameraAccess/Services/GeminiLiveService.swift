@@ -57,7 +57,7 @@ class GeminiLiveService: NSObject {
 
     init(apiKey: String, model: String? = nil) {
         self.apiKey = apiKey
-        self.model = model ?? "gemini-2.5-flash-native-audio-preview-12-2025"
+        self.model = model ?? APIProviderManager.staticLiveAIDefaultModel
         super.init()
         setupAudioEngine()
     }
@@ -121,8 +121,8 @@ class GeminiLiveService: NSObject {
     // MARK: - WebSocket Connection
 
     func connect() {
-        // Gemini Live WebSocket URL with API key
-        let baseURL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+        // Gemini Live WebSocket URL with API key (dynamic from server config)
+        let baseURL = APIProviderManager.staticLiveAIWebsocketURL
         let urlString = "\(baseURL)?key=\(apiKey)"
 
         print("🔌 [Gemini] Preparing to connect WebSocket")

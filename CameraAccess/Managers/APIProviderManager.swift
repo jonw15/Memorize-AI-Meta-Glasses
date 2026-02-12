@@ -155,17 +155,37 @@ class APIProviderManager: ObservableObject {
         self.selectedModel = savedModel ?? provider.defaultModel
     }
 
-    // MARK: - Live AI Configuration (always Google Gemini)
+    // MARK: - Live AI Configuration
 
-    static let liveAIWebSocketURL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
-    static let liveAIDefaultModel = "gemini-2.5-flash-native-audio-preview-12-2025"
+    private static let defaultLiveAIWebSocketURL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+    private static let defaultLiveAIModel = "gemini-2.5-flash-native-audio-preview-12-2025"
+
+    // Fetched config from server (set by LiveAIConfigService)
+    private(set) var liveAIFetchedKey: String?
+    private(set) var liveAIFetchedURL: String?
+    private(set) var liveAIFetchedModel: String?
+
+    static var liveAIWebSocketURL: String {
+        return shared.liveAIFetchedURL ?? defaultLiveAIWebSocketURL
+    }
+
+    static var liveAIDefaultModel: String {
+        return shared.liveAIFetchedModel ?? defaultLiveAIModel
+    }
 
     var liveAIAPIKey: String {
-        return APIKeyManager.shared.getGoogleAPIKey() ?? ""
+        return liveAIFetchedKey ?? APIKeyManager.shared.getGoogleAPIKey() ?? ""
     }
 
     var hasLiveAIAPIKey: Bool {
         return !liveAIAPIKey.isEmpty
+    }
+
+    func applyFetchedConfig(key: String, url: String, model: String) {
+        liveAIFetchedKey = key
+        liveAIFetchedURL = url
+        liveAIFetchedModel = model
+        updateStaticCache()
     }
 
     // MARK: - Get Current Configuration
@@ -271,10 +291,26 @@ extension APIProviderManager {
     }
 
     nonisolated static var staticLiveAIAPIKey: String {
-        return APIKeyManager.shared.getGoogleAPIKey() ?? ""
+        // Fetched key stored in-memory on shared instance; fall back to Keychain
+        return _liveAIFetchedKeyCache ?? APIKeyManager.shared.getGoogleAPIKey() ?? ""
     }
 
     nonisolated static var staticLiveAIWebsocketURL: String {
-        return liveAIWebSocketURL
+        return _liveAIFetchedURLCache ?? defaultLiveAIWebSocketURL
+    }
+
+    nonisolated static var staticLiveAIDefaultModel: String {
+        return _liveAIFetchedModelCache ?? defaultLiveAIModel
+    }
+
+    // Thread-safe cache for nonisolated static access
+    private nonisolated(unsafe) static var _liveAIFetchedKeyCache: String?
+    private nonisolated(unsafe) static var _liveAIFetchedURLCache: String?
+    private nonisolated(unsafe) static var _liveAIFetchedModelCache: String?
+
+    func updateStaticCache() {
+        APIProviderManager._liveAIFetchedKeyCache = liveAIFetchedKey
+        APIProviderManager._liveAIFetchedURLCache = liveAIFetchedURL
+        APIProviderManager._liveAIFetchedModelCache = liveAIFetchedModel
     }
 }

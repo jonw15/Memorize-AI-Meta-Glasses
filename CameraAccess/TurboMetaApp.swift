@@ -43,6 +43,17 @@ struct TurboMetaApp: App {
     let wearables = Wearables.shared
     self.wearables = wearables
     self._wearablesViewModel = StateObject(wrappedValue: WearablesViewModel(wearables: wearables))
+
+    // Auto-fetch Live AI config from server
+    Task {
+      do {
+        try await LiveAIConfigService.fetchConfig()
+      } catch {
+        #if DEBUG
+        NSLog("[TurboMeta] Live AI config fetch failed: \(error)")
+        #endif
+      }
+    }
   }
 
   var body: some Scene {

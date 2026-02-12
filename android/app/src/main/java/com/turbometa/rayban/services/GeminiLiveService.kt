@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit
  */
 class GeminiLiveService(
     private val apiKey: String,
-    private val model: String = "gemini-2.5-flash-native-audio-preview-12-2025",
+    private val model: String = com.turbometa.rayban.managers.APIProviderManager.liveAIDefaultModel,
     private val outputLanguage: String = "en-US",
     private val context: android.content.Context? = null
 ) {
@@ -101,8 +101,9 @@ class GeminiLiveService(
             Log.d(TAG, "Scope was cancelled, created new scope")
         }
 
-        // Gemini Live WebSocket URL with API key
-        val url = "$WS_BASE_URL?key=$apiKey"
+        // Gemini Live WebSocket URL with API key (dynamic from server config)
+        val baseUrl = com.turbometa.rayban.managers.APIProviderManager.liveAIWebSocketURL
+        val url = "$baseUrl?key=$apiKey"
 
         Log.d(TAG, "Connecting to Gemini Live WebSocket")
 

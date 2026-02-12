@@ -302,13 +302,7 @@ fun HomeScreen(
                                 showDeviceNotConnectedDialog = true
                                 return@FeatureCard
                             }
-                            // Then check API key
-                            val apiKey = apiKeyManager.getAPIKey()
-                            if (apiKey.isNullOrBlank()) {
-                                showApiKeyDialog = true
-                                return@FeatureCard
-                            }
-                            // Finally check camera permission and navigate
+                            // Check camera permission and navigate (API key auto-fetched from server)
                             checkCameraPermissionAndNavigate { onNavigateToLiveAI() }
                         }
                     )
