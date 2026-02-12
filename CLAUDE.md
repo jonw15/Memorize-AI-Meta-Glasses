@@ -51,9 +51,30 @@ Both platforms follow **MVVM** with matching layer structures:
 - Device must be in developer mode (Meta AI app → Settings → tap version 5 times)
 - `WearablesViewModel` is the central hub for device state across both platforms
 
+### Feature → AI Service Map
+
+| Feature                  | Model                                              | Protocol        |
+|--------------------------|----------------------------------------------------|-----------------|
+| Live AI                  | `gemini-2.5-flash-native-audio-preview-12-2025`    | WebSocket       |
+| Vision/Image Recognition | `gemini-2.5-flash`                                 | REST            |
+| Quick Vision             | `gemini-2.5-flash` (via VisionAPIService)          | REST            |
+| LeanEat (Nutrition)      | `gemini-2.5-flash`                                 | REST            |
+| Live Translate           | `gemini-2.5-flash-native-audio-preview-12-2025`    | WebSocket       |
+| System TTS               | iOS `AVSpeechSynthesizer` / Android `TextToSpeech` | Local           |
+| RTMP Streaming           | HaishinKit                                         | RTMP            |
+| Live Chat                | WebRTC (`ariaspark.com`)                           | WebRTC          |
+| Wake Word (Android)      | Porcupine SDK (require access key)                 | Local on-device |
+
+All Gemini features share a single auto-fetched API key from `AIConfigService`.
+
+### System TTS Usage
+- **Quick Vision**: `TTSService.shared` (iOS) / `TextToSpeech` (Android) speaks recognition results and status messages
+- **LiveAIManager** (iOS only): `TTSService.shared` speaks error messages (e.g. "not initialized", "configure API key")
+- Live AI conversation audio comes from Gemini's native audio stream, not System TTS
+
 ### AI Service Communication
 - **GeminiLiveService**: WebSocket connection to Gemini Live API for real-time audio+video AI chat
-- **AIConfigService**: Fetches encrypted config from `{API_APP}/config/get`, decrypts it (AES-256-CBC with PKCS7), extracts `key`, `url`, `model`. All Gemini AI services (Live AI, Vision, LeanEat, QuickVision) share the same auto-fetched API key. To configure, set the three constants in `CameraAccess/Utils/AIConfig.swift` (iOS) and `android/.../utils/AIConfig.kt` (Android) — both files must have identical values:
+- **AIConfigService**: Fetches encrypted config from `{API_APP}/config/get`, decrypts it (AES-256-CBC with PKCS7), extracts `key`, `url`, `model`. To configure, set the three constants in `CameraAccess/Utils/AIConfig.swift` (iOS) and `android/.../utils/AIConfig.kt` (Android) — both files must have identical values:
   - `apiApp` / `API_APP` — server base URL (the part before `/config/get`)
   - `configIdAILive` / `CONFIG_ID_AI_LIVE` — the config ID sent as `{ "id": "..." }` in the POST body
   - `configIV` / `CONFIG_IV` — pre-shared AES IV (Base64), corresponds to `configKey.key` in the C# reference
