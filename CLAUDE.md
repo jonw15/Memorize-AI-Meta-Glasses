@@ -67,6 +67,8 @@ Both platforms follow **MVVM** with matching layer structures:
 
 All Gemini features share a single auto-fetched API key from `AIConfigService`.
 
+> **Note:** Porcupine requires a paid Picovoice access key. [OpenWakeWord](https://github.com/dscripka/openWakeWord) (ONNX Runtime) is a free, keyless, on-device alternative that could replace it.
+
 ### System TTS Usage
 - **Quick Vision**: `TTSService.shared` (iOS) / `TextToSpeech` (Android) speaks recognition results and status messages
 - **LiveAIManager** (iOS only): `TTSService.shared` speaks error messages (e.g. "not initialized", "configure API key")
