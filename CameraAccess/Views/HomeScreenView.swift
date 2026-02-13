@@ -18,8 +18,20 @@ import SwiftUI
 
 struct HomeScreenView: View {
   @ObservedObject var viewModel: WearablesViewModel
+  let forceProjectIntroOnly: Bool
+  let onNewProject: (() -> Void)?
   @State private var showConnectionSuccess = false
   @State private var currentPage = 0
+
+  init(
+    viewModel: WearablesViewModel,
+    forceProjectIntroOnly: Bool = false,
+    onNewProject: (() -> Void)? = nil
+  ) {
+    self.viewModel = viewModel
+    self.forceProjectIntroOnly = forceProjectIntroOnly
+    self.onNewProject = onNewProject
+  }
 
   var body: some View {
     ZStack {
@@ -27,7 +39,7 @@ struct HomeScreenView: View {
         .ignoresSafeArea()
 
       Group {
-        if currentPage == 0 {
+        if forceProjectIntroOnly || currentPage == 0 {
           projectIntroPage
             .transition(.opacity)
         } else {
@@ -100,7 +112,11 @@ struct HomeScreenView: View {
         .padding(.horizontal, 28)
 
       Button {
-        currentPage = 1
+        if let onNewProject {
+          onNewProject()
+        } else {
+          currentPage = 1
+        }
       } label: {
         Text("New Project")
           .font(.system(size: 16, weight: .regular))

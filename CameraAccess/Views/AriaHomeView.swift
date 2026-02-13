@@ -11,6 +11,7 @@ struct AriaHomeView: View {
     @StateObject private var quickVisionManager = QuickVisionManager.shared
     @StateObject private var liveAIManager = LiveAIManager.shared
     let apiKey: String
+    @Binding var autoLaunchLiveAI: Bool
 
     @State private var showLiveAI = false
     @State private var showLiveStream = false
@@ -156,6 +157,12 @@ struct AriaHomeView: View {
             quickVisionManager.setStreamViewModel(streamViewModel)
             // Ensure LiveAIManager has a streamViewModel reference
             liveAIManager.setStreamViewModel(streamViewModel)
+            if autoLaunchLiveAI {
+                autoLaunchLiveAI = false
+                DispatchQueue.main.async {
+                    showLiveAI = true
+                }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .liveAITriggered)) { _ in
             // Triggered from Shortcuts, automatically open Live AI view

@@ -22,8 +22,9 @@ struct MainAppView: View {
   @ObservedObject private var viewModel: WearablesViewModel
   @StateObject private var streamViewModel: StreamSessionViewModel
   @StateObject private var quickVisionManager = QuickVisionManager.shared
-  @State private var permissionsGranted = false
   @State private var hasCheckedPermissions = false
+  @State private var shouldAutoLaunchLiveAI = false
+  @State private var showLaunchIntro = true
 
   init(wearables: WearablesInterface, viewModel: WearablesViewModel) {
     self.wearables = wearables
@@ -33,20 +34,40 @@ struct MainAppView: View {
 
   var body: some View {
     if viewModel.registrationState == .registered || viewModel.hasMockDevice {
-      // Registered/connected device
-      if !hasCheckedPermissions {
-        // First launch, request permissions
-        PermissionsRequestView { granted in
-          permissionsGranted = granted
-          hasCheckedPermissions = true
-        }
-      } else {
-        // Permissions checked, show main interface
-        MainTabView(streamViewModel: streamViewModel, wearablesViewModel: viewModel)
-          .onAppear {
-            // Set up QuickVisionManager's StreamViewModel reference
-            quickVisionManager.setStreamViewModel(streamViewModel)
+      if showLaunchIntro {
+        HomeScreenView(
+          viewModel: viewModel,
+          forceProjectIntroOnly: true,
+          onNewProject: {
+            showLaunchIntro = false
+
+            if PermissionsManager.shared.checkAllPermissions() {
+              hasCheckedPermissions = true
+              shouldAutoLaunchLiveAI = true
+            } else {
+              hasCheckedPermissions = false
+            }
           }
+        )
+      } else {
+        // Registered/connected device
+        if !hasCheckedPermissions {
+          // First launch, request permissions
+          PermissionsRequestView { _ in
+            hasCheckedPermissions = true
+          }
+        } else {
+          // Permissions checked, show main interface
+          MainTabView(
+            streamViewModel: streamViewModel,
+            wearablesViewModel: viewModel,
+            autoLaunchLiveAI: $shouldAutoLaunchLiveAI
+          )
+            .onAppear {
+              // Set up QuickVisionManager's StreamViewModel reference
+              quickVisionManager.setStreamViewModel(streamViewModel)
+            }
+        }
       }
     } else {
       // Not registered - show registration/onboarding flow
