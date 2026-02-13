@@ -6,11 +6,18 @@
 import SwiftUI
 
 struct LiveAIView: View {
+    private enum BottomTab: String {
+        case chatLog = "Chat Log"
+        case guide = "Guide"
+        case shop = "Shop"
+    }
+
     @StateObject private var viewModel: OmniRealtimeViewModel
     @ObservedObject var streamViewModel: StreamSessionViewModel
     @Environment(\.dismiss) private var dismiss
-    @State private var showConversation = true // Controls conversation content show/hide
+    @State private var showChatLogPanel = false
     @State private var frameTimer: Timer?
+    @State private var selectedBottomTab: BottomTab = .chatLog
 
     init(streamViewModel: StreamSessionViewModel, apiKey: String) {
         self.streamViewModel = streamViewModel
@@ -46,50 +53,17 @@ struct LiveAIView: View {
                 headerView
                     .padding(.top, 8) // Slightly below the status bar
 
-                // Conversation history (can be hidden)
-                if showConversation {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(spacing: 12) {
-                                ForEach(viewModel.conversationHistory) { message in
-                                    MessageBubble(message: message)
-                                        .id(message.id)
-                                }
-
-                                // Current AI response (streaming)
-                                if !viewModel.currentTranscript.isEmpty {
-                                    MessageBubble(
-                                        message: ConversationMessage(
-                                            role: .assistant,
-                                            content: viewModel.currentTranscript
-                                        )
-                                    )
-                                    .id("current")
-                                }
-                            }
-                            .padding()
-                        }
-                        .onChange(of: viewModel.conversationHistory.count) { _ in
-                            if let lastMessage = viewModel.conversationHistory.last {
-                                withAnimation {
-                                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                                }
-                            }
-                        }
-                        .onChange(of: viewModel.currentTranscript) { _ in
-                            withAnimation {
-                                proxy.scrollTo("current", anchor: .bottom)
-                            }
-                        }
-                    }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                } else {
-                    Spacer()
-                }
+                Spacer()
 
                 // Status and stop button
                 controlsView
                 }
+            }
+
+            if showChatLogPanel && streamViewModel.hasActiveDevice {
+                chatLogPanel
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(5)
             }
         }
         .onAppear {
@@ -157,10 +131,10 @@ struct LiveAIView: View {
             // Hide/show conversation button
             Button {
                 withAnimation(.easeInOut(duration: 0.3)) {
-                    showConversation.toggle()
+                    showChatLogPanel.toggle()
                 }
             } label: {
-                Image(systemName: showConversation ? "eye.fill" : "eye.slash.fill")
+                Image(systemName: showChatLogPanel ? "eye.fill" : "eye.slash.fill")
                     .font(.system(size: 16))
                     .foregroundColor(.white.opacity(0.8))
                     .frame(width: 32, height: 32)
@@ -254,6 +228,9 @@ struct LiveAIView: View {
                 .cornerRadius(AppCornerRadius.lg)
             }
             .padding(.horizontal, AppSpacing.lg)
+
+            liquidGlassTabBar
+                .padding(.horizontal, AppSpacing.lg)
         }
         .padding(.bottom, AppSpacing.lg)
         .background(
@@ -263,6 +240,123 @@ struct LiveAIView: View {
                 endPoint: .bottom
             )
         )
+    }
+
+    private var liquidGlassTabBar: some View {
+        HStack(spacing: 10) {
+            tabButton(icon: "text.bubble", tab: .chatLog)
+            tabButton(icon: "book", tab: .guide)
+            tabButton(icon: "cart", tab: .shop)
+        }
+        .padding(8)
+        .background(.ultraThinMaterial)
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(Color.white.opacity(0.25), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+    }
+
+    private func tabButton(icon: String, tab: BottomTab) -> some View {
+        let isSelected = selectedBottomTab == tab
+
+        return Button {
+            selectedBottomTab = tab
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showChatLogPanel = (tab == .chatLog)
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                Text(tab.rawValue)
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundColor(isSelected ? .black : .white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 42)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(isSelected ? Color.white.opacity(0.9) : Color.white.opacity(0.08))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var chatLogPanel: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            VStack(spacing: 10) {
+                Capsule()
+                    .fill(Color.white.opacity(0.5))
+                    .frame(width: 44, height: 5)
+                    .padding(.top, 10)
+
+                HStack {
+                    Text("Chat Log")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showChatLogPanel = false
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                }
+                .padding(.horizontal, 14)
+
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(viewModel.conversationHistory) { message in
+                                MessageBubble(message: message)
+                                    .id(message.id)
+                            }
+
+                            if !viewModel.currentTranscript.isEmpty {
+                                MessageBubble(
+                                    message: ConversationMessage(
+                                        role: .assistant,
+                                        content: viewModel.currentTranscript
+                                    )
+                                )
+                                .id("current")
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 16)
+                    }
+                    .onChange(of: viewModel.conversationHistory.count) { _ in
+                        if let lastMessage = viewModel.conversationHistory.last {
+                            withAnimation {
+                                proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                            }
+                        }
+                    }
+                    .onChange(of: viewModel.currentTranscript) { _ in
+                        withAnimation {
+                            proxy.scrollTo("current", anchor: .bottom)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 360)
+            .background(.ultraThinMaterial)
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color.white.opacity(0.22), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .padding(.horizontal, 12)
+            .padding(.bottom, 108)
+        }
+        .ignoresSafeArea(edges: .bottom)
     }
 
     // MARK: - Device Not Connected View
