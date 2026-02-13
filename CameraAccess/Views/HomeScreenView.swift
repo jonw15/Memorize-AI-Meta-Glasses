@@ -19,61 +19,22 @@ import SwiftUI
 struct HomeScreenView: View {
   @ObservedObject var viewModel: WearablesViewModel
   @State private var showConnectionSuccess = false
+  @State private var currentPage = 0
 
   var body: some View {
     ZStack {
       Color.black
         .ignoresSafeArea()
 
-      VStack(spacing: AppSpacing.xl) {
-        Spacer()
-
-        Text("Put on your glasses,\ntake a look,\nand tell me what\nyou're working on.")
-          .font(.system(size: 58, weight: .regular))
-          .foregroundStyle(.white)
-          .lineSpacing(6)
-          .multilineTextAlignment(.leading)
-          .minimumScaleFactor(0.7)
-          .padding(.horizontal, 40)
-
-        Spacer()
-
-        Button {
-          viewModel.connectGlasses()
-        } label: {
-          HStack(spacing: AppSpacing.sm) {
-            if viewModel.registrationState == .registering {
-              ProgressView()
-                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-              Text("Connecting...")
-            } else {
-              Image(systemName: "eye.circle.fill")
-                .font(.title3)
-              Text("Connect Ray-Ban Meta")
-            }
-          }
-          .font(.system(size: 20, weight: .semibold))
-          .foregroundColor(.white)
-          .frame(maxWidth: .infinity)
-          .frame(height: 78)
-          .background(
-            LinearGradient(
-              colors: [
-                Color(red: 0.33, green: 0.53, blue: 0.95),
-                Color(red: 0.19, green: 0.80, blue: 0.86)
-              ],
-              startPoint: .leading,
-              endPoint: .trailing
-            )
-          )
-          .cornerRadius(39)
-          .shadow(color: AppShadow.medium(), radius: 8, x: 0, y: 4)
+      Group {
+        if currentPage == 0 {
+          projectIntroPage
+            .transition(.opacity)
+        } else {
+          connectPage
+            .transition(.opacity)
         }
-        .disabled(viewModel.registrationState == .registering)
-        .padding(.horizontal, 28)
-        .padding(.bottom, AppSpacing.xl)
       }
-      .padding(.vertical, AppSpacing.xl)
 
       if showConnectionSuccess {
         VStack {
@@ -104,13 +65,13 @@ struct HomeScreenView: View {
         }
       }
     }
+    .animation(.easeInOut(duration: 0.2), value: currentPage)
     .onChange(of: viewModel.registrationState) { _, newState in
       if newState == .registered {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
           showConnectionSuccess = true
         }
 
-        // Auto dismiss after 1.5 seconds
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
           withAnimation {
             showConnectionSuccess = false
@@ -119,46 +80,107 @@ struct HomeScreenView: View {
       }
     }
   }
-}
 
-// MARK: - Feature Tip View
+  private var projectIntroPage: some View {
+    VStack(spacing: 0) {
+      Spacer()
+        .frame(height: 150)
 
-struct FeatureTipView: View {
-  let icon: String
-  let title: String
-  let text: String
-
-  var body: some View {
-    HStack(alignment: .top, spacing: AppSpacing.md) {
-      ZStack {
-        Circle()
-          .fill(
-            LinearGradient(
-              colors: [AppColors.primary.opacity(0.2), AppColors.secondary.opacity(0.2)],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
-          .frame(width: 48, height: 48)
-
-        Image(systemName: icon)
-          .font(.title3)
-          .foregroundColor(AppColors.primary)
-      }
-
-      VStack(alignment: .leading, spacing: AppSpacing.xs) {
-        Text(title)
-          .font(AppTypography.headline)
-          .foregroundColor(AppColors.textPrimary)
-
-        Text(text)
-          .font(AppTypography.subheadline)
-          .foregroundColor(AppColors.textSecondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
+      Text("Aria Spark")
+        .font(.system(size: 24, weight: .regular))
+        .foregroundStyle(.white)
 
       Spacer()
+
+      Text("Let's start a project")
+        .font(.system(size: 34, weight: .regular))
+        .foregroundStyle(.white)
+        .minimumScaleFactor(0.85)
+        .lineLimit(1)
+        .padding(.horizontal, 28)
+
+      Button {
+        currentPage = 1
+      } label: {
+        Text("New Project")
+          .font(.system(size: 16, weight: .regular))
+          .foregroundStyle(.white)
+          .frame(maxWidth: .infinity)
+          .frame(height: 66)
+          .background(
+            LinearGradient(
+              colors: [
+                Color(red: 0.10, green: 0.11, blue: 0.13),
+                Color(red: 0.06, green: 0.06, blue: 0.09)
+              ],
+              startPoint: .leading,
+              endPoint: .trailing
+            )
+          )
+          .cornerRadius(33)
+      }
+      .padding(.horizontal, 28)
+      .padding(.top, 36)
+
+      Spacer()
+        .frame(height: 160)
     }
-    .padding(.horizontal, AppSpacing.lg)
+  }
+
+  private var connectPage: some View {
+    VStack(spacing: AppSpacing.xl) {
+      Spacer()
+
+      Text("Put on your glasses,\ntake a look,\nand tell me what\nyou're working on.")
+        .font(.system(size: 34, weight: .regular))
+        .foregroundStyle(.white)
+        .lineSpacing(2)
+        .multilineTextAlignment(.leading)
+        .minimumScaleFactor(0.9)
+        .padding(.horizontal, 36)
+
+      Spacer()
+
+      Button {
+        viewModel.connectGlasses()
+      } label: {
+        HStack(spacing: AppSpacing.sm) {
+          if viewModel.registrationState == .registering {
+            ProgressView()
+              .progressViewStyle(CircularProgressViewStyle(tint: .white))
+            Text("Connecting...")
+          } else {
+            Image(systemName: "eye.fill")
+              .font(.system(size: 16, weight: .bold))
+              .foregroundStyle(Color(red: 0.36, green: 0.58, blue: 0.95))
+              .frame(width: 30, height: 30)
+              .background(Color.white.opacity(0.95))
+              .clipShape(Circle())
+
+            Text("Connect Ray-Ban Meta")
+          }
+        }
+        .font(.system(size: 17, weight: .semibold))
+        .foregroundColor(.white)
+        .frame(maxWidth: .infinity)
+        .frame(height: 66)
+        .background(
+          LinearGradient(
+            colors: [
+              Color(red: 0.33, green: 0.53, blue: 0.95),
+              Color(red: 0.19, green: 0.80, blue: 0.86)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+          )
+        )
+        .cornerRadius(33)
+        .shadow(color: AppShadow.medium(), radius: 8, x: 0, y: 4)
+      }
+      .disabled(viewModel.registrationState == .registering)
+      .padding(.horizontal, 28)
+      .padding(.bottom, AppSpacing.xl)
+    }
+    .padding(.vertical, AppSpacing.xl)
   }
 }
