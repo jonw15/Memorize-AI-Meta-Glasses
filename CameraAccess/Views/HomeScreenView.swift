@@ -22,103 +22,59 @@ struct HomeScreenView: View {
 
   var body: some View {
     ZStack {
-      // Gradient background
-      LinearGradient(
-        colors: [
-          AppColors.primary.opacity(0.15),
-          AppColors.secondary.opacity(0.15),
-          Color.white
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-      )
-      .edgesIgnoringSafeArea(.all)
+      Color.black
+        .ignoresSafeArea()
 
       VStack(spacing: AppSpacing.xl) {
         Spacer()
 
-        // Aria Logo
-        VStack(spacing: AppSpacing.md) {
-          Image(.cameraAccessIcon)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(width: 100)
-            .shadow(color: AppShadow.medium(), radius: 10, x: 0, y: 5)
-
-          Text("Aria")
-            .font(AppTypography.largeTitle)
-            .foregroundColor(AppColors.textPrimary)
-
-          Text("Rayban Meta Assistant")
-            .font(AppTypography.callout)
-            .foregroundColor(AppColors.textSecondary)
-        }
-
-        // Features
-        VStack(spacing: AppSpacing.md) {
-          FeatureTipView(
-            icon: "video.fill",
-            title: "Live Video",
-            text: "Record video directly from the glasses perspective, capturing what you see and hear"
-          )
-          FeatureTipView(
-            icon: "brain.head.profile",
-            title: "AI Chat",
-            text: "Real-time AI assistant, providing smart help anytime, anywhere"
-          )
-          FeatureTipView(
-            icon: "waveform",
-            title: "Open Audio",
-            text: "Keep your ears open to the world around you while receiving notifications"
-          )
-        }
+        Text("Put on your glasses,\ntake a look,\nand tell me what\nyou're working on.")
+          .font(.system(size: 58, weight: .regular))
+          .foregroundStyle(.white)
+          .lineSpacing(6)
+          .multilineTextAlignment(.leading)
+          .minimumScaleFactor(0.7)
+          .padding(.horizontal, 40)
 
         Spacer()
 
-        // Connection Button
-        VStack(spacing: AppSpacing.md) {
-          Text("You will be redirected to the Meta AI app to confirm connection")
-            .font(AppTypography.footnote)
-            .foregroundColor(AppColors.textSecondary)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, AppSpacing.lg)
-
-          Button {
-            viewModel.connectGlasses()
-          } label: {
-            HStack(spacing: AppSpacing.sm) {
-              if viewModel.registrationState == .registering {
-                ProgressView()
-                  .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                Text("Connecting...")
-              } else {
-                Image(systemName: "eye.circle.fill")
-                  .font(.title3)
-                Text("Connect Ray-Ban Meta")
-              }
+        Button {
+          viewModel.connectGlasses()
+        } label: {
+          HStack(spacing: AppSpacing.sm) {
+            if viewModel.registrationState == .registering {
+              ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+              Text("Connecting...")
+            } else {
+              Image(systemName: "eye.circle.fill")
+                .font(.title3)
+              Text("Connect Ray-Ban Meta")
             }
-            .font(AppTypography.headline)
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, AppSpacing.md)
-            .background(
-              LinearGradient(
-                colors: [AppColors.primary, AppColors.secondary],
-                startPoint: .leading,
-                endPoint: .trailing
-              )
-            )
-            .cornerRadius(AppCornerRadius.lg)
-            .shadow(color: AppShadow.medium(), radius: 8, x: 0, y: 4)
           }
-          .disabled(viewModel.registrationState == .registering)
-          .padding(.horizontal, AppSpacing.lg)
+          .font(.system(size: 20, weight: .semibold))
+          .foregroundColor(.white)
+          .frame(maxWidth: .infinity)
+          .frame(height: 78)
+          .background(
+            LinearGradient(
+              colors: [
+                Color(red: 0.33, green: 0.53, blue: 0.95),
+                Color(red: 0.19, green: 0.80, blue: 0.86)
+              ],
+              startPoint: .leading,
+              endPoint: .trailing
+            )
+          )
+          .cornerRadius(39)
+          .shadow(color: AppShadow.medium(), radius: 8, x: 0, y: 4)
         }
+        .disabled(viewModel.registrationState == .registering)
+        .padding(.horizontal, 28)
         .padding(.bottom, AppSpacing.xl)
       }
       .padding(.vertical, AppSpacing.xl)
 
-      // Connection Success Toast
       if showConnectionSuccess {
         VStack {
           Spacer()
@@ -163,7 +119,6 @@ struct HomeScreenView: View {
       }
     }
   }
-
 }
 
 // MARK: - Feature Tip View
