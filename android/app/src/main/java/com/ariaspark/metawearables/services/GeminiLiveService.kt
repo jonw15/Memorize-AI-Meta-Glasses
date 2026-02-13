@@ -164,7 +164,7 @@ class GeminiLiveService(
         // Gemini Live API setup message
         val setupMessage = mapOf(
             "setup" to mapOf(
-                "model" to "models/$model",
+                "model" to if (model.startsWith("models/")) model else "models/$model",
                 "generation_config" to mapOf(
                     "response_modalities" to listOf("AUDIO"),
                     "speech_config" to mapOf(
