@@ -42,5 +42,6 @@ android/local.properties
 
 # API Keys (extra protection)
 **/*APIKey*.swift
+!CameraAccess/Utils/APIKeyManager.swift
 **/APIKeys.swift
 **/*Secret*.swift
