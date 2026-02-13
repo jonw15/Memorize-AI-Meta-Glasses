@@ -199,7 +199,7 @@ Rules:
         // Gemini Live API setup message
         let setupMessage: [String: Any] = [
             "setup": [
-                "model": "models/\(model)",
+                "model": model.hasPrefix("models/") ? model : "models/\(model)",
                 "generation_config": [
                     "response_modalities": responseModalities,
                     "speech_config": [

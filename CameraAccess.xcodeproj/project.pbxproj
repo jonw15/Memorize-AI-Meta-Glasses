@@ -83,6 +83,8 @@
 		D83E4BD577765733E71A0068 /* QuickVisionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B037E0156E90DE2314A9F47 /* QuickVisionView.swift */; };
 		E699CCA12E8150670052C240 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = E699CCA42E8150670052C240 /* MWDATCore */; };
 		E699CCA22E8150670052C240 /* MWDATMockDevice in Frameworks */ = {isa = PBXBuildFile; productRef = E699CCA52E8150670052C240 /* MWDATMockDevice */; };
+		LA0001000100010001 /* AIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA1001000100010001 /* AIConfig.swift */; };
+		LA0002000200020002 /* AIConfigService.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA1002000200020002 /* AIConfigService.swift */; };
 		LC0001000100010001 /* LiveChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LC1001000100010001 /* LiveChatView.swift */; };
 		LC0002000200020002 /* LiveChatWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LC1002000200020002 /* LiveChatWebView.swift */; };
 		LT0001000100010001 /* LiveTranslateModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1001000100010001 /* LiveTranslateModels.swift */; };
@@ -90,8 +92,6 @@
 		LT0003000300030003 /* LiveTranslateViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1003000300030003 /* LiveTranslateViewModel.swift */; };
 		LT0004000400040004 /* LiveTranslateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1004000400040004 /* LiveTranslateView.swift */; };
 		LT0005000500050005 /* LiveTranslateSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1005000500050005 /* LiveTranslateSettingsView.swift */; };
-		LA0001000100010001 /* AIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA1001000100010001 /* AIConfig.swift */; };
-		LA0002000200020002 /* AIConfigService.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA1002000200020002 /* AIConfigService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -191,6 +191,8 @@
 		CA3E36CE337855A7F17F2AC8 /* QuickVisionService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickVisionService.swift; sourceTree = "<group>"; };
 		DC72379319F7F8AAF8019018 /* LiveAIManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LiveAIManager.swift; path = Managers/LiveAIManager.swift; sourceTree = "<group>"; };
 		E699CC952E8150670052C240 /* CameraAccessTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CameraAccessTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		LA1001000100010001 /* AIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfig.swift; sourceTree = "<group>"; };
+		LA1002000200020002 /* AIConfigService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfigService.swift; sourceTree = "<group>"; };
 		LC1001000100010001 /* LiveChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatView.swift; sourceTree = "<group>"; };
 		LC1002000200020002 /* LiveChatWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatWebView.swift; sourceTree = "<group>"; };
 		LT1001000100010001 /* LiveTranslateModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateModels.swift; sourceTree = "<group>"; };
@@ -198,8 +200,6 @@
 		LT1003000300030003 /* LiveTranslateViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateViewModel.swift; sourceTree = "<group>"; };
 		LT1004000400040004 /* LiveTranslateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateView.swift; sourceTree = "<group>"; };
 		LT1005000500050005 /* LiveTranslateSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateSettingsView.swift; sourceTree = "<group>"; };
-		LA1001000100010001 /* AIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfig.swift; sourceTree = "<group>"; };
-		LA1002000200020002 /* AIConfigService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfigService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */

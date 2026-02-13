@@ -58,8 +58,10 @@ class AIConfigService {
         }
 
         // Parse response JSON to get "content" field
+        // Server returns: {"r":"s", "data":{"content":"base64..."}}
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let content = json["content"] as? String else {
+              let dataObj = json["data"] as? [String: Any],
+              let content = dataObj["content"] as? String else {
             throw AIConfigError.invalidResponse
         }
 

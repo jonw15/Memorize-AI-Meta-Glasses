@@ -65,8 +65,10 @@ object AIConfigService {
             }
 
             // Parse response JSON to get "content" field
+            // Server returns: {"r":"s", "data":{"content":"base64..."}}
             val json = gson.fromJson(responseBody, JsonObject::class.java)
-            val content = json.get("content")?.asString
+            val dataObj = json.getAsJsonObject("data")
+            val content = dataObj?.get("content")?.asString
             if (content == null || content.length <= 44) {
                 Log.e(TAG, "Invalid response: content missing or too short")
                 return@withContext null
