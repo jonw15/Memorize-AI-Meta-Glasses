@@ -83,7 +83,7 @@ struct PermissionsRequestView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, AppSpacing.md)
                                 .background(AppColors.primary)
-                                .foregroundColor(.white)
+                                .foregroundColor(.black)
                                 .cornerRadius(AppCornerRadius.lg)
                             }
 
@@ -105,7 +105,7 @@ struct PermissionsRequestView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, AppSpacing.md)
                             .background(AppColors.primary)
-                            .foregroundColor(.white)
+                            .foregroundColor(.black)
                             .cornerRadius(AppCornerRadius.lg)
                         }
                     }
@@ -156,11 +156,11 @@ struct PermissionRow: View {
             VStack(alignment: .leading, spacing: AppSpacing.xs) {
                 Text(title)
                     .font(AppTypography.headline)
-                    .foregroundColor(AppColors.textPrimary)
+                    .foregroundColor(.black)
 
                 Text(description)
                     .font(AppTypography.caption)
-                    .foregroundColor(AppColors.textSecondary)
+                    .foregroundColor(.black)
             }
 
             Spacer()
