@@ -178,7 +178,10 @@ class GeminiLiveService: NSObject {
                     "parts": [
                         ["text": instructions]
                     ]
-                ]
+                ],
+                // Request both user and assistant speech transcripts from Gemini Live.
+                "input_audio_transcription": [:],
+                "output_audio_transcription": [:]
             ]
         ]
 
@@ -411,6 +414,16 @@ class GeminiLiveService: NSObject {
                 return
             }
 
+            // Some backends emit transcript events at the top level.
+            if let text = self.extractTranscript(from: json, containerKeys: ["inputTranscription", "input_transcription", "inputAudioTranscription", "input_audio_transcription"]) {
+                print("👤 [Gemini] User said (top-level): \(text)")
+                self.onUserTranscript?(text)
+            }
+            if let text = self.extractTranscript(from: json, containerKeys: ["outputTranscription", "output_transcription", "outputAudioTranscription", "output_audio_transcription"]) {
+                print("💬 [Gemini] AI text (top-level): \(text)")
+                self.onTranscriptDelta?(text)
+            }
+
             // Handle server content (audio/text responses)
             if let serverContent = json["serverContent"] as? [String: Any] {
                 self.handleServerContent(serverContent)
@@ -434,15 +447,27 @@ class GeminiLiveService: NSObject {
     }
 
     private func handleServerContent(_ content: [String: Any]) {
+        var hasOutputTranscription = false
+
+        // Prefer explicit speech transcription when available.
+        if let text = extractTranscript(from: content, containerKeys: ["outputTranscription", "output_transcription", "outputAudioTranscription", "output_audio_transcription"]) {
+            print("💬 [Gemini] AI text: \(text)")
+            onTranscriptDelta?(text)
+            hasOutputTranscription = true
+        }
+
         // Check for model turn
         if let modelTurn = content["modelTurn"] as? [String: Any],
            let parts = modelTurn["parts"] as? [[String: Any]] {
 
             for part in parts {
-                // Handle text response
-                if let text = part["text"] as? String {
-                    print("💬 [Gemini] AI response: \(text)")
-                    onTranscriptDelta?(text)
+                // Fallback text path: some model variants emit assistant text only here.
+                if !hasOutputTranscription, let text = part["text"] as? String {
+                    let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !cleaned.isEmpty, !isLikelyInternalObservationText(cleaned) {
+                        print("💬 [Gemini] AI response fallback text: \(cleaned)")
+                        onTranscriptDelta?(cleaned)
+                    }
                 }
 
                 // Handle inline audio data
@@ -473,18 +498,32 @@ class GeminiLiveService: NSObject {
         }
 
         // Handle input transcription (user speech)
-        if let inputTranscription = content["inputTranscription"] as? [String: Any],
-           let text = inputTranscription["text"] as? String {
+        if let text = extractTranscript(from: content, containerKeys: ["inputTranscription", "input_transcription", "inputAudioTranscription", "input_audio_transcription"]) {
             print("👤 [Gemini] User said: \(text)")
             onUserTranscript?(text)
         }
+    }
 
-        // Handle output transcription (AI speech text)
-        if let outputTranscription = content["outputTranscription"] as? [String: Any],
-           let text = outputTranscription["text"] as? String {
-            print("💬 [Gemini] AI text: \(text)")
-            onTranscriptDelta?(text)
+    private func isLikelyInternalObservationText(_ text: String) -> Bool {
+        let normalized = text.lowercased()
+        return normalized.contains("observing the current scene")
+            || normalized.contains("focused on the visual input")
+            || normalized.contains("processing this visual information")
+            || normalized.contains("analyze the prompt")
+    }
+
+    private func extractTranscript(from object: [String: Any], containerKeys: [String]) -> String? {
+        for key in containerKeys {
+            if let container = object[key] as? [String: Any] {
+                for textKey in ["text", "transcript"] {
+                    if let raw = container[textKey] as? String {
+                        let cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !cleaned.isEmpty { return cleaned }
+                    }
+                }
+            }
         }
+        return nil
     }
 
     // MARK: - Audio Playback

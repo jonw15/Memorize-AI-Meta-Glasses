@@ -6,10 +6,15 @@
 import SwiftUI
 
 struct LiveAIView: View {
+    private enum RoomAction {
+        case join
+        case create
+    }
+
     private enum BottomTab: String {
         case chatLog = "Chat Log"
         case guide = "Guide"
-        case shop = "Shop"
+        case connect = "Connect"
     }
 
     @StateObject private var viewModel: OmniRealtimeViewModel
@@ -18,6 +23,10 @@ struct LiveAIView: View {
     @State private var showChatLogPanel = false
     @State private var frameTimer: Timer?
     @State private var selectedBottomTab: BottomTab = .chatLog
+    @State private var isMuted = false
+    @State private var showConnectPanel = false
+    @State private var selectedRoomAction: RoomAction?
+    @State private var roomCode = ""
 
     init(streamViewModel: StreamSessionViewModel, apiKey: String) {
         self.streamViewModel = streamViewModel
@@ -64,6 +73,12 @@ struct LiveAIView: View {
                 chatLogPanel
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(5)
+            }
+
+            if showConnectPanel && streamViewModel.hasActiveDevice {
+                connectRoomPanel
+                    .transition(.opacity)
+                    .zIndex(6)
             }
         }
         .onAppear {
@@ -210,24 +225,8 @@ struct LiveAIView: View {
             .background(Color.black.opacity(0.6))
             .cornerRadius(AppCornerRadius.xl)
 
-            // Stop button (only button)
-            Button {
-                viewModel.disconnect()
-                dismiss()
-            } label: {
-                HStack(spacing: AppSpacing.sm) {
-                    Image(systemName: "stop.fill")
-                        .font(.title2)
-                    Text("liveai.stop".localized)
-                        .font(AppTypography.headline)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, AppSpacing.md)
-                .background(Color.red)
-                .foregroundColor(.white)
-                .cornerRadius(AppCornerRadius.lg)
-            }
-            .padding(.horizontal, AppSpacing.lg)
+            muteButton
+                .frame(maxWidth: .infinity, alignment: .center)
 
             liquidGlassTabBar
                 .padding(.horizontal, AppSpacing.lg)
@@ -242,11 +241,40 @@ struct LiveAIView: View {
         )
     }
 
+    private var muteButton: some View {
+        Button {
+            if isMuted {
+                viewModel.startRecording()
+                isMuted = false
+            } else {
+                viewModel.stopRecording()
+                isMuted = true
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isMuted ? "mic.slash.fill" : "mic.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                Text(isMuted ? "Unmute" : "Mute")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 16)
+            .frame(height: 38)
+            .background(Color.black.opacity(0.65))
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(0.25), lineWidth: 1)
+            )
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
     private var liquidGlassTabBar: some View {
         HStack(spacing: 10) {
             tabButton(icon: "text.bubble", tab: .chatLog)
             tabButton(icon: "book", tab: .guide)
-            tabButton(icon: "cart", tab: .shop)
+            tabButton(icon: "person.2.wave.2", tab: .connect)
         }
         .padding(8)
         .background(.ultraThinMaterial)
@@ -264,6 +292,11 @@ struct LiveAIView: View {
             selectedBottomTab = tab
             withAnimation(.easeInOut(duration: 0.2)) {
                 showChatLogPanel = (tab == .chatLog)
+                showConnectPanel = (tab == .connect)
+                if tab != .connect {
+                    selectedRoomAction = nil
+                    roomCode = ""
+                }
             }
         } label: {
             HStack(spacing: 6) {
@@ -357,6 +390,133 @@ struct LiveAIView: View {
             .padding(.bottom, 108)
         }
         .ignoresSafeArea(edges: .bottom)
+    }
+
+    private var connectRoomPanel: some View {
+        ZStack {
+            Color.black.opacity(0.92)
+                .ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                HStack {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showConnectPanel = false
+                            selectedBottomTab = .chatLog
+                            showChatLogPanel = true
+                            selectedRoomAction = nil
+                            roomCode = ""
+                        }
+                    } label: {
+                        Image(systemName: "arrow.left")
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundColor(.black)
+                            .frame(width: 64, height: 64)
+                            .background(Color.white.opacity(0.92))
+                            .clipShape(Circle())
+                    }
+
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+
+                Spacer()
+
+                Text("Join a DIY Project\nWith Friends!")
+                    .font(.system(size: 34, weight: .regular))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.75)
+                    .padding(.horizontal, 28)
+
+                VStack(spacing: 14) {
+                    Button {
+                        selectedRoomAction = .join
+                    } label: {
+                        VStack(spacing: 4) {
+                            Text("JOIN ROOM")
+                                .font(.system(size: 20, weight: .bold))
+                            Text("Help a Friend")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 86)
+                        .background(
+                            LinearGradient(
+                                colors: [Color(red: 0.89, green: 0.39, blue: 0.09), Color(red: 0.76, green: 0.28, blue: 0.04)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .cornerRadius(16)
+                    }
+
+                    Button {
+                        selectedRoomAction = .create
+                    } label: {
+                        VStack(spacing: 4) {
+                            Text("CREATE ROOM")
+                                .font(.system(size: 20, weight: .bold))
+                            Text("Start a Project")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 86)
+                        .background(
+                            LinearGradient(
+                                colors: [Color(red: 0.40, green: 0.62, blue: 0.19), Color(red: 0.25, green: 0.45, blue: 0.12)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .cornerRadius(16)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 10)
+
+                if let action = selectedRoomAction {
+                    VStack(spacing: 10) {
+                        Text(action == .join ? "Enter room code to join" : "Enter room code to create")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.9))
+
+                        TextField("4-character code", text: $roomCode)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .padding(.horizontal, 14)
+                            .frame(height: 48)
+                            .background(Color.white.opacity(0.95))
+                            .foregroundColor(.black)
+                            .cornerRadius(10)
+                            .onChange(of: roomCode) { value in
+                                let filtered = value.uppercased().filter { $0.isLetter || $0.isNumber }
+                                roomCode = String(filtered.prefix(4))
+                            }
+
+                        Button(action == .join ? "Join" : "Create") {
+                            roomCode = String(roomCode.uppercased().filter { $0.isLetter || $0.isNumber }.prefix(4))
+                        }
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .background(Color.white)
+                        .cornerRadius(10)
+                        .disabled(roomCode.count != 4)
+                    }
+                    .padding(14)
+                    .background(Color.white.opacity(0.12))
+                    .cornerRadius(14)
+                    .padding(.horizontal, 24)
+                }
+
+                Spacer()
+            }
+        }
     }
 
     // MARK: - Device Not Connected View

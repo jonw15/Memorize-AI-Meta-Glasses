@@ -29,6 +29,8 @@ class OmniRealtimeViewModel: ObservableObject {
     private var isImageSendingEnabled = false // Whether image sending is enabled (after first audio)
     private var imageSendTimer: Timer?
     @Published var imageSendInterval: TimeInterval = 1.0
+    private var lastUserTranscript = ""
+    private var lastAssistantTranscript = ""
 
     init(apiKey: String) {
         self.apiKey = apiKey
@@ -60,17 +62,32 @@ class OmniRealtimeViewModel: ObservableObject {
 
         geminiService.onTranscriptDelta = { [weak self] (delta: String) in
             Task { @MainActor in
-                print("📝 [LiveAI-VM] AI response fragment: \(delta)")
-                self?.currentTranscript += delta
+                guard let self else { return }
+                let cleaned = delta.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !cleaned.isEmpty else { return }
+                print("📝 [LiveAI-VM] AI speech fragment: \(cleaned)")
+                if self.currentTranscript.isEmpty {
+                    self.currentTranscript = cleaned
+                } else if cleaned.hasPrefix(self.currentTranscript) {
+                    // Some providers send a full running transcript on each delta.
+                    self.currentTranscript = cleaned
+                } else {
+                    // Others send only incremental chunks.
+                    self.currentTranscript += cleaned
+                }
             }
         }
 
         geminiService.onUserTranscript = { [weak self] (userText: String) in
             Task { @MainActor in
                 guard let self = self else { return }
-                print("💬 [LiveAI-VM] Saving user speech: \(userText)")
+                let cleaned = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !cleaned.isEmpty else { return }
+                guard cleaned != self.lastUserTranscript else { return }
+                self.lastUserTranscript = cleaned
+                print("💬 [LiveAI-VM] Saving user speech: \(cleaned)")
                 self.conversationHistory.append(
-                    ConversationMessage(role: .user, content: userText)
+                    ConversationMessage(role: .user, content: cleaned)
                 )
             }
         }
@@ -79,13 +96,19 @@ class OmniRealtimeViewModel: ObservableObject {
             Task { @MainActor in
                 guard let self = self else { return }
                 let textToSave = fullText.isEmpty ? self.currentTranscript : fullText
-                guard !textToSave.isEmpty else {
+                let cleaned = textToSave.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !cleaned.isEmpty else {
                     print("⚠️ [LiveAI-VM] AI response is empty, skipping save")
                     return
                 }
-                print("💬 [LiveAI-VM] Saving AI response: \(textToSave)")
+                guard cleaned != self.lastAssistantTranscript else {
+                    self.currentTranscript = ""
+                    return
+                }
+                self.lastAssistantTranscript = cleaned
+                print("💬 [LiveAI-VM] Saving AI response: \(cleaned)")
                 self.conversationHistory.append(
-                    ConversationMessage(role: .assistant, content: textToSave)
+                    ConversationMessage(role: .assistant, content: cleaned)
                 )
                 self.currentTranscript = ""
             }
