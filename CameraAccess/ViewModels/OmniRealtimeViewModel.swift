@@ -73,7 +73,8 @@ class OmniRealtimeViewModel: ObservableObject {
                     self.currentTranscript = cleaned
                 } else {
                     // Others send only incremental chunks.
-                    self.currentTranscript += cleaned
+                    let needsSpace = !self.currentTranscript.hasSuffix(" ") && !cleaned.hasPrefix(" ")
+                    self.currentTranscript += (needsSpace ? " " : "") + cleaned
                 }
             }
         }

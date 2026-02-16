@@ -158,7 +158,15 @@ class GeminiLiveService: NSObject {
         guard !isSessionConfigured else { return }
 
         // Get system prompt based on current Live AI mode
-        let instructions = LiveAIModeManager.staticSystemPrompt
+        let instructions = LiveAIModeManager.staticSystemPrompt + """
+
+        
+[CRITICAL OUTPUT RULES]
+- Provide only the final response you would speak to the user.
+- Do NOT include internal analysis, scene-observation notes, or reasoning process.
+- Do NOT use markdown section headers such as "**Observing...**" or "**Interpreting...**".
+- Keep responses concise and conversational (1-3 short sentences unless user asks for more).
+"""
 
         // Gemini Live API setup message
         let setupMessage: [String: Any] = [
@@ -461,6 +469,9 @@ class GeminiLiveService: NSObject {
            let parts = modelTurn["parts"] as? [[String: Any]] {
 
             for part in parts {
+                // Skip thinking/reasoning parts — only show the final spoken response.
+                if part["thought"] as? Bool == true { continue }
+
                 // Fallback text path: some model variants emit assistant text only here.
                 if !hasOutputTranscription, let text = part["text"] as? String {
                     let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
