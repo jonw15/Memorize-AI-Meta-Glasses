@@ -4,6 +4,7 @@
  */
 
 import SwiftUI
+import AVFoundation
 
 struct LiveAIView: View {
     private enum RoomAction {
@@ -27,6 +28,7 @@ struct LiveAIView: View {
     @State private var showConnectPanel = false
     @State private var selectedRoomAction: RoomAction?
     @State private var roomCode = ""
+    private let feedbackSynth = AVSpeechSynthesizer()
 
     init(streamViewModel: StreamSessionViewModel, apiKey: String) {
         self.streamViewModel = streamViewModel
@@ -73,6 +75,13 @@ struct LiveAIView: View {
                 chatLogPanel
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(5)
+            }
+
+            if selectedBottomTab == .guide && streamViewModel.hasActiveDevice {
+                guidePanel
+                    .transition(.opacity)
+                    .zIndex(5)
+                    .allowsHitTesting(false)
             }
 
             if showConnectPanel && streamViewModel.hasActiveDevice {
@@ -246,9 +255,11 @@ struct LiveAIView: View {
             if isMuted {
                 viewModel.startRecording()
                 isMuted = false
+                playMuteToggleSound(isMuted: false)
             } else {
                 viewModel.stopRecording()
                 isMuted = true
+                playMuteToggleSound(isMuted: true)
             }
         } label: {
             HStack(spacing: 8) {
@@ -517,6 +528,63 @@ struct LiveAIView: View {
                 Spacer()
             }
         }
+    }
+
+    private var guidePanel: some View {
+        ZStack {
+            Color.black.opacity(0.45)
+                .ignoresSafeArea()
+
+            VStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(Color(red: 0.96, green: 0.45, blue: 0.12).opacity(0.16))
+                        .frame(width: 108, height: 108)
+                    Circle()
+                        .fill(Color(red: 0.96, green: 0.45, blue: 0.12))
+                        .frame(width: 42, height: 42)
+
+                    Image(systemName: "brain.head.profile")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.black)
+                }
+
+                Text("Waiting for more details")
+                    .font(.system(size: 38, weight: .semibold))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+
+                Text("More context from your conversation is needed to build your custom guide. Keep talking to Aria.")
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundColor(.white.opacity(0.85))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .padding(.horizontal, 18)
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 28)
+            .background(Color(red: 0.16, green: 0.08, blue: 0.05).opacity(0.86))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color(red: 0.96, green: 0.45, blue: 0.12).opacity(0.2), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .padding(.horizontal, 24)
+        }
+    }
+
+    private func playMuteToggleSound(isMuted: Bool) {
+        // Use a short spoken earcon so feedback still works under the app's audio session.
+        if feedbackSynth.isSpeaking {
+            feedbackSynth.stopSpeaking(at: .immediate)
+        }
+
+        let utterance = AVSpeechUtterance(string: isMuted ? "Muted" : "Unmuted")
+        utterance.rate = 0.52
+        utterance.pitchMultiplier = 1.0
+        utterance.volume = 0.8
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        feedbackSynth.speak(utterance)
     }
 
     // MARK: - Device Not Connected View
