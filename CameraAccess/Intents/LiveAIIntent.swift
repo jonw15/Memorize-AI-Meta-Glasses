@@ -19,7 +19,7 @@ struct LiveAIIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         // Post notification to automatically open Live AI view in the app
         NotificationCenter.default.post(name: .liveAITriggered, object: nil)
-        return .result(dialog: "Starting Live AI...")
+        return .result(dialog: "Put on your glasses, look at your project, and tell me what you're working on.")
     }
 }
 

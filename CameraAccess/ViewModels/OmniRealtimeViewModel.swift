@@ -87,9 +87,25 @@ class OmniRealtimeViewModel: ObservableObject {
                 guard cleaned != self.lastUserTranscript else { return }
                 self.lastUserTranscript = cleaned
                 print("💬 [LiveAI-VM] Saving user speech: \(cleaned)")
-                self.conversationHistory.append(
-                    ConversationMessage(role: .user, content: cleaned)
-                )
+                // Accumulate user speech fragments into a single bubble.
+                if let lastIndex = self.conversationHistory.indices.last,
+                   self.conversationHistory[lastIndex].role == .user {
+                    let existing = self.conversationHistory[lastIndex].content
+                    // If the new text already contains the old text, it's a running transcript — use it as-is.
+                    // Otherwise it's an incremental fragment — append it.
+                    let merged: String
+                    if cleaned.hasPrefix(existing) {
+                        merged = cleaned
+                    } else {
+                        let needsSpace = !existing.hasSuffix(" ") && !cleaned.hasPrefix(" ")
+                        merged = existing + (needsSpace ? " " : "") + cleaned
+                    }
+                    self.conversationHistory[lastIndex] = ConversationMessage(role: .user, content: merged)
+                } else {
+                    self.conversationHistory.append(
+                        ConversationMessage(role: .user, content: cleaned)
+                    )
+                }
             }
         }
 
