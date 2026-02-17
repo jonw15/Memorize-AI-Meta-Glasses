@@ -174,7 +174,11 @@ class APIProviderManager: ObservableObject {
     }
 
     var liveAIAPIKey: String {
-        return fetchedAPIKey ?? APIKeyManager.shared.getGoogleAPIKey() ?? ""
+        if let localKey = APIKeyManager.shared.getGoogleAPIKey(),
+           !localKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return localKey
+        }
+        return fetchedAPIKey ?? ""
     }
 
     var hasLiveAIAPIKey: Bool {
@@ -293,7 +297,11 @@ extension APIProviderManager {
     }
 
     nonisolated static var staticLiveAIAPIKey: String {
-        return _fetchedAPIKeyCache ?? APIKeyManager.shared.getGoogleAPIKey() ?? ""
+        if let localKey = APIKeyManager.shared.getGoogleAPIKey(),
+           !localKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return localKey
+        }
+        return _fetchedAPIKeyCache ?? ""
     }
 
     nonisolated static var staticLiveAIWebsocketURL: String {

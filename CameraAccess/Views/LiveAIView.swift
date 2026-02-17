@@ -21,7 +21,6 @@ struct LiveAIView: View {
     @StateObject private var viewModel: OmniRealtimeViewModel
     @ObservedObject var streamViewModel: StreamSessionViewModel
     @Environment(\.dismiss) private var dismiss
-    @State private var showChatLogPanel = false
     @State private var frameTimer: Timer?
     @State private var selectedBottomTab: BottomTab = .chatLog
     @State private var isMuted = false
@@ -47,34 +46,20 @@ struct LiveAIView: View {
             if !streamViewModel.hasActiveDevice {
                 deviceNotConnectedView
             } else {
-                // Video feed (full opacity, no white mask)
-                if let videoFrame = streamViewModel.currentVideoFrame {
-                    GeometryReader { geometry in
-                        Image(uiImage: videoFrame)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: geometry.size.width, height: geometry.size.height)
-                            .clipped()
-                    }
-                    .ignoresSafeArea()
-                }
-
                 VStack(spacing: 0) {
                 // Header (flush with status bar)
                 headerView
                     .padding(.top, 8) // Slightly below the status bar
 
-                Spacer()
+                if selectedBottomTab == .chatLog {
+                    chatLogFullPage
+                } else {
+                    Spacer()
+                }
 
                 // Status and stop button
                 controlsView
                 }
-            }
-
-            if showChatLogPanel && streamViewModel.hasActiveDevice {
-                chatLogPanel
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .zIndex(5)
             }
 
             if selectedBottomTab == .guide && streamViewModel.hasActiveDevice {
@@ -151,18 +136,6 @@ struct LiveAIView: View {
                 .foregroundColor(.white)
 
             Spacer()
-
-            // Hide/show conversation button
-            Button {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    showChatLogPanel.toggle()
-                }
-            } label: {
-                Image(systemName: showChatLogPanel ? "eye.fill" : "eye.slash.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(.white.opacity(0.8))
-                    .frame(width: 32, height: 32)
-            }
 
             // Connection status
             HStack(spacing: AppSpacing.xs) {
@@ -302,7 +275,6 @@ struct LiveAIView: View {
         return Button {
             selectedBottomTab = tab
             withAnimation(.easeInOut(duration: 0.2)) {
-                showChatLogPanel = (tab == .chatLog)
                 showConnectPanel = (tab == .connect)
                 if tab != .connect {
                     selectedRoomAction = nil
@@ -327,80 +299,68 @@ struct LiveAIView: View {
         .buttonStyle(.plain)
     }
 
-    private var chatLogPanel: some View {
-        VStack(spacing: 0) {
-            Spacer()
+    private var chatLogFullPage: some View {
+        VStack(spacing: 10) {
+            Text("Put on your glasses, look at your project, and tell me what you're working on.")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .lineSpacing(2)
+                .padding(.horizontal, 14)
+                .padding(.top, 6)
 
-            VStack(spacing: 10) {
-                Capsule()
-                    .fill(Color.white.opacity(0.5))
-                    .frame(width: 44, height: 5)
-                    .padding(.top, 10)
+            Rectangle()
+                .fill(Color.white.opacity(0.22))
+                .frame(height: 1)
+                .padding(.horizontal, 14)
+                .padding(.top, 2)
 
-                HStack {
-                    Text("Chat Log")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                    Spacer()
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showChatLogPanel = false
+            HStack {
+                Text("Chat Log")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(viewModel.conversationHistory) { message in
+                            MessageBubble(message: message)
+                                .id(message.id)
                         }
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.white.opacity(0.8))
+
+                        if !viewModel.currentTranscript.isEmpty {
+                            MessageBubble(
+                                message: ConversationMessage(
+                                    role: .assistant,
+                                    content: viewModel.currentTranscript
+                                )
+                            )
+                            .id("current")
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 16)
+                }
+                .onChange(of: viewModel.conversationHistory.count) { _ in
+                    if let lastMessage = viewModel.conversationHistory.last {
+                        withAnimation {
+                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                        }
                     }
                 }
-                .padding(.horizontal, 14)
-
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(viewModel.conversationHistory) { message in
-                                MessageBubble(message: message)
-                                    .id(message.id)
-                            }
-
-                            if !viewModel.currentTranscript.isEmpty {
-                                MessageBubble(
-                                    message: ConversationMessage(
-                                        role: .assistant,
-                                        content: viewModel.currentTranscript
-                                    )
-                                )
-                                .id("current")
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 16)
-                    }
-                    .onChange(of: viewModel.conversationHistory.count) { _ in
-                        if let lastMessage = viewModel.conversationHistory.last {
-                            withAnimation {
-                                proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                            }
-                        }
-                    }
-                    .onChange(of: viewModel.currentTranscript) { _ in
-                        withAnimation {
-                            proxy.scrollTo("current", anchor: .bottom)
-                        }
+                .onChange(of: viewModel.currentTranscript) { _ in
+                    withAnimation {
+                        proxy.scrollTo("current", anchor: .bottom)
                     }
                 }
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 360)
-            .background(.ultraThinMaterial)
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(Color.white.opacity(0.22), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .padding(.horizontal, 12)
-            .padding(.bottom, 108)
         }
-        .ignoresSafeArea(edges: .bottom)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.28))
     }
 
     private var connectRoomPanel: some View {
@@ -414,7 +374,6 @@ struct LiveAIView: View {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showConnectPanel = false
                             selectedBottomTab = .chatLog
-                            showChatLogPanel = true
                             selectedRoomAction = nil
                             roomCode = ""
                         }

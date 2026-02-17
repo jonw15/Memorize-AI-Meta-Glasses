@@ -123,15 +123,35 @@ class GeminiLiveService: NSObject {
     func connect() {
         // Gemini Live WebSocket URL with API key (dynamic from server config)
         let baseURL = APIProviderManager.staticLiveAIWebsocketURL
-        let urlString = "\(baseURL)?key=\(apiKey)"
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedKey.isEmpty else {
+            print("❌ [Gemini] Missing API key for Live AI")
+            onError?("Missing Live AI API key")
+            return
+        }
 
         print("🔌 [Gemini] Preparing to connect WebSocket")
 
-        guard let url = URL(string: urlString) else {
-            print("❌ [Gemini] Invalid URL")
+        guard var components = URLComponents(string: baseURL) else {
+            print("❌ [Gemini] Invalid base URL: \(baseURL)")
             onError?("Invalid URL")
             return
         }
+
+        var queryItems = components.queryItems ?? []
+        if !queryItems.contains(where: { $0.name.lowercased() == "key" }) {
+            queryItems.append(URLQueryItem(name: "key", value: trimmedKey))
+        }
+        components.queryItems = queryItems
+
+        guard let url = components.url else {
+            print("❌ [Gemini] Failed to build URL from components")
+            onError?("Invalid URL")
+            return
+        }
+
+        print("🔌 [Gemini] WebSocket host: \(url.host ?? "unknown"), keyLength: \(trimmedKey.count)")
 
         let configuration = URLSessionConfiguration.default
         urlSession = URLSession(configuration: configuration, delegate: self, delegateQueue: OperationQueue())
