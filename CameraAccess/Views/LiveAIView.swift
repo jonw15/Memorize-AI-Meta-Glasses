@@ -14,8 +14,10 @@ struct LiveAIView: View {
 
     private enum BottomTab: String {
         case chatLog = "Chat Log"
-        case guide = "Guide"
-        case connect = "Connect"
+        case videos = "Videos"
+        case webLinks = "Web Links"
+        case instructions = "Instructions"
+        case collab = "Collab"
     }
 
     @StateObject private var viewModel: OmniRealtimeViewModel
@@ -54,19 +56,12 @@ struct LiveAIView: View {
                 if selectedBottomTab == .chatLog {
                     chatLogFullPage
                 } else {
-                    Spacer()
+                    tabPlaceholderContent
                 }
 
                 // Status and stop button
                 controlsView
                 }
-            }
-
-            if selectedBottomTab == .guide && streamViewModel.hasActiveDevice {
-                guidePanel
-                    .transition(.opacity)
-                    .zIndex(5)
-                    .allowsHitTesting(false)
             }
 
             if showConnectPanel && streamViewModel.hasActiveDevice {
@@ -255,10 +250,12 @@ struct LiveAIView: View {
     }
 
     private var liquidGlassTabBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 6) {
             tabButton(icon: "text.bubble", tab: .chatLog)
-            tabButton(icon: "book", tab: .guide)
-            tabButton(icon: "person.2.wave.2", tab: .connect)
+            tabButton(icon: "play.rectangle", tab: .videos)
+            tabButton(icon: "link", tab: .webLinks)
+            tabButton(icon: "list.bullet.clipboard", tab: .instructions)
+            tabButton(icon: "person.2.wave.2", tab: .collab)
         }
         .padding(8)
         .background(.ultraThinMaterial)
@@ -275,22 +272,24 @@ struct LiveAIView: View {
         return Button {
             selectedBottomTab = tab
             withAnimation(.easeInOut(duration: 0.2)) {
-                showConnectPanel = (tab == .connect)
-                if tab != .connect {
+                showConnectPanel = (tab == .collab)
+                if tab != .collab {
                     selectedRoomAction = nil
                     roomCode = ""
                 }
             }
         } label: {
-            HStack(spacing: 6) {
+            VStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: .semibold))
                 Text(tab.rawValue)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
             .foregroundColor(isSelected ? .black : .white)
             .frame(maxWidth: .infinity)
-            .frame(height: 42)
+            .frame(height: 52)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(isSelected ? Color.white.opacity(0.9) : Color.white.opacity(0.08))
@@ -361,6 +360,21 @@ struct LiveAIView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black.opacity(0.28))
+    }
+
+    private var tabPlaceholderContent: some View {
+        VStack {
+            Spacer()
+            Text(selectedBottomTab.rawValue)
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundColor(.white)
+            Text("Coming Soon")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.white.opacity(0.75))
+                .padding(.top, 4)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var connectRoomPanel: some View {
@@ -486,49 +500,6 @@ struct LiveAIView: View {
 
                 Spacer()
             }
-        }
-    }
-
-    private var guidePanel: some View {
-        ZStack {
-            Color.black.opacity(0.45)
-                .ignoresSafeArea()
-
-            VStack(spacing: 16) {
-                ZStack {
-                    Circle()
-                        .fill(Color(red: 0.96, green: 0.45, blue: 0.12).opacity(0.16))
-                        .frame(width: 108, height: 108)
-                    Circle()
-                        .fill(Color(red: 0.96, green: 0.45, blue: 0.12))
-                        .frame(width: 42, height: 42)
-
-                    Image(systemName: "brain.head.profile")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.black)
-                }
-
-                Text("Waiting for more details")
-                    .font(.system(size: 38, weight: .semibold))
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-
-                Text("More context from your conversation is needed to build your custom guide. Keep talking to Aria.")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(.white.opacity(0.85))
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(3)
-                    .padding(.horizontal, 18)
-            }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 28)
-            .background(Color(red: 0.16, green: 0.08, blue: 0.05).opacity(0.86))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(Color(red: 0.96, green: 0.45, blue: 0.12).opacity(0.2), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .padding(.horizontal, 24)
         }
     }
 
