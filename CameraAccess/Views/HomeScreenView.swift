@@ -138,9 +138,47 @@ struct HomeScreenView: View {
       .padding(.horizontal, 28)
       .padding(.top, 36)
 
+      VStack(spacing: 12) {
+        comingSoonButton(title: "Hanging Pictures")
+        comingSoonButton(title: "Declutter")
+      }
+      .padding(.horizontal, 28)
+      .padding(.top, 12)
+
       Spacer()
         .frame(height: 160)
     }
+  }
+
+  private func comingSoonButton(title: String) -> some View {
+    Button {} label: {
+      HStack {
+        Text(title)
+          .font(.system(size: 16, weight: .semibold))
+          .foregroundStyle(.white.opacity(0.85))
+
+        Spacer()
+
+        Text("Coming Soon")
+          .font(.system(size: 12, weight: .semibold))
+          .foregroundStyle(.white.opacity(0.75))
+          .padding(.horizontal, 10)
+          .padding(.vertical, 6)
+          .background(Color.white.opacity(0.12))
+          .cornerRadius(12)
+      }
+      .padding(.horizontal, 16)
+      .frame(maxWidth: .infinity)
+      .frame(height: 56)
+      .background(Color.white.opacity(0.06))
+      .cornerRadius(16)
+      .overlay(
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .stroke(Color.white.opacity(0.16), lineWidth: 1)
+      )
+    }
+    .disabled(true)
+    .buttonStyle(.plain)
   }
 
   private var connectPage: some View {
