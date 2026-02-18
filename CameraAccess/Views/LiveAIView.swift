@@ -7,6 +7,13 @@ import SwiftUI
 import AVFoundation
 
 struct LiveAIView: View {
+    private struct InstructionStep: Identifiable {
+        let id = UUID()
+        let title: String
+        let detail: String
+        let isCompleted: Bool
+    }
+
     private enum RoomAction {
         case join
         case create
@@ -30,6 +37,48 @@ struct LiveAIView: View {
     @State private var selectedRoomAction: RoomAction?
     @State private var roomCode = ""
     private let feedbackSynth = AVSpeechSynthesizer()
+    private let placeholderInstructionSteps: [InstructionStep] = [
+        .init(
+            title: "Open the vehicle hood and secure it",
+            detail: "Ensure the safety latch is engaged.",
+            isCompleted: true
+        ),
+        .init(
+            title: "Identify the engine cover bolts",
+            detail: "Usually 4-6 plastic or metal fasteners.",
+            isCompleted: true
+        ),
+        .init(
+            title: "Remove the ignition coil carefully",
+            detail: "Disconnect the electrical harness first.",
+            isCompleted: false
+        ),
+        .init(
+            title: "Unscrew the old spark plug",
+            detail: "Use a 5/8\" or 13/16\" socket wrench.",
+            isCompleted: false
+        ),
+        .init(
+            title: "Install the new spark plug by hand",
+            detail: "Thread gently first to avoid cross-threading.",
+            isCompleted: false
+        ),
+        .init(
+            title: "Torque to manufacturer spec",
+            detail: "Confirm exact torque value for your model.",
+            isCompleted: false
+        ),
+        .init(
+            title: "Reconnect and test engine idle",
+            detail: "Verify there are no warning lights.",
+            isCompleted: false
+        ),
+        .init(
+            title: "Close hood and clean workspace",
+            detail: "Remove tools and confirm all clips are secured.",
+            isCompleted: false
+        )
+    ]
 
     init(streamViewModel: StreamSessionViewModel, apiKey: String) {
         self.streamViewModel = streamViewModel
@@ -270,13 +319,21 @@ struct LiveAIView: View {
         let isSelected = selectedBottomTab == tab
 
         return Button {
+            if tab == .collab {
+                // Route through home's existing Live Chat entry flow.
+                viewModel.disconnect()
+                dismiss()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    NotificationCenter.default.post(name: .liveChatTriggered, object: nil)
+                }
+                return
+            }
+
             selectedBottomTab = tab
             withAnimation(.easeInOut(duration: 0.2)) {
-                showConnectPanel = (tab == .collab)
-                if tab != .collab {
-                    selectedRoomAction = nil
-                    roomCode = ""
-                }
+                showConnectPanel = false
+                selectedRoomAction = nil
+                roomCode = ""
             }
         } label: {
             VStack(spacing: 4) {
@@ -362,19 +419,104 @@ struct LiveAIView: View {
         .background(Color.black.opacity(0.28))
     }
 
+    @ViewBuilder
     private var tabPlaceholderContent: some View {
+        if selectedBottomTab == .instructions {
+            instructionsPanel
+        } else {
+            VStack {
+                Spacer()
+                Text(selectedBottomTab.rawValue)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundColor(.white)
+                Text("Coming Soon")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.75))
+                    .padding(.top, 4)
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var instructionsPanel: some View {
         VStack {
-            Spacer()
-            Text(selectedBottomTab.rawValue)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundColor(.white)
-            Text("Coming Soon")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white.opacity(0.75))
-                .padding(.top, 4)
-            Spacer()
+            HStack {
+                Text("Steps")
+                    .font(.system(size: 30, weight: .bold))
+                    .foregroundColor(.white)
+                Spacer()
+                Text("3/8 COMPLETED")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(Color(red: 1.0, green: 0.47, blue: 0.14))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(red: 1.0, green: 0.47, blue: 0.14).opacity(0.12))
+                    .cornerRadius(9)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 14) {
+                    ForEach(placeholderInstructionSteps) { step in
+                        instructionStepRow(step: step)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .padding(.bottom, 12)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            LinearGradient(
+                colors: [Color.black.opacity(0.6), Color(red: 0.12, green: 0.08, blue: 0.04).opacity(0.65)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+
+    private func instructionStepRow(step: InstructionStep) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: step.isCompleted ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 30, weight: .semibold))
+                .foregroundColor(
+                    step.isCompleted
+                        ? Color(red: 1.0, green: 0.47, blue: 0.14)
+                        : Color(red: 0.40, green: 0.46, blue: 0.56)
+                )
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(step.title)
+                    .font(.system(size: 23, weight: .semibold))
+                    .foregroundColor(step.isCompleted ? Color.white.opacity(0.62) : .white)
+                    .strikethrough(step.isCompleted, color: Color.white.opacity(0.5))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(step.detail)
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundColor(step.isCompleted ? Color.gray.opacity(0.9) : Color.white.opacity(0.72))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(step.isCompleted ? 0.04 : 0.02))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(
+                    step.isCompleted
+                        ? Color(red: 1.0, green: 0.35, blue: 0.06).opacity(0.72)
+                        : Color.white.opacity(0.12),
+                    lineWidth: 1.2
+                )
+        )
     }
 
     private var connectRoomPanel: some View {

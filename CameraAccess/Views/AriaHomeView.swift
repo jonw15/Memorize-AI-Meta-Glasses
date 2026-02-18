@@ -128,6 +128,7 @@ struct AriaHomeView: View {
                         .padding(.bottom, AppSpacing.xl)
                     }
                 }
+                .opacity(0.001) // Keep layout and taps, hide visible home UI
             }
             .navigationBarHidden(true)
             .fullScreenCover(isPresented: $showLiveAI) {
@@ -166,6 +167,13 @@ struct AriaHomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .liveAITriggered)) { _ in
             // Triggered from Shortcuts, automatically open Live AI view
+            showLiveAI = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .liveChatTriggered)) { _ in
+            showLiveChat = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .liveChatClosedToLiveAI)) { _ in
+            showLiveChat = false
             showLiveAI = true
         }
     }

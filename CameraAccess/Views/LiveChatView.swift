@@ -24,6 +24,11 @@ struct LiveChatView: View {
         roomCode.isEmpty ? joinCode : roomCode
     }
 
+    private func closeAndReturnToChatLog() {
+        NotificationCenter.default.post(name: .liveChatClosedToLiveAI, object: nil)
+        dismiss()
+    }
+
     var body: some View {
         ZStack {
             if mode == .inCall {
@@ -31,8 +36,12 @@ struct LiveChatView: View {
                     roomCode: activeRoomCode,
                     streamViewModel: streamViewModel,
                     onDismiss: {
-                        Task { await streamViewModel.stopSession() }
-                        dismiss()
+                        Task {
+                            await streamViewModel.stopSession()
+                            await MainActor.run {
+                                closeAndReturnToChatLog()
+                            }
+                        }
                     }
                 )
                 .ignoresSafeArea()
@@ -71,7 +80,7 @@ struct LiveChatView: View {
                         ToolbarItem(placement: .navigationBarLeading) {
                             Button(action: {
                                 if mode == .menu {
-                                    dismiss()
+                                    closeAndReturnToChatLog()
                                 } else {
                                     withAnimation { mode = .menu }
                                 }
