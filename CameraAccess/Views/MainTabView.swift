@@ -26,6 +26,7 @@ struct MainTabView: View {
                 apiKey: apiKey,
                 autoLaunchLiveAI: $autoLaunchLiveAI
             )
+                .toolbar(.hidden, for: .tabBar)
                 .tabItem {
                     Label("tab.home".localized, systemImage: "house.fill")
                 }
