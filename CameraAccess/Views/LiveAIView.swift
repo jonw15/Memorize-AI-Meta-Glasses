@@ -11,7 +11,7 @@ struct LiveAIView: View {
         let id = UUID()
         let title: String
         let detail: String
-        let isCompleted: Bool
+        var isCompleted: Bool
     }
 
     private enum RoomAction {
@@ -36,17 +36,18 @@ struct LiveAIView: View {
     @State private var showConnectPanel = false
     @State private var selectedRoomAction: RoomAction?
     @State private var roomCode = ""
+    @State private var instructionSteps = Self.defaultInstructionSteps
     private let feedbackSynth = AVSpeechSynthesizer()
-    private let placeholderInstructionSteps: [InstructionStep] = [
+    private static let defaultInstructionSteps: [InstructionStep] = [
         .init(
             title: "Open the vehicle hood and secure it",
             detail: "Ensure the safety latch is engaged.",
-            isCompleted: true
+            isCompleted: false
         ),
         .init(
             title: "Identify the engine cover bolts",
             detail: "Usually 4-6 plastic or metal fasteners.",
-            isCompleted: true
+            isCompleted: false
         ),
         .init(
             title: "Remove the ignition coil carefully",
@@ -442,7 +443,7 @@ struct LiveAIView: View {
                     .font(.system(size: 30, weight: .bold))
                     .foregroundColor(.white)
                 Spacer()
-                Text("3/8 COMPLETED")
+                Text("\(instructionSteps.filter { $0.isCompleted }.count)/\(instructionSteps.count) COMPLETED")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(Color(red: 1.0, green: 0.47, blue: 0.14))
                     .padding(.horizontal, 12)
@@ -455,8 +456,8 @@ struct LiveAIView: View {
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 14) {
-                    ForEach(placeholderInstructionSteps) { step in
-                        instructionStepRow(step: step)
+                    ForEach($instructionSteps) { $step in
+                        instructionStepRow(step: $step)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -474,40 +475,45 @@ struct LiveAIView: View {
         )
     }
 
-    private func instructionStepRow(step: InstructionStep) -> some View {
+    private func instructionStepRow(step: Binding<InstructionStep>) -> some View {
         HStack(alignment: .top, spacing: 14) {
-            Image(systemName: step.isCompleted ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 30, weight: .semibold))
-                .foregroundColor(
-                    step.isCompleted
-                        ? Color(red: 1.0, green: 0.47, blue: 0.14)
-                        : Color(red: 0.40, green: 0.46, blue: 0.56)
-                )
-                .padding(.top, 1)
+            Button {
+                step.isCompleted.wrappedValue.toggle()
+            } label: {
+                Image(systemName: step.isCompleted.wrappedValue ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundColor(
+                        step.isCompleted.wrappedValue
+                            ? Color(red: 1.0, green: 0.47, blue: 0.14)
+                            : Color(red: 0.40, green: 0.46, blue: 0.56)
+                    )
+                    .padding(.top, 1)
+            }
+            .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(step.title)
-                    .font(.system(size: 23, weight: .semibold))
-                    .foregroundColor(step.isCompleted ? Color.white.opacity(0.62) : .white)
-                    .strikethrough(step.isCompleted, color: Color.white.opacity(0.5))
+                Text(step.wrappedValue.title)
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundColor(step.isCompleted.wrappedValue ? Color.white.opacity(0.62) : .white)
+                    .strikethrough(step.isCompleted.wrappedValue, color: Color.white.opacity(0.5))
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(step.detail)
-                    .font(.system(size: 16, weight: .regular))
-                    .foregroundColor(step.isCompleted ? Color.gray.opacity(0.9) : Color.white.opacity(0.72))
+                Text(step.wrappedValue.detail)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundColor(step.isCompleted.wrappedValue ? Color.gray.opacity(0.9) : Color.white.opacity(0.72))
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(step.isCompleted ? 0.04 : 0.02))
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(step.isCompleted.wrappedValue ? 0.04 : 0.02))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(
-                    step.isCompleted
+                    step.isCompleted.wrappedValue
                         ? Color(red: 1.0, green: 0.35, blue: 0.06).opacity(0.72)
                         : Color.white.opacity(0.12),
                     lineWidth: 1.2
