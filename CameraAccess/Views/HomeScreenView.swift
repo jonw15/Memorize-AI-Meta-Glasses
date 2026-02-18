@@ -119,21 +119,26 @@ struct HomeScreenView: View {
         }
       } label: {
         Text("New Project")
-          .font(.system(size: 16, weight: .regular))
+          .font(.system(size: 17, weight: .semibold))
           .foregroundStyle(.white)
           .frame(maxWidth: .infinity)
           .frame(height: 66)
           .background(
             LinearGradient(
               colors: [
-                Color(red: 0.10, green: 0.11, blue: 0.13),
-                Color(red: 0.06, green: 0.06, blue: 0.09)
+                Color(red: 0.27, green: 0.43, blue: 0.93),
+                Color(red: 0.18, green: 0.31, blue: 0.78)
               ],
               startPoint: .leading,
               endPoint: .trailing
             )
           )
           .cornerRadius(33)
+          .overlay(
+            RoundedRectangle(cornerRadius: 33, style: .continuous)
+              .stroke(Color.white.opacity(0.28), lineWidth: 1)
+          )
+          .shadow(color: Color(red: 0.27, green: 0.43, blue: 0.93).opacity(0.45), radius: 10, x: 0, y: 5)
       }
       .padding(.horizontal, 28)
       .padding(.top, 36)

@@ -5,6 +5,7 @@
 
 import SwiftUI
 import AVFoundation
+import AVKit
 
 struct LiveAIView: View {
     private struct InstructionStep: Identifiable {
@@ -21,6 +22,18 @@ struct LiveAIView: View {
         let quantity: String
         let amazonQuery: String
         var hasItem: Bool
+    }
+
+    private struct VideoChapter: Identifiable {
+        let id = UUID()
+        let startSeconds: Double
+        let title: String
+    }
+
+    private struct TutorialVideo: Identifiable {
+        let id = UUID()
+        let title: String
+        let duration: String
     }
 
     private enum RoomAction {
@@ -42,13 +55,19 @@ struct LiveAIView: View {
     @Environment(\.openURL) private var openURL
     @State private var frameTimer: Timer?
     @State private var selectedBottomTab: BottomTab = .chatLog
+    @State private var previousBottomTab: BottomTab = .chatLog
     @State private var isMuted = false
+    @State private var savedMutedStateForChatLog: Bool?
     @State private var showConnectPanel = false
     @State private var selectedRoomAction: RoomAction?
     @State private var roomCode = ""
     @State private var instructionSteps = Self.defaultInstructionSteps
     @State private var shopItems = Self.defaultShopItems
+    @State private var currentChapterIndex = 0
+    @State private var activeVideoURLIndex = 0
+    @State private var placeholderVideoPlayer = AVPlayer(url: Self.placeholderVideoURL)
     private let feedbackSynth = AVSpeechSynthesizer()
+    private let videoProgressTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
     private static let defaultInstructionSteps: [InstructionStep] = [
         .init(
             title: "Open the vehicle hood and secure it",
@@ -103,6 +122,24 @@ struct LiveAIView: View {
         .init(section: "PAINT & FINISH", name: "Matte Paint", quantity: "2 gallons", amazonQuery: "matte interior paint", hasItem: false),
         .init(section: "PAINT & FINISH", name: "Foam Rollers", quantity: "6", amazonQuery: "foam paint rollers", hasItem: false)
     ]
+    private static let videoChapters: [VideoChapter] = [
+        .init(startSeconds: 0, title: "Introduction & Safety Gear"),
+        .init(startSeconds: 22, title: "Measuring & Marking the Wall"),
+        .init(startSeconds: 44, title: "Cutting the Timber to Size"),
+        .init(startSeconds: 66, title: "Assembly & Mounting Brackets"),
+        .init(startSeconds: 88, title: "Sanding & Finishing"),
+        .init(startSeconds: 110, title: "Final Installation")
+    ]
+    private static let tutorialVideos: [TutorialVideo] = [
+        .init(title: "Proper Ignition Coil Removal Techniques", duration: "4:20"),
+        .init(title: "How to Gap Your Spark Plugs", duration: "6:05")
+    ]
+    private static let videoURLs: [URL] = [
+        // DIY-style clips only.
+        URL(string: "https://cdn.coverr.co/videos/coverr-carpenter-working-in-a-workshop-1579/1080p.mp4")!,
+        URL(string: "https://assets.mixkit.co/videos/preview/mixkit-man-sawing-wood-boards-3469-large.mp4")!
+    ]
+    private static let placeholderVideoURL = videoURLs[0]
 
     init(streamViewModel: StreamSessionViewModel, apiKey: String) {
         self.streamViewModel = streamViewModel
@@ -184,6 +221,31 @@ struct LiveAIView: View {
                 viewModel.startRecording()
             }
         }
+        .onChange(of: selectedBottomTab) { tab in
+            let lastTab = previousBottomTab
+            previousBottomTab = tab
+
+            // Leaving Chat Log: save user's mute preference, then force mute off-page.
+            if lastTab == .chatLog, tab != .chatLog {
+                savedMutedStateForChatLog = isMuted
+                if viewModel.isRecording || !isMuted {
+                    viewModel.stopRecording()
+                    isMuted = true
+                }
+                return
+            }
+
+            // Returning to Chat Log: restore user's previous mute preference.
+            if lastTab != .chatLog, tab == .chatLog, let savedMuted = savedMutedStateForChatLog {
+                isMuted = savedMuted
+                if savedMuted {
+                    viewModel.stopRecording()
+                } else if viewModel.isConnected && !viewModel.isRecording {
+                    viewModel.startRecording()
+                }
+                savedMutedStateForChatLog = nil
+            }
+        }
         .alert("error".localized, isPresented: $viewModel.showError) {
             Button("ok".localized) {
                 viewModel.dismissError()
@@ -252,31 +314,33 @@ struct LiveAIView: View {
 
     private var controlsView: some View {
         VStack(spacing: AppSpacing.md) {
-            // Recording status
-            HStack(spacing: AppSpacing.sm) {
-                if viewModel.isRecording {
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: 8, height: 8)
-                    Text("liveai.listening".localized)
-                        .font(AppTypography.caption)
-                        .foregroundColor(.white)
-                } else {
-                    Circle()
-                        .fill(Color.gray)
-                        .frame(width: 8, height: 8)
-                    Text("liveai.stop".localized)
-                        .font(AppTypography.caption)
-                        .foregroundColor(.white)
+            if selectedBottomTab == .chatLog {
+                // Recording status
+                HStack(spacing: AppSpacing.sm) {
+                    if viewModel.isRecording {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 8, height: 8)
+                        Text("liveai.listening".localized)
+                            .font(AppTypography.caption)
+                            .foregroundColor(.white)
+                    } else {
+                        Circle()
+                            .fill(Color.gray)
+                            .frame(width: 8, height: 8)
+                        Text("liveai.stop".localized)
+                            .font(AppTypography.caption)
+                            .foregroundColor(.white)
+                    }
                 }
-            }
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.vertical, AppSpacing.sm)
-            .background(Color.black.opacity(0.6))
-            .cornerRadius(AppCornerRadius.xl)
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.vertical, AppSpacing.sm)
+                .background(Color.black.opacity(0.6))
+                .cornerRadius(AppCornerRadius.xl)
 
-            muteButton
-                .frame(maxWidth: .infinity, alignment: .center)
+                muteButton
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
 
             liquidGlassTabBar
                 .padding(.horizontal, AppSpacing.lg)
@@ -443,6 +507,8 @@ struct LiveAIView: View {
     private var tabPlaceholderContent: some View {
         if selectedBottomTab == .instructions {
             instructionsPanel
+        } else if selectedBottomTab == .videos {
+            videosPanel
         } else if selectedBottomTab == .shop {
             shopPanel
         } else {
@@ -544,6 +610,214 @@ struct LiveAIView: View {
                     lineWidth: 1.2
                 )
         )
+    }
+
+    private var videosPanel: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 14) {
+                VideoPlayer(player: placeholderVideoPlayer)
+                    .frame(height: 190)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
+                    .onAppear {
+                        loadActiveVideo()
+                    }
+                    .onDisappear {
+                        placeholderVideoPlayer.pause()
+                    }
+                    .onReceive(videoProgressTimer) { _ in
+                        if placeholderVideoPlayer.currentItem?.status == .failed {
+                            switchToNextVideoURLIfAvailable()
+                            return
+                        }
+                        guard selectedBottomTab == .videos else { return }
+                        let seconds = max(0, placeholderVideoPlayer.currentTime().seconds)
+                        guard seconds.isFinite else { return }
+                        let matchedIndex = chapterIndex(for: seconds)
+                        if matchedIndex != currentChapterIndex {
+                            currentChapterIndex = matchedIndex
+                        }
+                    }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Building a Modern\nFloating Shelf with\nHidden Brackets")
+                        .font(.system(size: 32, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.8)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                VStack(spacing: 0) {
+                    HStack {
+                        Label("Project Chapters", systemImage: "list.bullet.indent")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                        Spacer()
+                        Text("12:20 Total")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(Color.white.opacity(0.7))
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.05))
+
+                    ForEach(Array(Self.videoChapters.enumerated()), id: \.offset) { index, chapter in
+                        chapterRow(chapter: chapter, index: index)
+                    }
+                }
+                .background(Color.white.opacity(0.04))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Tutorial Videos")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(.white)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(Self.tutorialVideos) { video in
+                                tutorialVideoCard(video: video)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+            .padding(.bottom, 18)
+        }
+        .background(Color.black.opacity(0.28))
+    }
+
+    private func chapterRow(chapter: VideoChapter, index: Int) -> some View {
+        let isCurrent = index == currentChapterIndex
+        return Button {
+            currentChapterIndex = index
+            let target = CMTime(seconds: chapter.startSeconds, preferredTimescale: 600)
+            placeholderVideoPlayer.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
+            placeholderVideoPlayer.play()
+        } label: {
+            HStack(spacing: 12) {
+                Text(formatTimestamp(chapter.startSeconds))
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .foregroundColor(Color.white.opacity(0.65))
+                    .frame(width: 40, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(chapter.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(isCurrent ? Color(red: 0.24, green: 0.42, blue: 0.93) : .white)
+                        .multilineTextAlignment(.leading)
+                    if isCurrent {
+                        Text("CURRENTLY PLAYING")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(Color(red: 0.24, green: 0.42, blue: 0.93))
+                    }
+                }
+                Spacer()
+                if isCurrent {
+                    Image(systemName: "chart.bar.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(Color(red: 0.24, green: 0.42, blue: 0.93))
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                isCurrent
+                    ? Color(red: 0.24, green: 0.42, blue: 0.93).opacity(0.12)
+                    : Color.clear
+            )
+            .overlay(alignment: .leading) {
+                if isCurrent {
+                    Rectangle()
+                        .fill(Color(red: 0.24, green: 0.42, blue: 0.93))
+                        .frame(width: 3)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func chapterIndex(for seconds: Double) -> Int {
+        var matched = 0
+        for (index, chapter) in Self.videoChapters.enumerated() where seconds >= chapter.startSeconds {
+            matched = index
+        }
+        return matched
+    }
+
+    private func loadActiveVideo() {
+        let url = Self.videoURLs[min(activeVideoURLIndex, Self.videoURLs.count - 1)]
+        let item = AVPlayerItem(url: url)
+        placeholderVideoPlayer.replaceCurrentItem(with: item)
+        placeholderVideoPlayer.play()
+    }
+
+    private func switchToNextVideoURLIfAvailable() {
+        guard activeVideoURLIndex + 1 < Self.videoURLs.count else { return }
+        activeVideoURLIndex += 1
+        loadActiveVideo()
+    }
+
+    private func formatTimestamp(_ seconds: Double) -> String {
+        let total = max(0, Int(seconds.rounded()))
+        let minutes = total / 60
+        let secs = total % 60
+        return String(format: "%d:%02d", minutes, secs)
+    }
+
+    private func tutorialVideoCard(video: TutorialVideo) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack(alignment: .bottomTrailing) {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.14), Color.white.opacity(0.06)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 180, height: 110)
+
+                Circle()
+                    .fill(Color(red: 0.24, green: 0.42, blue: 0.93))
+                    .frame(width: 42, height: 42)
+                    .overlay(
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                            .offset(x: 1)
+                    )
+
+                Text(video.duration)
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.black.opacity(0.65))
+                    .clipShape(Capsule())
+                    .padding(8)
+            }
+
+            Text(video.title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white)
+                .lineLimit(2)
+                .frame(width: 180, alignment: .leading)
+        }
     }
 
     private var shopPanel: some View {
