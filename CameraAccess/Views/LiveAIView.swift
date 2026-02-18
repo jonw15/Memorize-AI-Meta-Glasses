@@ -344,13 +344,9 @@ struct LiveAIView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }
-            .foregroundColor(isSelected ? .black : .white)
+            .foregroundColor(isSelected ? Color(red: 60/255, green: 106/255, blue: 237/255) : .white)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(isSelected ? Color.white.opacity(0.9) : Color.white.opacity(0.08))
-            )
         }
         .buttonStyle(.plain)
     }

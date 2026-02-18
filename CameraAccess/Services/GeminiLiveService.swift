@@ -54,6 +54,7 @@ class GeminiLiveService: NSObject {
     private var isRecording = false
     private var hasAudioBeenSent = false
     private var isSessionConfigured = false
+    private var isDisconnecting = false
 
     init(apiKey: String, model: String? = nil) {
         self.apiKey = apiKey
@@ -121,6 +122,7 @@ class GeminiLiveService: NSObject {
     // MARK: - WebSocket Connection
 
     func connect() {
+        isDisconnecting = false
         // Gemini Live WebSocket URL with API key (dynamic from server config)
         let baseURL = APIProviderManager.staticLiveAIWebsocketURL
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -165,6 +167,7 @@ class GeminiLiveService: NSObject {
 
     func disconnect() {
         print("🔌 [Gemini] Disconnecting WebSocket")
+        isDisconnecting = true
         webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
         stopRecording()
@@ -355,6 +358,10 @@ class GeminiLiveService: NSObject {
         let message = URLSessionWebSocketTask.Message.string(jsonString)
         webSocket?.send(message) { error in
             if let error = error {
+                if self.shouldSuppressSocketError(error) {
+                    print("ℹ️ [Gemini] Ignoring expected send teardown error: \(error.localizedDescription)")
+                    return
+                }
                 print("❌ [Gemini] Failed to send: \(error.localizedDescription)")
                 self.onError?("Send error: \(error.localizedDescription)")
             }
@@ -408,10 +415,32 @@ class GeminiLiveService: NSObject {
                 self?.receiveMessage()
 
             case .failure(let error):
+                if self?.shouldSuppressSocketError(error) == true {
+                    print("ℹ️ [Gemini] Ignoring expected receive teardown error: \(error.localizedDescription)")
+                    return
+                }
                 print("❌ [Gemini] Failed to receive message: \(error.localizedDescription)")
                 self?.onError?("Receive error: \(error.localizedDescription)")
             }
         }
+    }
+
+    private func shouldSuppressSocketError(_ error: Error) -> Bool {
+        if isDisconnecting {
+            return true
+        }
+
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return true
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
+            return true
+        }
+
+        let normalized = error.localizedDescription.lowercased()
+        return normalized.contains("cancelled") || normalized.contains("socket is not connected")
     }
 
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
@@ -651,6 +680,7 @@ class GeminiLiveService: NSObject {
 extension GeminiLiveService: URLSessionWebSocketDelegate {
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
         print("✅ [Gemini] WebSocket connection established")
+        isDisconnecting = false
         DispatchQueue.main.async {
             self.configureSession()
         }
