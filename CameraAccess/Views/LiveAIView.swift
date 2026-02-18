@@ -14,6 +14,15 @@ struct LiveAIView: View {
         var isCompleted: Bool
     }
 
+    private struct ShopItem: Identifiable {
+        let id = UUID()
+        let section: String
+        let name: String
+        let quantity: String
+        let amazonQuery: String
+        var hasItem: Bool
+    }
+
     private enum RoomAction {
         case join
         case create
@@ -22,7 +31,7 @@ struct LiveAIView: View {
     private enum BottomTab: String {
         case chatLog = "Chat Log"
         case videos = "Videos"
-        case webLinks = "Web Links"
+        case shop = "Shop"
         case instructions = "Instructions"
         case collab = "Collab"
     }
@@ -30,6 +39,7 @@ struct LiveAIView: View {
     @StateObject private var viewModel: OmniRealtimeViewModel
     @ObservedObject var streamViewModel: StreamSessionViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var frameTimer: Timer?
     @State private var selectedBottomTab: BottomTab = .chatLog
     @State private var isMuted = false
@@ -37,6 +47,7 @@ struct LiveAIView: View {
     @State private var selectedRoomAction: RoomAction?
     @State private var roomCode = ""
     @State private var instructionSteps = Self.defaultInstructionSteps
+    @State private var shopItems = Self.defaultShopItems
     private let feedbackSynth = AVSpeechSynthesizer()
     private static let defaultInstructionSteps: [InstructionStep] = [
         .init(
@@ -79,6 +90,18 @@ struct LiveAIView: View {
             detail: "Remove tools and confirm all clips are secured.",
             isCompleted: false
         )
+    ]
+    private static let shopSections: [String] = ["LUMBER", "HARDWARE", "PAINT & FINISH"]
+    private static let defaultShopItems: [ShopItem] = [
+        .init(section: "LUMBER", name: "2x4 Studs", quantity: "12", amazonQuery: "2x4 wood studs", hasItem: false),
+        .init(section: "LUMBER", name: "3/4\" Plywood Sheets", quantity: "4", amazonQuery: "3/4 plywood sheets", hasItem: false),
+        .init(section: "LUMBER", name: "Pine Trim", quantity: "20ft", amazonQuery: "pine trim boards", hasItem: false),
+        .init(section: "HARDWARE", name: "Wood Screws (Box)", quantity: "1", amazonQuery: "wood screws box", hasItem: false),
+        .init(section: "HARDWARE", name: "Pocket Hole Screws", quantity: "50ct", amazonQuery: "pocket hole screws", hasItem: false),
+        .init(section: "HARDWARE", name: "Shelf Pins", quantity: "24", amazonQuery: "shelf pins", hasItem: false),
+        .init(section: "PAINT & FINISH", name: "Primer", quantity: "1 gallon", amazonQuery: "interior wood primer", hasItem: false),
+        .init(section: "PAINT & FINISH", name: "Matte Paint", quantity: "2 gallons", amazonQuery: "matte interior paint", hasItem: false),
+        .init(section: "PAINT & FINISH", name: "Foam Rollers", quantity: "6", amazonQuery: "foam paint rollers", hasItem: false)
     ]
 
     init(streamViewModel: StreamSessionViewModel, apiKey: String) {
@@ -303,7 +326,7 @@ struct LiveAIView: View {
         HStack(spacing: 6) {
             tabButton(icon: "text.bubble", tab: .chatLog)
             tabButton(icon: "play.rectangle", tab: .videos)
-            tabButton(icon: "link", tab: .webLinks)
+            tabButton(icon: "cart", tab: .shop)
             tabButton(icon: "list.bullet.clipboard", tab: .instructions)
             tabButton(icon: "person.2.wave.2", tab: .collab)
         }
@@ -420,6 +443,8 @@ struct LiveAIView: View {
     private var tabPlaceholderContent: some View {
         if selectedBottomTab == .instructions {
             instructionsPanel
+        } else if selectedBottomTab == .shop {
+            shopPanel
         } else {
             VStack {
                 Spacer()
@@ -519,6 +544,113 @@ struct LiveAIView: View {
                     lineWidth: 1.2
                 )
         )
+    }
+
+    private var shopPanel: some View {
+        ScrollView(showsIndicators: false) {
+            LazyVStack(spacing: 0) {
+                ForEach(Self.shopSections, id: \.self) { section in
+                    sectionHeader(title: section)
+                    ForEach(shopItemIndices(for: section), id: \.self) { index in
+                        shopItemRow(item: $shopItems[index])
+                        Divider()
+                            .background(Color.white.opacity(0.08))
+                    }
+                }
+            }
+            .padding(.top, 8)
+            .padding(.bottom, 16)
+        }
+        .background(Color.black.opacity(0.28))
+    }
+
+    private func sectionHeader(title: String) -> some View {
+        HStack(spacing: 14) {
+            Text(title)
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(Color.white.opacity(0.65))
+                .tracking(1.2)
+            Rectangle()
+                .fill(Color.white.opacity(0.12))
+                .frame(height: 1)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 8)
+    }
+
+    private func shopItemRow(item: Binding<ShopItem>) -> some View {
+        HStack(spacing: 14) {
+            Button {
+                item.hasItem.wrappedValue.toggle()
+            } label: {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(item.hasItem.wrappedValue ? Color(red: 0.24, green: 0.42, blue: 0.93) : Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(
+                                item.hasItem.wrappedValue ? Color(red: 0.24, green: 0.42, blue: 0.93) : Color.white.opacity(0.45),
+                                lineWidth: 1.6
+                            )
+                    )
+                    .overlay(
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white)
+                            .opacity(item.hasItem.wrappedValue ? 1 : 0)
+                    )
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.wrappedValue.name)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                Text("Quantity: \(item.wrappedValue.quantity)")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color.white.opacity(0.65))
+            }
+
+            Spacer(minLength: 10)
+
+            Button {
+                openAmazon(query: item.wrappedValue.amazonQuery)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "cart.fill")
+                        .font(.system(size: 14, weight: .bold))
+                    Text("Shop")
+                        .font(.system(size: 16, weight: .bold))
+                }
+                .foregroundColor(.white)
+                .frame(width: 106, height: 44)
+                .background(Color(red: 0.24, green: 0.42, blue: 0.93))
+                .cornerRadius(12)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(Color.clear)
+    }
+
+    private func shopItemIndices(for section: String) -> [Int] {
+        shopItems.indices.filter { shopItems[$0].section == section }
+    }
+
+    private func openAmazon(query: String) {
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+        guard let amazonAppURL = URL(string: "amazon://search?k=\(encoded)"),
+              let amazonWebURL = URL(string: "https://www.amazon.com/s?k=\(encoded)") else { return }
+
+        openURL(amazonAppURL) { accepted in
+            if !accepted {
+                openURL(amazonWebURL)
+            }
+        }
     }
 
     private var connectRoomPanel: some View {
