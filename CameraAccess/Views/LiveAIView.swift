@@ -1093,6 +1093,7 @@ struct LiveAIView: View {
 
             // Back button
             Button {
+                NotificationCenter.default.post(name: .returnToNewProjectIntro, object: nil)
                 dismiss()
             } label: {
                 HStack(spacing: AppSpacing.sm) {

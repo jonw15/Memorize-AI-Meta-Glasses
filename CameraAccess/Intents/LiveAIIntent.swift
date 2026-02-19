@@ -50,4 +50,5 @@ extension Notification.Name {
     static let liveAITriggered = Notification.Name("liveAITriggered")
     static let liveChatTriggered = Notification.Name("liveChatTriggered")
     static let liveChatClosedToLiveAI = Notification.Name("liveChatClosedToLiveAI")
+    static let returnToNewProjectIntro = Notification.Name("returnToNewProjectIntro")
 }

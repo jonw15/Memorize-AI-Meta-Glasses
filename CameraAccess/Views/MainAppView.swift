@@ -33,45 +33,51 @@ struct MainAppView: View {
   }
 
   var body: some View {
-    if viewModel.registrationState == .registered || viewModel.hasMockDevice {
-      if showLaunchIntro {
-        HomeScreenView(
-          viewModel: viewModel,
-          forceProjectIntroOnly: true,
-          onNewProject: {
-            showLaunchIntro = false
+    Group {
+      if viewModel.registrationState == .registered || viewModel.hasMockDevice {
+        if showLaunchIntro {
+          HomeScreenView(
+            viewModel: viewModel,
+            forceProjectIntroOnly: true,
+            onNewProject: {
+              showLaunchIntro = false
 
-            if PermissionsManager.shared.checkAllPermissions() {
-              hasCheckedPermissions = true
-              shouldAutoLaunchLiveAI = true
-            } else {
-              hasCheckedPermissions = false
+              if PermissionsManager.shared.checkAllPermissions() {
+                hasCheckedPermissions = true
+                shouldAutoLaunchLiveAI = true
+              } else {
+                hasCheckedPermissions = false
+              }
             }
-          }
-        )
-      } else {
-        // Registered/connected device
-        if !hasCheckedPermissions {
-          // First launch, request permissions
-          PermissionsRequestView { _ in
-            hasCheckedPermissions = true
-          }
-        } else {
-          // Permissions checked, show main interface
-          MainTabView(
-            streamViewModel: streamViewModel,
-            wearablesViewModel: viewModel,
-            autoLaunchLiveAI: $shouldAutoLaunchLiveAI
           )
-            .onAppear {
-              // Set up QuickVisionManager's StreamViewModel reference
-              quickVisionManager.setStreamViewModel(streamViewModel)
+        } else {
+          // Registered/connected device
+          if !hasCheckedPermissions {
+            // First launch, request permissions
+            PermissionsRequestView { _ in
+              hasCheckedPermissions = true
             }
+          } else {
+            // Permissions checked, show main interface
+            MainTabView(
+              streamViewModel: streamViewModel,
+              wearablesViewModel: viewModel,
+              autoLaunchLiveAI: $shouldAutoLaunchLiveAI
+            )
+              .onAppear {
+                // Set up QuickVisionManager's StreamViewModel reference
+                quickVisionManager.setStreamViewModel(streamViewModel)
+              }
+          }
         }
+      } else {
+        // Not registered - show registration/onboarding flow
+        HomeScreenView(viewModel: viewModel)
       }
-    } else {
-      // Not registered - show registration/onboarding flow
-      HomeScreenView(viewModel: viewModel)
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .returnToNewProjectIntro)) { _ in
+      shouldAutoLaunchLiveAI = false
+      showLaunchIntro = true
     }
   }
 }
