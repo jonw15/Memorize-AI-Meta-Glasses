@@ -68,48 +68,7 @@ struct LiveAIView: View {
     @State private var placeholderVideoPlayer = AVPlayer(url: Self.placeholderVideoURL)
     private let feedbackSynth = AVSpeechSynthesizer()
     private let videoProgressTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
-    private static let defaultInstructionSteps: [InstructionStep] = [
-        .init(
-            title: "Open the vehicle hood and secure it",
-            detail: "Ensure the safety latch is engaged.",
-            isCompleted: false
-        ),
-        .init(
-            title: "Identify the engine cover bolts",
-            detail: "Usually 4-6 plastic or metal fasteners.",
-            isCompleted: false
-        ),
-        .init(
-            title: "Remove the ignition coil carefully",
-            detail: "Disconnect the electrical harness first.",
-            isCompleted: false
-        ),
-        .init(
-            title: "Unscrew the old spark plug",
-            detail: "Use a 5/8\" or 13/16\" socket wrench.",
-            isCompleted: false
-        ),
-        .init(
-            title: "Install the new spark plug by hand",
-            detail: "Thread gently first to avoid cross-threading.",
-            isCompleted: false
-        ),
-        .init(
-            title: "Torque to manufacturer spec",
-            detail: "Confirm exact torque value for your model.",
-            isCompleted: false
-        ),
-        .init(
-            title: "Reconnect and test engine idle",
-            detail: "Verify there are no warning lights.",
-            isCompleted: false
-        ),
-        .init(
-            title: "Close hood and clean workspace",
-            detail: "Remove tools and confirm all clips are secured.",
-            isCompleted: false
-        )
-    ]
+    private static let defaultInstructionSteps: [InstructionStep] = []
     private static let shopSections: [String] = ["LUMBER", "HARDWARE", "PAINT & FINISH"]
     private static let defaultShopItems: [ShopItem] = [
         .init(section: "LUMBER", name: "2x4 Studs", quantity: "12", amazonQuery: "2x4 wood studs", hasItem: false),

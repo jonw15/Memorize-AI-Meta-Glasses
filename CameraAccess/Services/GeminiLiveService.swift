@@ -687,6 +687,9 @@ class GeminiLiveService: NSObject {
             ?? []
 
         for call in calls {
+            if (call["name"] as? String) == "multiple_step_instructions" {
+                print("🧩 [MultipleStepInstructions] Tool call received: \(call)")
+            }
             dispatchToolCall(call)
         }
     }
@@ -709,7 +712,7 @@ class GeminiLiveService: NSObject {
 
         switch name {
         case "multiple_step_instructions":
-            print("🛠️ [Gemini] Dispatching multiple_step_instructions")
+            print("🧩 [MultipleStepInstructions] Dispatching multiple_step_instructions")
 
             let problem = (args["problem"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let rawBrand = (args["brand"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -730,6 +733,7 @@ class GeminiLiveService: NSObject {
                     instructions: instructions
                 )
             )
+            print("🧩 [MultipleStepInstructions] Parsed payload: problem='\(problem)', brand='\(brand)', model='\(model)', tools=\(tools.count), parts=\(parts.count), steps=\(instructions.count)")
 
             if !instructions.isEmpty {
                 print("🛠️ [Gemini] multiple_step_instructions first step: \(instructions[0])")
