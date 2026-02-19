@@ -63,6 +63,7 @@ struct LiveAIView: View {
     @State private var roomCode = ""
     @State private var instructionSteps = Self.defaultInstructionSteps
     @State private var shopItems = Self.defaultShopItems
+    @State private var lastLoggedShopItemsSignature = ""
     @State private var currentChapterIndex = 0
     @State private var activeVideoURLIndex = 0
     @State private var placeholderVideoPlayer = AVPlayer(url: Self.placeholderVideoURL)
@@ -203,6 +204,12 @@ struct LiveAIView: View {
         }
         .onChange(of: viewModel.toolCallInstructions) { instructions in
             applyToolCallInstructions(instructions)
+        }
+        .onChange(of: viewModel.toolCallTools) { _ in
+            applyToolCallShopItemsIfNeeded()
+        }
+        .onChange(of: viewModel.toolCallParts) { _ in
+            applyToolCallShopItemsIfNeeded()
         }
         .alert("error".localized, isPresented: $viewModel.showError) {
             Button("ok".localized) {
@@ -759,6 +766,60 @@ struct LiveAIView: View {
         }
     }
 
+    private func applyToolCallShopItemsIfNeeded() {
+        let tools = normalizedToolCallItems(viewModel.toolCallTools)
+        let parts = normalizedToolCallItems(viewModel.toolCallParts)
+
+        guard !tools.isEmpty || !parts.isEmpty else { return }
+
+        var updatedItems: [ShopItem] = []
+        updatedItems.append(contentsOf: tools.map {
+            ShopItem(
+                section: "TOOLS",
+                name: $0,
+                quantity: "1",
+                amazonQuery: "\($0) diy tool",
+                hasItem: false
+            )
+        })
+        updatedItems.append(contentsOf: parts.map {
+            ShopItem(
+                section: "PARTS",
+                name: $0,
+                quantity: "1",
+                amazonQuery: "\($0) replacement part",
+                hasItem: false
+            )
+        })
+
+        let signature = updatedItems
+            .map { "\($0.section)|\($0.name.lowercased())|\($0.quantity)|\($0.amazonQuery.lowercased())" }
+            .joined(separator: "||")
+
+        if signature != lastLoggedShopItemsSignature {
+            for item in updatedItems {
+                print("[ShopItem] section=\(item.section), name=\(item.name), quantity=\(item.quantity), query=\(item.amazonQuery)")
+            }
+            lastLoggedShopItemsSignature = signature
+        }
+
+        shopItems = updatedItems
+    }
+
+    private func normalizedToolCallItems(_ items: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+        for raw in items {
+            let cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleaned.isEmpty, cleaned.lowercased() != "none" else { continue }
+            let key = cleaned.lowercased()
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            normalized.append(cleaned)
+        }
+        return normalized
+    }
+
     private func loadActiveVideo() {
         let url = Self.videoURLs[min(activeVideoURLIndex, Self.videoURLs.count - 1)]
         let item = AVPlayerItem(url: url)
@@ -823,7 +884,7 @@ struct LiveAIView: View {
     private var shopPanel: some View {
         ScrollView(showsIndicators: false) {
             LazyVStack(spacing: 0) {
-                ForEach(Self.shopSections, id: \.self) { section in
+                ForEach(shopSectionsForDisplay, id: \.self) { section in
                     sectionHeader(title: section)
                     ForEach(shopItemIndices(for: section), id: \.self) { index in
                         shopItemRow(item: $shopItems[index])
@@ -913,6 +974,18 @@ struct LiveAIView: View {
 
     private func shopItemIndices(for section: String) -> [Int] {
         shopItems.indices.filter { shopItems[$0].section == section }
+    }
+
+    private var shopSectionsForDisplay: [String] {
+        var seen = Set<String>()
+        var sections: [String] = []
+        for item in shopItems {
+            if !seen.contains(item.section) {
+                seen.insert(item.section)
+                sections.append(item.section)
+            }
+        }
+        return sections
     }
 
     private func openAmazon(query: String) {

@@ -193,11 +193,18 @@ class GeminiLiveService: NSObject {
         let instructions = LiveAIModeManager.staticSystemPrompt + """
 
         
-[CRITICAL OUTPUT RULES]
-- Provide only the final response you would speak to the user.
-- Do NOT include internal analysis, scene-observation notes, or reasoning process.
-- Do NOT use markdown section headers such as "**Observing...**" or "**Interpreting...**".
-- Keep responses concise and conversational (1-3 short sentences unless user asks for more).
+<system_instructions>
+<role>
+You are Aria — a concise, friendly DIY voice assistant on the Meta Quest.
+Speak clearly, focus on one step at a time, and keep answers brief unless the user asks for more detail.
+Always refer to what you see in the image to understand the user's context.
+Your primary role is to interpret the user’s request and format it into the correct tool call.
+</role>
+
+<guardrails>
+Do not apologize.
+</guardrails>
+</system_instructions>
 """
 
         // Gemini Live API setup message
