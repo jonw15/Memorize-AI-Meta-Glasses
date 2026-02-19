@@ -159,10 +159,6 @@ struct LiveAIView: View {
                 deviceNotConnectedView
             } else {
                 VStack(spacing: 0) {
-                // Header (flush with status bar)
-                headerView
-                    .padding(.top, 8) // Slightly below the status bar
-
                 if selectedBottomTab == .chatLog {
                     chatLogFullPage
                 } else {
@@ -441,17 +437,7 @@ struct LiveAIView: View {
 
     private var chatLogFullPage: some View {
         VStack(spacing: 10) {
-            Text("Put on your glasses, look at your project, and tell me what you're working on.")
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
-                .lineSpacing(2)
-                .padding(.horizontal, 14)
-                .padding(.top, 6)
-
-            Rectangle()
-                .fill(Color.white.opacity(0.22))
-                .frame(height: 1)
+            livePreviewCard
                 .padding(.horizontal, 14)
                 .padding(.top, 2)
 
@@ -501,6 +487,26 @@ struct LiveAIView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black.opacity(0.28))
+    }
+
+    private var livePreviewCard: some View {
+        Group {
+            if let frame = streamViewModel.currentVideoFrame {
+                Image(uiImage: frame)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Color.black.opacity(0.75)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 210)
+        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.14), lineWidth: 1)
+        )
     }
 
     @ViewBuilder
