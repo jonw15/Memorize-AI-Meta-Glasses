@@ -11,6 +11,14 @@ import AVFoundation
 // MARK: - Gemini Live Service
 
 class GeminiLiveService: NSObject {
+    struct MultipleStepInstructionsPayload {
+        let problem: String
+        let brand: String
+        let model: String
+        let tools: [String]
+        let parts: [String]
+        let instructions: [String]
+    }
 
     // WebSocket
     private var webSocket: URLSessionWebSocketTask?
@@ -49,6 +57,7 @@ class GeminiLiveService: NSObject {
     var onError: ((String) -> Void)?
     var onConnected: (() -> Void)?
     var onFirstAudioSent: (() -> Void)?
+    var onMultipleStepInstructions: ((MultipleStepInstructionsPayload) -> Void)?
 
     // State
     private var isRecording = false
@@ -212,7 +221,14 @@ class GeminiLiveService: NSObject {
                 ],
                 // Request both user and assistant speech transcripts from Gemini Live.
                 "input_audio_transcription": [:],
-                "output_audio_transcription": [:]
+                "output_audio_transcription": [:],
+                "tools": [
+                    [
+                        "functionDeclarations": [
+                            multipleStepsInstructionDeclaration
+                        ]
+                    ]
+                ]
             ]
         ]
 
@@ -348,6 +364,37 @@ class GeminiLiveService: NSObject {
 
     // MARK: - Send Events
 
+    private var multipleStepsInstructionDeclaration: [String: Any] {
+        [
+            "name": "multiple_step_instructions",
+            "description": "REQUIRED for any task involving 2 or more steps. STRICTLY SILENT ACTION: Do NOT output conversational filler like 'Sure', 'Okay', or 'Here are the steps'. Do NOT list the steps in the text response. Output ONLY the function call json. The application will read the first step automatically.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "problem": ["type": "string"],
+                    "brand": ["type": "string"],
+                    "model": ["type": "string"],
+                    "tools": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Required tools. Use ['none'] if not applicable."
+                    ],
+                    "parts": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Required parts. Use ['none'] if not applicable."
+                    ],
+                    "instructions": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "The list of steps. IMPORTANT: Keep each step extremely concise (max 5-7 words). Focus ONLY on the core action (e.g., 'Step 1: Open Settings', 'Step 2: Tap General'). Remove all fluff."
+                    ]
+                ],
+                "required": ["problem", "brand", "model", "instructions", "tools", "parts"]
+            ]
+        ]
+    }
+
     private func sendJSON(_ json: [String: Any]) {
         guard let jsonData = try? JSONSerialization.data(withJSONObject: json),
               let jsonString = String(data: jsonData, encoding: .utf8) else {
@@ -424,6 +471,25 @@ class GeminiLiveService: NSObject {
         ]
         print("🧭 [Gemini] Sending text input prompt")
         sendJSON(message)
+    }
+
+    private func sendFunctionResponse(id: String, functionName: String, result: [String: Any], isSilent: Bool = false) {
+        var functionResponseItem: [String: Any] = [
+            "id": id,
+            "name": functionName,
+            "response": result
+        ]
+        if isSilent {
+            functionResponseItem["scheduling"] = "SILENT"
+        }
+
+        let payload: [String: Any] = [
+            "toolResponse": [
+                "functionResponses": [functionResponseItem]
+            ]
+        ]
+        print("🛠️ [Gemini] Sending tool response for \(functionName), silent=\(isSilent)")
+        sendJSON(payload)
     }
 
     // MARK: - Receive Messages
@@ -510,7 +576,11 @@ class GeminiLiveService: NSObject {
 
             // Handle tool calls (if any)
             if let toolCall = json["toolCall"] as? [String: Any] {
-                print("🔧 [Gemini] Tool call: \(toolCall)")
+                self.handleToolCall(toolCall)
+                return
+            }
+            if let toolCall = json["tool_call"] as? [String: Any] {
+                self.handleToolCall(toolCall)
                 return
             }
 
@@ -605,6 +675,86 @@ class GeminiLiveService: NSObject {
             }
         }
         return nil
+    }
+
+    // MARK: - Tool Calls
+
+    private func handleToolCall(_ toolCall: [String: Any]) {
+        print("🔧 [Gemini] Tool call payload: \(toolCall)")
+
+        let calls = (toolCall["functionCalls"] as? [[String: Any]])
+            ?? (toolCall["function_calls"] as? [[String: Any]])
+            ?? []
+
+        for call in calls {
+            dispatchToolCall(call)
+        }
+    }
+
+    private func dispatchToolCall(_ functionCall: [String: Any]) {
+        let id = functionCall["id"] as? String ?? UUID().uuidString
+        let name = functionCall["name"] as? String ?? ""
+
+        let rawArgs = functionCall["args"] ?? functionCall["arguments"] ?? [:]
+        let args: [String: Any]
+        if let dictArgs = rawArgs as? [String: Any] {
+            args = dictArgs
+        } else if let rawString = rawArgs as? String,
+                  let data = rawString.data(using: .utf8),
+                  let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            args = parsed
+        } else {
+            args = [:]
+        }
+
+        switch name {
+        case "multiple_step_instructions":
+            print("🛠️ [Gemini] Dispatching multiple_step_instructions")
+
+            let problem = (args["problem"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let rawBrand = (args["brand"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let rawModel = (args["model"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let brand = rawBrand.lowercased() == "unknown" ? "" : rawBrand
+            let model = rawModel.lowercased() == "unknown" ? "" : rawModel
+            let tools = (args["tools"] as? [Any])?.compactMap { $0 as? String } ?? []
+            let parts = (args["parts"] as? [Any])?.compactMap { $0 as? String } ?? []
+            let instructions = (args["instructions"] as? [Any])?.compactMap { $0 as? String } ?? []
+
+            onMultipleStepInstructions?(
+                MultipleStepInstructionsPayload(
+                    problem: problem,
+                    brand: brand,
+                    model: model,
+                    tools: tools,
+                    parts: parts,
+                    instructions: instructions
+                )
+            )
+
+            if !instructions.isEmpty {
+                print("🛠️ [Gemini] multiple_step_instructions first step: \(instructions[0])")
+                sendFunctionResponse(
+                    id: id,
+                    functionName: name,
+                    result: ["success": true, "info": "System is handling step guidance. Do not list steps."],
+                    isSilent: true
+                )
+            } else {
+                sendFunctionResponse(
+                    id: id,
+                    functionName: name,
+                    result: ["success": true]
+                )
+            }
+
+        default:
+            print("⚠️ [Gemini] Unknown tool call: \(name)")
+            sendFunctionResponse(
+                id: id,
+                functionName: name,
+                result: ["success": false, "error": "Unknown function name: \(name)"]
+            )
+        }
     }
 
     // MARK: - Audio Playback

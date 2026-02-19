@@ -19,6 +19,9 @@ class OmniRealtimeViewModel: ObservableObject {
     @Published var conversationHistory: [ConversationMessage] = []
     @Published var errorMessage: String?
     @Published var showError = false
+    @Published var toolCallTools: [String] = []
+    @Published var toolCallParts: [String] = []
+    @Published var toolCallInstructions: [String] = []
 
     // Service
     private var geminiService: GeminiLiveService?
@@ -141,6 +144,26 @@ class OmniRealtimeViewModel: ObservableObject {
             Task { @MainActor in
                 self?.errorMessage = error
                 self?.showError = true
+            }
+        }
+
+        geminiService.onMultipleStepInstructions = { [weak self] payload in
+            Task { @MainActor in
+                guard let self else { return }
+                let cleanedInstructions = payload.instructions
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                let cleanedTools = payload.tools
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                let cleanedParts = payload.parts
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+
+                self.toolCallInstructions = cleanedInstructions
+                self.toolCallTools = cleanedTools
+                self.toolCallParts = cleanedParts
+                print("🧾 [LiveAI-VM] Tool call mapped: \(cleanedInstructions.count) steps, \(cleanedTools.count) tools, \(cleanedParts.count) parts")
             }
         }
     }

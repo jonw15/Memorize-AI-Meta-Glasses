@@ -242,6 +242,9 @@ struct LiveAIView: View {
                 savedMutedStateForChatLog = nil
             }
         }
+        .onChange(of: viewModel.toolCallInstructions) { instructions in
+            applyToolCallInstructions(instructions)
+        }
         .alert("error".localized, isPresented: $viewModel.showError) {
             Button("ok".localized) {
                 viewModel.dismissError()
@@ -551,6 +554,24 @@ struct LiveAIView: View {
             .padding(.horizontal, 20)
             .padding(.top, 10)
 
+            if !viewModel.toolCallTools.isEmpty || !viewModel.toolCallParts.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !viewModel.toolCallTools.isEmpty {
+                        Text("Tools: \(viewModel.toolCallTools.joined(separator: ", "))")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(Color.white.opacity(0.85))
+                    }
+                    if !viewModel.toolCallParts.isEmpty {
+                        Text("Parts: \(viewModel.toolCallParts.joined(separator: ", "))")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(Color.white.opacity(0.85))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+            }
+
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 14) {
                     ForEach($instructionSteps) { $step in
@@ -595,10 +616,12 @@ struct LiveAIView: View {
                     .strikethrough(step.isCompleted.wrappedValue, color: Color.white.opacity(0.5))
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(step.wrappedValue.detail)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(step.isCompleted.wrappedValue ? Color.gray.opacity(0.9) : Color.white.opacity(0.72))
-                    .fixedSize(horizontal: false, vertical: true)
+                if !step.wrappedValue.detail.isEmpty {
+                    Text(step.wrappedValue.detail)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundColor(step.isCompleted.wrappedValue ? Color.gray.opacity(0.9) : Color.white.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -763,6 +786,18 @@ struct LiveAIView: View {
             matched = index
         }
         return matched
+    }
+
+    private func applyToolCallInstructions(_ instructions: [String]) {
+        let normalized = instructions
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !normalized.isEmpty else { return }
+
+        instructionSteps = normalized.map { text in
+            InstructionStep(title: text, detail: "", isCompleted: false)
+        }
     }
 
     private func loadActiveVideo() {
