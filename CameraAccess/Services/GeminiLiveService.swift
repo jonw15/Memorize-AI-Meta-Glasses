@@ -405,6 +405,27 @@ class GeminiLiveService: NSObject {
         sendJSON(message)
     }
 
+    func sendTextInput(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let message: [String: Any] = [
+            "client_content": [
+                "turns": [
+                    [
+                        "role": "user",
+                        "parts": [
+                            ["text": trimmed]
+                        ]
+                    ]
+                ],
+                "turn_complete": true
+            ]
+        ]
+        print("🧭 [Gemini] Sending text input prompt")
+        sendJSON(message)
+    }
+
     // MARK: - Receive Messages
 
     private func receiveMessage() {

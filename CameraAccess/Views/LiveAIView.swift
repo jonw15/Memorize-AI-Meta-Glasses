@@ -195,7 +195,7 @@ struct LiveAIView: View {
             // Update video frames
             frameTimer?.invalidate()
             frameTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-                if let frame = streamViewModel.currentVideoFrame {
+                if streamViewModel.hasReceivedFirstFrame, let frame = streamViewModel.currentVideoFrame {
                     viewModel.updateVideoFrame(frame)
                 }
             }
