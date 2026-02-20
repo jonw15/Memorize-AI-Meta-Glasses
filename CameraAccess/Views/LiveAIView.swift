@@ -1289,6 +1289,7 @@ private struct YouTubeEmbedView: View {
 
 private struct EmbeddedWebView: UIViewRepresentable {
     private static let readyMessage = "video_message_ready"
+    private static let playingMessage = "video_message_playing"
     private static let bridgeName = "ariaBridge"
     let urlString: String
 
@@ -1345,12 +1346,17 @@ private struct EmbeddedWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler {
         var loadedURLString: String?
         weak var webView: WKWebView?
+        private var unmuteAttempted = false
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             if let value = message.body as? String {
                 print("[Youtube] message emitted: \(value)")
-                guard value == EmbeddedWebView.readyMessage else { return }
-                webView?.becomeFirstResponder()
+                if value == EmbeddedWebView.readyMessage {
+                    webView?.becomeFirstResponder()
+                } else if value == EmbeddedWebView.playingMessage && !unmuteAttempted {
+                    unmuteAttempted = true
+                    webView?.evaluateJavaScript("unmute()", completionHandler: nil)
+                }
             }
         }
     }
