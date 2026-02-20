@@ -20,6 +20,13 @@ class GeminiLiveService: NSObject {
         let instructions: [String]
     }
 
+    struct YouTubeVideo {
+        let videoId: String
+        let url: String
+        let title: String
+        let thumbnail: String
+    }
+
     // WebSocket
     private var webSocket: URLSessionWebSocketTask?
     private var urlSession: URLSession?
@@ -58,6 +65,7 @@ class GeminiLiveService: NSObject {
     var onConnected: (() -> Void)?
     var onFirstAudioSent: (() -> Void)?
     var onMultipleStepInstructions: ((MultipleStepInstructionsPayload) -> Void)?
+    var onYouTubeResults: (([YouTubeVideo]) -> Void)?
 
     // State
     private var isRecording = false
@@ -232,7 +240,8 @@ Do not apologize.
                 "tools": [
                     [
                         "functionDeclarations": [
-                            multipleStepsInstructionDeclaration
+                            multipleStepsInstructionDeclaration,
+                            youtubeDeclaration
                         ]
                     ]
                 ]
@@ -398,6 +407,22 @@ Do not apologize.
                     ]
                 ],
                 "required": ["problem", "brand", "model", "instructions", "tools", "parts"]
+            ]
+        ]
+    }
+
+    private var youtubeDeclaration: [String: Any] {
+        [
+            "name": "youtube",
+            "description": "Opens the YouTube player or searches for videos. Use this for any requests related to YouTube, such as 'Open YouTube', 'Search YouTube for videos about...', or 'Find a video on how to fix a leaky faucet.'",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "search_string": [
+                        "type": "string",
+                        "description": "The topic or video the user wants to search for. This is optional; omit it if the user only asks to open YouTube without specifying what to search for."
+                    ]
+                ]
             ]
         ]
     }
@@ -758,6 +783,16 @@ Do not apologize.
                 )
             }
 
+        case "youtube":
+            let youtubeSearch = (args["search_string"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            print("[Youtube] DispatchToolCall youtube search_string='\(youtubeSearch)'")
+            searchYouTube(youtubeSearch)
+            sendFunctionResponse(
+                id: id,
+                functionName: name,
+                result: ["success": true]
+            )
+
         default:
             print("⚠️ [Gemini] Unknown tool call: \(name)")
             sendFunctionResponse(
@@ -766,6 +801,66 @@ Do not apologize.
                 result: ["success": false, "error": "Unknown function name: \(name)"]
             )
         }
+    }
+
+    private func searchYouTube(_ searchString: String) {
+        guard let url = URL(string: "https://app.ariaspark.com/ai/json/youtube/search") else {
+            print("[Youtube] Invalid endpoint URL")
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = [
+            "query": searchString.isEmpty ? "DIY project tutorial" : searchString,
+            "maxResults": 4
+        ]
+        guard let bodyData = try? JSONSerialization.data(withJSONObject: body) else {
+            print("[Youtube] Failed to serialize request body")
+            return
+        }
+        request.httpBody = bodyData
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            if let error {
+                print("[Youtube] Request error: \(error.localizedDescription)")
+                return
+            }
+
+            guard let data else {
+                print("[Youtube] Empty response body")
+                return
+            }
+
+            if let rawJSON = String(data: data, encoding: .utf8) {
+                print("[Youtube] Response JSON: \(rawJSON)")
+            } else {
+                print("[Youtube] Response received (\(data.count) bytes)")
+            }
+
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                print("[Youtube] Failed to parse response JSON")
+                return
+            }
+
+            let dataArray = json["data"] as? [[String: Any]] ?? []
+            let videos: [YouTubeVideo] = dataArray.compactMap { item in
+                guard let videoId = item["videoId"] as? String,
+                      let url = item["url"] as? String,
+                      let title = item["title"] as? String,
+                      let thumbnail = item["thumbnail"] as? String else {
+                    return nil
+                }
+                return YouTubeVideo(videoId: videoId, url: url, title: title, thumbnail: thumbnail)
+            }
+
+            print("[Youtube] Parsed \(videos.count) videos")
+            DispatchQueue.main.async {
+                self?.onYouTubeResults?(videos)
+            }
+        }.resume()
     }
 
     // MARK: - Audio Playback

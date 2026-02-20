@@ -10,6 +10,13 @@ import AVFoundation
 
 @MainActor
 class OmniRealtimeViewModel: ObservableObject {
+    struct YouTubeVideoItem: Identifiable {
+        let id = UUID()
+        let videoId: String
+        let url: String
+        let title: String
+        let thumbnail: String
+    }
 
     // Published state
     @Published var isConnected = false
@@ -22,6 +29,7 @@ class OmniRealtimeViewModel: ObservableObject {
     @Published var toolCallTools: [String] = []
     @Published var toolCallParts: [String] = []
     @Published var toolCallInstructions: [String] = []
+    @Published var youtubeVideos: [YouTubeVideoItem] = []
 
     // Service
     private var geminiService: GeminiLiveService?
@@ -164,6 +172,20 @@ class OmniRealtimeViewModel: ObservableObject {
                 self.toolCallTools = cleanedTools
                 self.toolCallParts = cleanedParts
                 print("🧾 [LiveAI-VM] Tool call mapped: \(cleanedInstructions.count) steps, \(cleanedTools.count) tools, \(cleanedParts.count) parts")
+            }
+        }
+
+        geminiService.onYouTubeResults = { [weak self] videos in
+            Task { @MainActor in
+                self?.youtubeVideos = videos.map {
+                    YouTubeVideoItem(
+                        videoId: $0.videoId,
+                        url: $0.url,
+                        title: $0.title,
+                        thumbnail: $0.thumbnail
+                    )
+                }
+                print("📺 [LiveAI-VM] YouTube videos updated: \(self?.youtubeVideos.count ?? 0)")
             }
         }
     }

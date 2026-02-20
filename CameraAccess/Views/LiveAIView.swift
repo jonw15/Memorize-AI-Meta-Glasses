@@ -681,8 +681,14 @@ struct LiveAIView: View {
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
-                            ForEach(Self.tutorialVideos) { video in
-                                tutorialVideoCard(video: video)
+                            if !viewModel.youtubeVideos.isEmpty {
+                                ForEach(viewModel.youtubeVideos) { video in
+                                    youtubeVideoCard(video: video)
+                                }
+                            } else {
+                                ForEach(Self.tutorialVideos) { video in
+                                    tutorialVideoCard(video: video)
+                                }
                             }
                         }
                     }
@@ -871,6 +877,49 @@ struct LiveAIView: View {
                     .background(Color.black.opacity(0.65))
                     .clipShape(Capsule())
                     .padding(8)
+            }
+
+            Text(video.title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white)
+                .lineLimit(2)
+                .frame(width: 180, alignment: .leading)
+        }
+    }
+
+    private func youtubeVideoCard(video: OmniRealtimeViewModel.YouTubeVideoItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack(alignment: .bottomTrailing) {
+                AsyncImage(url: URL(string: video.thumbnail)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.14), Color.white.opacity(0.06)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    }
+                }
+                .frame(width: 180, height: 110)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                Circle()
+                    .fill(Color(red: 0.24, green: 0.42, blue: 0.93))
+                    .frame(width: 42, height: 42)
+                    .overlay(
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                            .offset(x: 1)
+                    )
             }
 
             Text(video.title)
