@@ -900,7 +900,7 @@ struct LiveAIView: View {
     private func youtubeVideoCard(video: OmniRealtimeViewModel.YouTubeVideoItem) -> some View {
         Button {
             if let videoID = extractYouTubeVideoId(from: video.url) {
-                selectedYouTubeEmbedTarget = YouTubeEmbedTarget(urlString: "https://app.ariaspark.com/yt/?v=\(videoID)")
+                selectedYouTubeEmbedTarget = YouTubeEmbedTarget(urlString: "https://www.youtube.com/embed/\(videoID)?autoplay=1&playsinline=1&rel=0&modestbranding=1")
             }
         } label: {
             VStack(alignment: .leading, spacing: 8) {
