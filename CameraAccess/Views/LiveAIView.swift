@@ -900,7 +900,7 @@ struct LiveAIView: View {
     private func youtubeVideoCard(video: OmniRealtimeViewModel.YouTubeVideoItem) -> some View {
         Button {
             if let videoID = extractYouTubeVideoId(from: video.url) {
-                selectedYouTubeEmbedTarget = YouTubeEmbedTarget(urlString: "https://app.ariaspark.com/y/?v=\(videoID)")
+                selectedYouTubeEmbedTarget = YouTubeEmbedTarget(urlString: "https://app.ariaspark.com/yt/?v=\(videoID)")
             }
         } label: {
             VStack(alignment: .leading, spacing: 8) {
@@ -1274,15 +1274,15 @@ private struct YouTubeEmbedView: View {
         NavigationView {
             EmbeddedWebView(urlString: urlString)
                 .ignoresSafeArea()
-                .navigationTitle("Video")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Done") {
-                            dismiss()
-                        }
+            .navigationTitle("Video")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
                     }
                 }
+            }
         }
     }
 }
@@ -1341,6 +1341,7 @@ private struct EmbeddedWebView: UIViewRepresentable {
         """
     }
 
+
     final class Coordinator: NSObject, WKScriptMessageHandler {
         var loadedURLString: String?
         weak var webView: WKWebView?
@@ -1350,25 +1351,6 @@ private struct EmbeddedWebView: UIViewRepresentable {
                 print("[Youtube] message emitted: \(value)")
                 guard value == EmbeddedWebView.readyMessage else { return }
                 webView?.becomeFirstResponder()
-                webView?.evaluateJavaScript(
-                    """
-                    (function ensurePlayback() {
-                      var attempts = 0;
-                      var timer = setInterval(function() {
-                        attempts += 1;
-                        try {
-                          if (window.player) {
-                            if (window.player.mute) { window.player.mute(); }
-                            if (window.player.playVideo) { window.player.playVideo(); }
-                          }
-                          var videos = document.querySelectorAll('video');
-                          videos.forEach(function(v){ try { v.muted = true; v.play(); } catch (e) {} });
-                        } catch (e) {}
-                        if (attempts >= 8) { clearInterval(timer); }
-                      }, 350);
-                    })();
-                    """
-                )
             }
         }
     }
