@@ -1301,6 +1301,7 @@ private struct EmbeddedWebView: UIViewRepresentable {
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
+        configuration.websiteDataStore = .nonPersistent()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.userContentController.add(context.coordinator, name: Self.bridgeName)
         configuration.userContentController.addUserScript(
@@ -1319,7 +1320,7 @@ private struct EmbeddedWebView: UIViewRepresentable {
         guard let url = URL(string: urlString) else { return }
         if context.coordinator.loadedURLString != urlString {
             context.coordinator.loadedURLString = urlString
-            uiView.load(URLRequest(url: url))
+            uiView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData))
         }
     }
 
