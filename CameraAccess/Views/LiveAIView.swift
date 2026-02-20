@@ -6,6 +6,7 @@
 import SwiftUI
 import AVFoundation
 import AVKit
+import WebKit
 
 struct LiveAIView: View {
     private struct InstructionStep: Identifiable {
@@ -49,6 +50,11 @@ struct LiveAIView: View {
         case collab = "Collab"
     }
 
+    private struct YouTubeEmbedTarget: Identifiable {
+        let id = UUID()
+        let urlString: String
+    }
+
     @StateObject private var viewModel: OmniRealtimeViewModel
     @ObservedObject var streamViewModel: StreamSessionViewModel
     @Environment(\.dismiss) private var dismiss
@@ -67,6 +73,7 @@ struct LiveAIView: View {
     @State private var currentChapterIndex = 0
     @State private var activeVideoURLIndex = 0
     @State private var placeholderVideoPlayer = AVPlayer(url: Self.placeholderVideoURL)
+    @State private var selectedYouTubeEmbedTarget: YouTubeEmbedTarget?
     private let feedbackSynth = AVSpeechSynthesizer()
     private let videoProgressTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
     private static let defaultInstructionSteps: [InstructionStep] = []
@@ -219,6 +226,9 @@ struct LiveAIView: View {
             if let error = viewModel.errorMessage {
                 Text(error)
             }
+        }
+        .sheet(item: $selectedYouTubeEmbedTarget) { target in
+            YouTubeEmbedView(urlString: target.urlString)
         }
     }
 
@@ -888,46 +898,67 @@ struct LiveAIView: View {
     }
 
     private func youtubeVideoCard(video: OmniRealtimeViewModel.YouTubeVideoItem) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .bottomTrailing) {
-                AsyncImage(url: URL(string: video.thumbnail)) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    default:
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color.white.opacity(0.14), Color.white.opacity(0.06)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                    }
-                }
-                .frame(width: 180, height: 110)
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-                Circle()
-                    .fill(Color(red: 0.24, green: 0.42, blue: 0.93))
-                    .frame(width: 42, height: 42)
-                    .overlay(
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
-                            .offset(x: 1)
-                    )
+        Button {
+            if let videoID = extractYouTubeVideoId(from: video.url) {
+                selectedYouTubeEmbedTarget = YouTubeEmbedTarget(urlString: "https://app.ariaspark.com/y/?v=\(videoID)")
             }
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                ZStack(alignment: .bottomTrailing) {
+                    AsyncImage(url: URL(string: video.thumbnail)) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        default:
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.white.opacity(0.14), Color.white.opacity(0.06)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                        }
+                    }
+                    .frame(width: 180, height: 110)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-            Text(video.title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.white)
-                .lineLimit(2)
-                .frame(width: 180, alignment: .leading)
+                    Circle()
+                        .fill(Color(red: 0.24, green: 0.42, blue: 0.93))
+                        .frame(width: 42, height: 42)
+                        .overlay(
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.white)
+                                .offset(x: 1)
+                        )
+                }
+
+                Text(video.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                    .frame(width: 180, alignment: .leading)
+            }
         }
+        .buttonStyle(.plain)
+    }
+
+    private func extractYouTubeVideoId(from url: String) -> String? {
+        let pattern = #"embed/([a-zA-Z0-9_-]{11})(?:\?|/|$)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(url.startIndex..<url.endIndex, in: url)
+        guard
+            let match = regex.firstMatch(in: url, options: [], range: range),
+            match.numberOfRanges > 1,
+            let idRange = Range(match.range(at: 1), in: url)
+        else {
+            return nil
+        }
+        return String(url[idRange])
     }
 
     private var shopPanel: some View {
@@ -1231,6 +1262,114 @@ struct LiveAIView: View {
             }
             .padding(.horizontal, AppSpacing.xl)
             .padding(.bottom, AppSpacing.xl)
+        }
+    }
+}
+
+private struct YouTubeEmbedView: View {
+    let urlString: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            EmbeddedWebView(urlString: urlString)
+                .ignoresSafeArea()
+                .navigationTitle("Video")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") {
+                            dismiss()
+                        }
+                    }
+                }
+        }
+    }
+}
+
+private struct EmbeddedWebView: UIViewRepresentable {
+    private static let readyMessage = "video_message_ready"
+    private static let bridgeName = "ariaBridge"
+    let urlString: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.userContentController.add(context.coordinator, name: Self.bridgeName)
+        configuration.userContentController.addUserScript(
+            WKUserScript(source: bridgeInjectionScript, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        )
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        context.coordinator.webView = webView
+        webView.backgroundColor = .black
+        webView.isOpaque = false
+        webView.scrollView.backgroundColor = .black
+        return webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+        guard let url = URL(string: urlString) else { return }
+        if context.coordinator.loadedURLString != urlString {
+            context.coordinator.loadedURLString = urlString
+            uiView.load(URLRequest(url: url))
+        }
+    }
+
+    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        uiView.configuration.userContentController.removeScriptMessageHandler(forName: Self.bridgeName)
+    }
+
+    private var bridgeInjectionScript: String {
+        """
+        (function() {
+          window.vuplex = window.vuplex || {};
+          window.vuplex.postMessage = function(value) {
+            try {
+              if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.\(Self.bridgeName)) {
+                window.webkit.messageHandlers.\(Self.bridgeName).postMessage(value);
+              }
+            } catch (e) {}
+          };
+        })();
+        """
+    }
+
+    final class Coordinator: NSObject, WKScriptMessageHandler {
+        var loadedURLString: String?
+        weak var webView: WKWebView?
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if let value = message.body as? String {
+                print("[Youtube] message emitted: \(value)")
+                guard value == EmbeddedWebView.readyMessage else { return }
+                webView?.becomeFirstResponder()
+                webView?.evaluateJavaScript(
+                    """
+                    (function ensurePlayback() {
+                      var attempts = 0;
+                      var timer = setInterval(function() {
+                        attempts += 1;
+                        try {
+                          if (window.player) {
+                            if (window.player.mute) { window.player.mute(); }
+                            if (window.player.playVideo) { window.player.playVideo(); }
+                          }
+                          var videos = document.querySelectorAll('video');
+                          videos.forEach(function(v){ try { v.muted = true; v.play(); } catch (e) {} });
+                        } catch (e) {}
+                        if (attempts >= 8) { clearInterval(timer); }
+                      }, 350);
+                    })();
+                    """
+                )
+            }
         }
     }
 }
