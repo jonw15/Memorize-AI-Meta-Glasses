@@ -1304,6 +1304,18 @@ private struct EmbeddedWebView: UIViewRepresentable {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.userContentController.add(context.coordinator, name: Self.bridgeName)
 
+#if DEBUG
+        assert(configuration.allowsInlineMediaPlayback, "[Youtube] allowsInlineMediaPlayback must be enabled.")
+        assert(
+            configuration.mediaTypesRequiringUserActionForPlayback.isEmpty,
+            "[Youtube] mediaTypesRequiringUserActionForPlayback must be empty for autoplay."
+        )
+        print(
+            "[Youtube] WKWebView config inline=\(configuration.allowsInlineMediaPlayback) " +
+            "requiresUserAction=\(configuration.mediaTypesRequiringUserActionForPlayback)"
+        )
+#endif
+
         let webView = WKWebView(frame: .zero, configuration: configuration)
         context.coordinator.webView = webView
         webView.backgroundColor = .black
