@@ -72,6 +72,7 @@ class GeminiLiveService: NSObject {
     private var hasAudioBeenSent = false
     private var isSessionConfigured = false
     private var isDisconnecting = false
+    private var isPlaybackEnabled = true
 
     init(apiKey: String, model: String? = nil) {
         self.apiKey = apiKey
@@ -113,6 +114,16 @@ class GeminiLiveService: NSObject {
         }
     }
 
+    private func deactivateAudioSessionIfIdle() {
+        guard !isRecording, !isPlaybackEngineRunning else { return }
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+            print("🔇 [Gemini] Audio session deactivated (idle)")
+        } catch {
+            print("⚠️ [Gemini] Failed to deactivate audio session: \(error)")
+        }
+    }
+
     private func startPlaybackEngine() {
         guard let playbackEngine = playbackEngine, !isPlaybackEngineRunning else { return }
 
@@ -134,6 +145,7 @@ class GeminiLiveService: NSObject {
         playbackEngine.stop()
         isPlaybackEngineRunning = false
         print("⏹️ [Gemini] Playback engine stopped and queue cleared")
+        deactivateAudioSessionIfIdle()
     }
 
     // MARK: - WebSocket Connection
@@ -326,6 +338,22 @@ Do not apologize.
         audioEngine?.stop()
         isRecording = false
         hasAudioBeenSent = false
+        deactivateAudioSessionIfIdle()
+    }
+
+    func suspendAudioForExternalPlayback() {
+        print("🔇 [Gemini] Suspending audio I/O for external playback")
+        if isRecording {
+            stopRecording()
+        }
+        stopPlaybackEngine()
+        isPlaybackEnabled = false
+        deactivateAudioSessionIfIdle()
+    }
+
+    func resumeAudioForConversation() {
+        isPlaybackEnabled = true
+        print("🔊 [Gemini] Resumed audio I/O for conversation")
     }
 
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat) {
@@ -866,6 +894,8 @@ Do not apologize.
     // MARK: - Audio Playback
 
     private func handleAudioChunk(_ audioData: Data) {
+        guard isPlaybackEnabled else { return }
+
         if !isCollectingAudio {
             isCollectingAudio = true
             audioBuffer = Data()

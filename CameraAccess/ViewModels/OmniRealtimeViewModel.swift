@@ -253,6 +253,16 @@ class OmniRealtimeViewModel: ObservableObject {
         isRecording = false
     }
 
+    func suspendAudioForEmbeddedVideo() {
+        stopImageSendTimer()
+        geminiService?.suspendAudioForExternalPlayback()
+        isRecording = false
+    }
+
+    func resumeAudioAfterEmbeddedVideo() {
+        geminiService?.resumeAudioForConversation()
+    }
+
     // MARK: - Video Frames
 
     func updateVideoFrame(_ frame: UIImage) {

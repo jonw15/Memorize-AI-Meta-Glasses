@@ -174,7 +174,7 @@ struct LiveAIView: View {
             }
         }
         .onChange(of: viewModel.isConnected) { isConnected in
-            if isConnected, !viewModel.isRecording {
+            if isConnected, selectedBottomTab == .chatLog, !isMuted, !viewModel.isRecording {
                 viewModel.startRecording()
             }
         }
@@ -185,15 +185,14 @@ struct LiveAIView: View {
             // Leaving Chat Log: save user's mute preference, then force mute off-page.
             if lastTab == .chatLog, tab != .chatLog {
                 savedMutedStateForChatLog = isMuted
-                if viewModel.isRecording || !isMuted {
-                    viewModel.stopRecording()
-                    isMuted = true
-                }
+                viewModel.suspendAudioForEmbeddedVideo()
+                isMuted = true
                 return
             }
 
             // Returning to Chat Log: restore user's previous mute preference.
             if lastTab != .chatLog, tab == .chatLog, let savedMuted = savedMutedStateForChatLog {
+                viewModel.resumeAudioAfterEmbeddedVideo()
                 isMuted = savedMuted
                 if savedMuted {
                     viewModel.stopRecording()
