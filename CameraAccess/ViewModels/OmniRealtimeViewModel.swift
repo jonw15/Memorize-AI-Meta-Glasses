@@ -10,8 +10,8 @@ import AVFoundation
 
 @MainActor
 class OmniRealtimeViewModel: ObservableObject {
-    struct YouTubeVideoItem: Identifiable {
-        let id = UUID()
+    struct YouTubeVideoItem: Identifiable, Equatable {
+        var id: String { videoId }
         let videoId: String
         let url: String
         let title: String
@@ -177,7 +177,7 @@ class OmniRealtimeViewModel: ObservableObject {
 
         geminiService.onYouTubeResults = { [weak self] videos in
             Task { @MainActor in
-                self?.youtubeVideos = videos.map {
+                let mapped = videos.map {
                     YouTubeVideoItem(
                         videoId: $0.videoId,
                         url: $0.url,
@@ -185,7 +185,13 @@ class OmniRealtimeViewModel: ObservableObject {
                         thumbnail: $0.thumbnail
                     )
                 }
-                print("📺 [LiveAI-VM] YouTube videos updated: \(self?.youtubeVideos.count ?? 0)")
+                guard let self else { return }
+                if self.youtubeVideos != mapped {
+                    self.youtubeVideos = mapped
+                    print("📺 [LiveAI-VM] YouTube videos updated: \(self.youtubeVideos.count)")
+                } else {
+                    print("📺 [LiveAI-VM] YouTube videos unchanged, skipping UI refresh")
+                }
             }
         }
     }
