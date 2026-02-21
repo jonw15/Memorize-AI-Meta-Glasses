@@ -1302,6 +1302,7 @@ private struct EmbeddedWebView: UIViewRepresentable {
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.websiteDataStore = .nonPersistent()
+        configuration.processPool = WKProcessPool()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.userContentController.add(context.coordinator, name: Self.bridgeName)
         configuration.userContentController.addUserScript(
