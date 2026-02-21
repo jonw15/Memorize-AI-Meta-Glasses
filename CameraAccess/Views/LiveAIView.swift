@@ -53,7 +53,6 @@ struct LiveAIView: View {
     private struct YouTubeEmbedTarget: Identifiable {
         let id = UUID()
         let urlString: String
-        let videoId: String
     }
 
     @StateObject private var viewModel: OmniRealtimeViewModel
@@ -229,7 +228,7 @@ struct LiveAIView: View {
             }
         }
         .sheet(item: $selectedYouTubeEmbedTarget) { target in
-            YouTubeEmbedView(videoId: target.videoId)
+            YouTubeEmbedView(urlString: target.urlString)
         }
     }
 
@@ -901,7 +900,7 @@ struct LiveAIView: View {
     private func youtubeVideoCard(video: OmniRealtimeViewModel.YouTubeVideoItem) -> some View {
         Button {
             if let videoID = extractYouTubeVideoId(from: video.url) {
-                selectedYouTubeEmbedTarget = YouTubeEmbedTarget(urlString: "https://app.ariaspark.com/yt/?v=\(videoID)", videoId: videoID)
+                selectedYouTubeEmbedTarget = YouTubeEmbedTarget(urlString: "https://app.ariaspark.com/yt/?v=\(videoID)")
             }
         } label: {
             VStack(alignment: .leading, spacing: 8) {
@@ -1268,12 +1267,12 @@ struct LiveAIView: View {
 }
 
 private struct YouTubeEmbedView: View {
-    let videoId: String
+    let urlString: String
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationView {
-            EmbeddedWebView(videoId: videoId)
+            EmbeddedWebView(urlString: urlString)
                 .ignoresSafeArea()
             .navigationTitle("Video")
             .navigationBarTitleDisplayMode(.inline)
@@ -1289,10 +1288,8 @@ private struct YouTubeEmbedView: View {
 }
 
 private struct EmbeddedWebView: UIViewRepresentable {
-    private static let readyMessage = "video_message_ready"
-    private static let playingMessage = "video_message_playing"
     private static let bridgeName = "ariaBridge"
-    let videoId: String
+    let urlString: String
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -1316,10 +1313,10 @@ private struct EmbeddedWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
-        if context.coordinator.loadedVideoId != videoId {
-            context.coordinator.loadedVideoId = videoId
-            let html = youtubePlayerHTML(videoId: videoId)
-            uiView.loadHTMLString(html, baseURL: URL(string: "https://www.youtube.com"))
+        guard let url = URL(string: urlString) else { return }
+        if context.coordinator.loadedURLString != urlString {
+            context.coordinator.loadedURLString = urlString
+            uiView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData))
         }
     }
 
@@ -1327,72 +1324,13 @@ private struct EmbeddedWebView: UIViewRepresentable {
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: Self.bridgeName)
     }
 
-    private func youtubePlayerHTML(videoId: String) -> String {
-        """
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-          <style>
-            html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
-            #player { position: fixed; inset: 0; width: 100vw; height: 100vh; }
-          </style>
-        </head>
-        <body>
-          <div id="player"></div>
-          <script>
-            var player;
-            function post(msg) {
-              try {
-                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.\(Self.bridgeName)) {
-                  window.webkit.messageHandlers.\(Self.bridgeName).postMessage(msg);
-                }
-              } catch (e) {}
-            }
-
-            function onYouTubeIframeAPIReady() {
-              player = new YT.Player('player', {
-                width: '100%',
-                height: '100%',
-                videoId: '\(videoId)',
-                playerVars: {
-                  autoplay: 1,
-                  mute: 0,
-                  controls: 1,
-                  playsinline: 1,
-                  rel: 0,
-                  modestbranding: 1,
-                  enablejsapi: 1
-                },
-                events: {
-                  onReady: function () { post('video_message_ready'); },
-                  onStateChange: function (e) {
-                    if (e.data === YT.PlayerState.PLAYING) post('video_message_playing');
-                    if (e.data === YT.PlayerState.PAUSED)  post('video_message_paused');
-                  }
-                }
-              });
-            }
-
-            var tag = document.createElement('script');
-            tag.src = 'https://www.youtube.com/iframe_api';
-            document.head.appendChild(tag);
-          </script>
-        </body>
-        </html>
-        """
-    }
-
     final class Coordinator: NSObject, WKScriptMessageHandler {
-        var loadedVideoId: String?
+        var loadedURLString: String?
         weak var webView: WKWebView?
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             if let value = message.body as? String {
                 print("[Youtube] message emitted: \(value)")
-                if value == EmbeddedWebView.readyMessage {
-                    webView?.becomeFirstResponder()
-                }
             }
         }
     }
