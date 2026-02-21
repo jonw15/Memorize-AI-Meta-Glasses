@@ -50,11 +50,6 @@ struct LiveAIView: View {
         case collab = "Collab"
     }
 
-    private struct YouTubeEmbedTarget: Identifiable {
-        let id = UUID()
-        let urlString: String
-    }
-
     @StateObject private var viewModel: OmniRealtimeViewModel
     @ObservedObject var streamViewModel: StreamSessionViewModel
     @Environment(\.dismiss) private var dismiss
@@ -73,7 +68,6 @@ struct LiveAIView: View {
     @State private var currentChapterIndex = 0
     @State private var activeVideoURLIndex = 0
     @State private var placeholderVideoPlayer = AVPlayer(url: Self.placeholderVideoURL)
-    @State private var selectedYouTubeEmbedTarget: YouTubeEmbedTarget?
     private let feedbackSynth = AVSpeechSynthesizer()
     private let videoProgressTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
     private static let defaultInstructionSteps: [InstructionStep] = []
@@ -226,9 +220,6 @@ struct LiveAIView: View {
             if let error = viewModel.errorMessage {
                 Text(error)
             }
-        }
-        .sheet(item: $selectedYouTubeEmbedTarget) { target in
-            YouTubeEmbedView(urlString: target.urlString)
         }
     }
 
@@ -898,53 +889,29 @@ struct LiveAIView: View {
     }
 
     private func youtubeVideoCard(video: OmniRealtimeViewModel.YouTubeVideoItem) -> some View {
-        Button {
+        VStack(alignment: .leading, spacing: 8) {
             if let videoID = extractYouTubeVideoId(from: video.url) {
-                selectedYouTubeEmbedTarget = YouTubeEmbedTarget(urlString: "https://app.ariaspark.com/yt/?v=\(videoID)")
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                ZStack(alignment: .bottomTrailing) {
-                    AsyncImage(url: URL(string: video.thumbnail)) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        default:
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color.white.opacity(0.14), Color.white.opacity(0.06)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                        }
-                    }
+                YouTubeCardWebPreview(urlString: "https://app.ariaspark.com/yt/?v=\(videoID)")
                     .frame(width: 180, height: 110)
-                    .clipped()
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-                    Circle()
-                        .fill(Color(red: 0.24, green: 0.42, blue: 0.93))
-                        .frame(width: 42, height: 42)
-                        .overlay(
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.white)
-                                .offset(x: 1)
+            } else {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.14), Color.white.opacity(0.06)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
                         )
-                }
-
-                Text(video.title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .lineLimit(2)
-                    .frame(width: 180, alignment: .leading)
+                    )
+                    .frame(width: 180, height: 110)
             }
+
+            Text(video.title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white)
+                .lineLimit(2)
+                .frame(width: 180, alignment: .leading)
         }
-        .buttonStyle(.plain)
     }
 
     private func extractYouTubeVideoId(from url: String) -> String? {
@@ -1266,29 +1233,7 @@ struct LiveAIView: View {
     }
 }
 
-private struct YouTubeEmbedView: View {
-    let urlString: String
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationView {
-            EmbeddedWebView(urlString: urlString)
-                .ignoresSafeArea()
-            .navigationTitle("Video")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
-
-private struct EmbeddedWebView: UIViewRepresentable {
-    private static let bridgeName = "ariaBridge"
+private struct YouTubeCardWebPreview: UIViewRepresentable {
     let urlString: String
 
     func makeCoordinator() -> Coordinator {
@@ -1299,25 +1244,12 @@ private struct EmbeddedWebView: UIViewRepresentable {
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
-        configuration.websiteDataStore = .nonPersistent()
-        configuration.processPool = WKProcessPool()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        configuration.userContentController.add(context.coordinator, name: Self.bridgeName)
-
-#if DEBUG
-        assert(configuration.allowsInlineMediaPlayback, "[Youtube] allowsInlineMediaPlayback must be enabled.")
-        assert(
-            configuration.mediaTypesRequiringUserActionForPlayback.isEmpty,
-            "[Youtube] mediaTypesRequiringUserActionForPlayback must be empty for autoplay."
-        )
-        print(
-            "[Youtube] WKWebView config inline=\(configuration.allowsInlineMediaPlayback) " +
-            "requiresUserAction=\(configuration.mediaTypesRequiringUserActionForPlayback)"
-        )
-#endif
+        configuration.websiteDataStore = .nonPersistent()
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
-        context.coordinator.webView = webView
+        webView.isUserInteractionEnabled = true
+        webView.scrollView.isScrollEnabled = false
         webView.backgroundColor = .black
         webView.isOpaque = false
         webView.scrollView.backgroundColor = .black
@@ -1332,18 +1264,7 @@ private struct EmbeddedWebView: UIViewRepresentable {
         }
     }
 
-    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
-        uiView.configuration.userContentController.removeScriptMessageHandler(forName: Self.bridgeName)
-    }
-
-    final class Coordinator: NSObject, WKScriptMessageHandler {
+    final class Coordinator {
         var loadedURLString: String?
-        weak var webView: WKWebView?
-
-        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            if let value = message.body as? String {
-                print("[Youtube] message emitted: \(value)")
-            }
-        }
     }
 }
