@@ -68,6 +68,7 @@ struct LiveAIView: View {
     @State private var currentChapterIndex = 0
     @State private var activeVideoURLIndex = 0
     @State private var placeholderVideoPlayer = AVPlayer(url: Self.placeholderVideoURL)
+    @State private var streamSuspendedForNonChatTab = false
     private let feedbackSynth = AVSpeechSynthesizer()
     private let videoProgressTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
     private static let defaultInstructionSteps: [InstructionStep] = []
@@ -187,11 +188,23 @@ struct LiveAIView: View {
                 savedMutedStateForChatLog = isMuted
                 viewModel.suspendAudioForEmbeddedVideo()
                 isMuted = true
+                if streamViewModel.streamingStatus != .stopped {
+                    streamSuspendedForNonChatTab = true
+                    Task {
+                        await streamViewModel.stopSession()
+                    }
+                }
                 return
             }
 
             // Returning to Chat Log: restore user's previous mute preference.
             if lastTab != .chatLog, tab == .chatLog, let savedMuted = savedMutedStateForChatLog {
+                if streamSuspendedForNonChatTab, streamViewModel.hasActiveDevice {
+                    streamSuspendedForNonChatTab = false
+                    Task {
+                        await streamViewModel.handleStartStreaming()
+                    }
+                }
                 viewModel.resumeAudioAfterEmbeddedVideo()
                 isMuted = savedMuted
                 if savedMuted {
