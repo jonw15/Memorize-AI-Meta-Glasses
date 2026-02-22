@@ -153,7 +153,7 @@ struct LiveAIView: View {
             }
         }
         .onChange(of: viewModel.isConnected) { isConnected in
-            let liveAITabs: Set<BottomTab> = [.chatLog, .videos]
+            let liveAITabs: Set<BottomTab> = [.chatLog, .videos, .shop, .instructions]
             if isConnected, liveAITabs.contains(selectedBottomTab), fullscreenYouTubeVideo == nil, !isMuted, !viewModel.isRecording {
                 viewModel.startRecording()
             }
@@ -162,7 +162,7 @@ struct LiveAIView: View {
             let lastTab = previousBottomTab
             previousBottomTab = tab
 
-            let liveAITabs: Set<BottomTab> = [.chatLog, .videos]
+            let liveAITabs: Set<BottomTab> = [.chatLog, .videos, .shop, .instructions]
             let wasCompatible = liveAITabs.contains(lastTab)
             let isCompatible = liveAITabs.contains(tab)
 
@@ -234,7 +234,7 @@ struct LiveAIView: View {
             FullscreenYouTubePlayerView(video: video)
         }
         .onChange(of: fullscreenYouTubeVideo) { video in
-            let liveAITabs: Set<BottomTab> = [.chatLog, .videos]
+            let liveAITabs: Set<BottomTab> = [.chatLog, .videos, .shop, .instructions]
             if video != nil {
                 // Opening fullscreen: suspend Live AI
                 savedMutedStateForFullscreen = isMuted
@@ -327,7 +327,7 @@ struct LiveAIView: View {
 
     private var controlsView: some View {
         VStack(spacing: AppSpacing.md) {
-            if selectedBottomTab == .chatLog || selectedBottomTab == .videos {
+            if selectedBottomTab != .collab {
                 // Recording status
                 HStack(spacing: AppSpacing.sm) {
                     if viewModel.isRecording {
@@ -1159,7 +1159,7 @@ struct LiveAIView: View {
     }
 
     private func restartChatAudioCaptureWithRetry() {
-        let liveAITabs: Set<BottomTab> = [.chatLog, .videos]
+        let liveAITabs: Set<BottomTab> = [.chatLog, .videos, .shop, .instructions]
         guard liveAITabs.contains(selectedBottomTab), fullscreenYouTubeVideo == nil, !isMuted, viewModel.isConnected else { return }
 
         viewModel.stopRecording()
