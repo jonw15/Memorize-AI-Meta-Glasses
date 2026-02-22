@@ -107,10 +107,25 @@ class GeminiLiveService: NSObject {
     private func configureAudioSession() {
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker])
+            try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetoothHFP])
             try audioSession.setActive(true, options: [.notifyOthersOnDeactivation])
+            selectBluetoothRouteIfAvailable()
         } catch {
             print("⚠️ [Gemini] Audio session configuration failed: \(error)")
+        }
+    }
+
+    private func selectBluetoothRouteIfAvailable() {
+        let session = AVAudioSession.sharedInstance()
+        guard let inputs = session.availableInputs else { return }
+        for input in inputs where input.portType == .bluetoothHFP {
+            do {
+                try session.setPreferredInput(input)
+                print("🎧 [Gemini] Preferred Bluetooth HFP input selected")
+            } catch {
+                print("⚠️ [Gemini] Failed to set preferred Bluetooth input: \(error)")
+            }
+            return
         }
     }
 
@@ -353,6 +368,11 @@ Do not apologize.
 
     func resumeAudioForConversation() {
         isPlaybackEnabled = true
+        configureAudioSession()
+        // Route discovery can lag briefly after tab/session switches.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.selectBluetoothRouteIfAvailable()
+        }
         print("🔊 [Gemini] Resumed audio I/O for conversation")
     }
 

@@ -188,6 +188,7 @@ struct LiveAIView: View {
                 savedMutedStateForChatLog = isMuted
                 viewModel.suspendAudioForEmbeddedVideo()
                 isMuted = true
+                activateVideoPlaybackAudioSession()
                 if streamViewModel.streamingStatus != .stopped {
                     streamSuspendedForNonChatTab = true
                     Task {
@@ -199,18 +200,23 @@ struct LiveAIView: View {
 
             // Returning to Chat Log: restore user's previous mute preference.
             if lastTab != .chatLog, tab == .chatLog, let savedMuted = savedMutedStateForChatLog {
-                if streamSuspendedForNonChatTab, streamViewModel.hasActiveDevice {
-                    streamSuspendedForNonChatTab = false
-                    Task {
-                        await streamViewModel.handleStartStreaming()
-                    }
-                }
+                deactivateVideoPlaybackAudioSessionOverride()
                 viewModel.resumeAudioAfterEmbeddedVideo()
                 isMuted = savedMuted
                 if savedMuted {
                     viewModel.stopRecording()
-                } else if viewModel.isConnected && !viewModel.isRecording {
-                    viewModel.startRecording()
+                } else {
+                    if streamSuspendedForNonChatTab, streamViewModel.hasActiveDevice {
+                        streamSuspendedForNonChatTab = false
+                        Task {
+                            await streamViewModel.handleStartStreaming()
+                            await MainActor.run {
+                                restartChatAudioCaptureWithRetry()
+                            }
+                        }
+                    } else {
+                        restartChatAudioCaptureWithRetry()
+                    }
                 }
                 savedMutedStateForChatLog = nil
             }
@@ -843,6 +849,9 @@ struct LiveAIView: View {
         let url = Self.videoURLs[min(activeVideoURLIndex, Self.videoURLs.count - 1)]
         let item = AVPlayerItem(url: url)
         placeholderVideoPlayer.replaceCurrentItem(with: item)
+        // Keep the local demo player silent so it doesn't compete with YouTube card audio.
+        placeholderVideoPlayer.isMuted = true
+        placeholderVideoPlayer.volume = 0
         placeholderVideoPlayer.play()
     }
 
@@ -1197,6 +1206,42 @@ struct LiveAIView: View {
         utterance.volume = 0.8
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
         feedbackSynth.speak(utterance)
+    }
+
+    private func activateVideoPlaybackAudioSession() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .moviePlayback, options: [])
+            try session.setActive(true)
+            print("🔊 [LiveAIView] Video playback audio session activated")
+        } catch {
+            print("⚠️ [LiveAIView] Failed to activate video playback audio session: \(error)")
+        }
+    }
+
+    private func deactivateVideoPlaybackAudioSessionOverride() {
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+            print("🔉 [LiveAIView] Video playback audio session override deactivated")
+        } catch {
+            print("⚠️ [LiveAIView] Failed to deactivate video playback audio session override: \(error)")
+        }
+    }
+
+    private func restartChatAudioCaptureWithRetry() {
+        guard selectedBottomTab == .chatLog, !isMuted, viewModel.isConnected else { return }
+
+        viewModel.stopRecording()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            if selectedBottomTab == .chatLog, !isMuted, viewModel.isConnected, !viewModel.isRecording {
+                viewModel.startRecording()
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            if selectedBottomTab == .chatLog, !isMuted, viewModel.isConnected, !viewModel.isRecording {
+                viewModel.startRecording()
+            }
+        }
     }
 
     // MARK: - Device Not Connected View
