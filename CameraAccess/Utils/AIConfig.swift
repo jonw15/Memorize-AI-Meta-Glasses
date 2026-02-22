@@ -19,5 +19,5 @@ struct AIConfig {
 /// Tunable Live AI parameters — change these values to adjust behavior globally.
 struct LiveAIConfig {
     /// How often (in seconds) to send a camera frame to Gemini during Live AI.
-    static let imageSendIntervalSeconds: TimeInterval = 3.0
+    static let imageSendIntervalSeconds: TimeInterval = 1.0
 }

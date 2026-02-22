@@ -155,9 +155,8 @@
 "settings.model.current" = "Currently using";
 "settings.model.google" = "Google Models";
 "settings.model.openrouter" = "OpenRouter Models";
-"settings.model.gemini25flash.desc" = "Fast and efficient vision model";
-"settings.model.gemini25pro.desc" = "Most capable vision model";
-"settings.model.gemini20flash.desc" = "Previous generation fast model";
+"settings.model.gemini30flash.desc" = "Fast and efficient vision model";
+"settings.model.gemini30pro.desc" = "Most capable vision model";
 "settings.model.search" = "Search models...";
 "settings.model.visiononly" = "Show vision-capable models only";
 "settings.model.loading" = "Loading models...";

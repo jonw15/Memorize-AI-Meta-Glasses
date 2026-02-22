@@ -9,7 +9,7 @@ import UIKit
 class LeanEatService {
     private let apiKey: String
     private let baseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
-    private let model = "gemini-2.5-flash"
+    private let model = "gemini-3.0-flash"
 
     init(apiKey: String) {
         self.apiKey = apiKey
