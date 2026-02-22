@@ -69,6 +69,8 @@ struct LiveAIView: View {
     @State private var activeVideoURLIndex = 0
     @State private var placeholderVideoPlayer = AVPlayer(url: Self.placeholderVideoURL)
     @State private var streamSuspendedForNonChatTab = false
+    @State private var fullscreenYouTubeVideo: OmniRealtimeViewModel.YouTubeVideoItem?
+    @State private var savedMutedStateForFullscreen: Bool?
     private let feedbackSynth = AVSpeechSynthesizer()
     private let videoProgressTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
     private static let defaultInstructionSteps: [InstructionStep] = []
@@ -175,7 +177,8 @@ struct LiveAIView: View {
             }
         }
         .onChange(of: viewModel.isConnected) { isConnected in
-            if isConnected, selectedBottomTab == .chatLog, !isMuted, !viewModel.isRecording {
+            let liveAITabs: Set<BottomTab> = [.chatLog, .videos]
+            if isConnected, liveAITabs.contains(selectedBottomTab), fullscreenYouTubeVideo == nil, !isMuted, !viewModel.isRecording {
                 viewModel.startRecording()
             }
         }
@@ -183,8 +186,15 @@ struct LiveAIView: View {
             let lastTab = previousBottomTab
             previousBottomTab = tab
 
-            // Leaving Chat Log: save user's mute preference, then force mute off-page.
-            if lastTab == .chatLog, tab != .chatLog {
+            let liveAITabs: Set<BottomTab> = [.chatLog, .videos]
+            let wasCompatible = liveAITabs.contains(lastTab)
+            let isCompatible = liveAITabs.contains(tab)
+
+            // Switching between two compatible tabs (chatLog ↔ videos) — do nothing.
+            if wasCompatible && isCompatible { return }
+
+            // Leaving a compatible tab for a non-compatible one: suspend Live AI.
+            if wasCompatible && !isCompatible {
                 savedMutedStateForChatLog = isMuted
                 viewModel.suspendAudioForEmbeddedVideo()
                 isMuted = true
@@ -198,8 +208,8 @@ struct LiveAIView: View {
                 return
             }
 
-            // Returning to Chat Log: restore user's previous mute preference.
-            if lastTab != .chatLog, tab == .chatLog, let savedMuted = savedMutedStateForChatLog {
+            // Returning from a non-compatible tab to a compatible one: resume Live AI.
+            if !wasCompatible && isCompatible, let savedMuted = savedMutedStateForChatLog {
                 deactivateVideoPlaybackAudioSessionOverride()
                 viewModel.resumeAudioAfterEmbeddedVideo()
                 isMuted = savedMuted
@@ -237,6 +247,44 @@ struct LiveAIView: View {
         } message: {
             if let error = viewModel.errorMessage {
                 Text(error)
+            }
+        }
+        .fullScreenCover(item: $fullscreenYouTubeVideo) { video in
+            FullscreenYouTubePlayerView(video: video)
+        }
+        .onChange(of: fullscreenYouTubeVideo) { video in
+            let liveAITabs: Set<BottomTab> = [.chatLog, .videos]
+            if video != nil {
+                // Opening fullscreen: suspend Live AI
+                savedMutedStateForFullscreen = isMuted
+                viewModel.suspendAudioForEmbeddedVideo()
+                isMuted = true
+                activateVideoPlaybackAudioSession()
+                if streamViewModel.streamingStatus != .stopped {
+                    streamSuspendedForNonChatTab = true
+                    Task { await streamViewModel.stopSession() }
+                }
+            } else {
+                // Closing fullscreen: resume Live AI (only if on a compatible tab)
+                guard liveAITabs.contains(selectedBottomTab) else { return }
+                deactivateVideoPlaybackAudioSessionOverride()
+                viewModel.resumeAudioAfterEmbeddedVideo()
+                let savedMuted = savedMutedStateForFullscreen ?? false
+                isMuted = savedMuted
+                if savedMuted {
+                    viewModel.stopRecording()
+                } else {
+                    if streamSuspendedForNonChatTab, streamViewModel.hasActiveDevice {
+                        streamSuspendedForNonChatTab = false
+                        Task {
+                            await streamViewModel.handleStartStreaming()
+                            await MainActor.run { restartChatAudioCaptureWithRetry() }
+                        }
+                    } else {
+                        restartChatAudioCaptureWithRetry()
+                    }
+                }
+                savedMutedStateForFullscreen = nil
             }
         }
     }
@@ -298,7 +346,7 @@ struct LiveAIView: View {
 
     private var controlsView: some View {
         VStack(spacing: AppSpacing.md) {
-            if selectedBottomTab == .chatLog {
+            if selectedBottomTab == .chatLog || selectedBottomTab == .videos {
                 // Recording status
                 HStack(spacing: AppSpacing.sm) {
                     if viewModel.isRecording {
@@ -910,22 +958,56 @@ struct LiveAIView: View {
     }
 
     private func youtubeVideoCard(video: OmniRealtimeViewModel.YouTubeVideoItem) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let videoID = extractYouTubeVideoId(from: video.url) {
-                YouTubeCardWebPreview(urlString: "https://app.ariaspark.com/yt/?v=\(videoID)")
-                    .frame(width: 180, height: 110)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            } else {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.14), Color.white.opacity(0.06)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 180, height: 110)
+        let thumbnailURL: URL? = {
+            if !video.thumbnail.isEmpty, let url = URL(string: video.thumbnail) {
+                return url
             }
+            if let videoID = extractYouTubeVideoId(from: video.url) {
+                return URL(string: "https://img.youtube.com/vi/\(videoID)/hqdefault.jpg")
+            }
+            return nil
+        }()
+
+        return VStack(alignment: .leading, spacing: 8) {
+            Button {
+                fullscreenYouTubeVideo = video
+            } label: {
+                ZStack {
+                    if let thumbnailURL {
+                        AsyncImage(url: thumbnailURL) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            case .failure:
+                                thumbnailPlaceholder
+                            case .empty:
+                                thumbnailPlaceholder
+                                    .overlay(ProgressView().tint(.white))
+                            @unknown default:
+                                thumbnailPlaceholder
+                            }
+                        }
+                    } else {
+                        thumbnailPlaceholder
+                    }
+
+                    // Play button overlay
+                    Circle()
+                        .fill(Color.black.opacity(0.55))
+                        .frame(width: 44, height: 44)
+                        .overlay(
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(.white)
+                                .offset(x: 2)
+                        )
+                }
+                .frame(width: 180, height: 110)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
 
             Text(video.title)
                 .font(.system(size: 14, weight: .semibold))
@@ -933,6 +1015,18 @@ struct LiveAIView: View {
                 .lineLimit(2)
                 .frame(width: 180, alignment: .leading)
         }
+    }
+
+    private var thumbnailPlaceholder: some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.14), Color.white.opacity(0.06)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: 180, height: 110)
     }
 
     private func extractYouTubeVideoId(from url: String) -> String? {
@@ -1233,16 +1327,17 @@ struct LiveAIView: View {
     }
 
     private func restartChatAudioCaptureWithRetry() {
-        guard selectedBottomTab == .chatLog, !isMuted, viewModel.isConnected else { return }
+        let liveAITabs: Set<BottomTab> = [.chatLog, .videos]
+        guard liveAITabs.contains(selectedBottomTab), fullscreenYouTubeVideo == nil, !isMuted, viewModel.isConnected else { return }
 
         viewModel.stopRecording()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            if selectedBottomTab == .chatLog, !isMuted, viewModel.isConnected, !viewModel.isRecording {
+            if liveAITabs.contains(selectedBottomTab), fullscreenYouTubeVideo == nil, !isMuted, viewModel.isConnected, !viewModel.isRecording {
                 viewModel.startRecording()
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            if selectedBottomTab == .chatLog, !isMuted, viewModel.isConnected, !viewModel.isRecording {
+            if liveAITabs.contains(selectedBottomTab), fullscreenYouTubeVideo == nil, !isMuted, viewModel.isConnected, !viewModel.isRecording {
                 viewModel.startRecording()
             }
         }
@@ -1338,5 +1433,48 @@ private struct YouTubeCardWebPreview: UIViewRepresentable {
 
     final class Coordinator {
         var loadedURLString: String?
+    }
+}
+
+private struct FullscreenYouTubePlayerView: View {
+    let video: OmniRealtimeViewModel.YouTubeVideoItem
+    @Environment(\.dismiss) private var dismiss
+
+    private var playerURLString: String? {
+        let pattern = #"embed/([a-zA-Z0-9_-]{11})(?:\?|/|$)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(video.url.startIndex..<video.url.endIndex, in: video.url)
+        guard
+            let match = regex.firstMatch(in: video.url, options: [], range: range),
+            match.numberOfRanges > 1,
+            let idRange = Range(match.range(at: 1), in: video.url)
+        else { return nil }
+        let videoID = String(video.url[idRange])
+        return "https://app.ariaspark.com/yt/?v=\(videoID)"
+    }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.black.ignoresSafeArea()
+
+            if let urlString = playerURLString {
+                YouTubeCardWebPreview(urlString: urlString)
+                    .ignoresSafeArea()
+            }
+
+            // Close button
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 36, height: 36)
+                    .background(Color.black.opacity(0.6))
+                    .clipShape(Circle())
+            }
+            .padding(.top, 8)
+            .padding(.leading, 16)
+        }
     }
 }
