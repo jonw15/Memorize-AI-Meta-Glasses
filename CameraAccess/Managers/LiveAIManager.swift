@@ -241,7 +241,7 @@ class LiveAIManager: ObservableObject {
         }
     }
 
-    private var imageSendInterval: TimeInterval = 1.0
+    private var imageSendInterval: TimeInterval = LiveAIConfig.imageSendIntervalSeconds
 
     private func startImageSendTimer() {
         stopImageSendTimer()

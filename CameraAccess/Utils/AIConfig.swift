@@ -15,3 +15,9 @@ struct AIConfig {
     /// AES-256-CBC IV (Base64 encoded)
     static let configIV = "/Zk5T8D0i1rbM8ElAkjbRA=="
 }
+
+/// Tunable Live AI parameters — change these values to adjust behavior globally.
+struct LiveAIConfig {
+    /// How often (in seconds) to send a camera frame to Gemini during Live AI.
+    static let imageSendIntervalSeconds: TimeInterval = 3.0
+}

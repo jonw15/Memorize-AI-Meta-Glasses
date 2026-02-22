@@ -273,59 +273,6 @@ struct LiveAIView: View {
         }
     }
 
-    // MARK: - Header
-
-    private var headerView: some View {
-        HStack {
-            Text("liveai.title".localized)
-                .font(AppTypography.headline)
-                .foregroundColor(.white)
-
-            Spacer()
-
-            // Connection status
-            HStack(spacing: AppSpacing.xs) {
-                Circle()
-                    .fill(viewModel.isConnected ? Color.green : Color.red)
-                    .frame(width: 8, height: 8)
-                Text(viewModel.isConnected ? "liveai.connected".localized : "liveai.connecting".localized)
-                    .font(AppTypography.caption)
-                    .foregroundColor(.white)
-            }
-
-            // Speaking indicator
-            if viewModel.isSpeaking {
-                HStack(spacing: AppSpacing.xs) {
-                    Image(systemName: "waveform")
-                        .foregroundColor(.green)
-                    Text("liveai.speaking".localized)
-                        .font(AppTypography.caption)
-                        .foregroundColor(.white)
-                }
-            }
-
-            // Image send interval toggle
-            Button {
-                let newInterval: TimeInterval = viewModel.imageSendInterval == 1.0 ? 3.0 : 1.0
-                viewModel.setImageSendInterval(newInterval)
-            } label: {
-                HStack(spacing: 2) {
-                    Image(systemName: "camera.fill")
-                        .font(.system(size: 10))
-                    Text(viewModel.imageSendInterval == 1.0 ? "1s" : "3s")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(viewModel.imageSendInterval == 1.0 ? Color.green.opacity(0.6) : Color.orange.opacity(0.6))
-                .cornerRadius(12)
-            }
-        }
-        .padding(AppSpacing.md)
-        .background(Color.black.opacity(0.7))
-    }
-
     // MARK: - Controls
 
     private var controlsView: some View {
@@ -354,8 +301,10 @@ struct LiveAIView: View {
                 .background(Color.black.opacity(0.6))
                 .cornerRadius(AppCornerRadius.xl)
 
-                muteButton
-                    .frame(maxWidth: .infinity, alignment: .center)
+                HStack(spacing: 12) {
+                    muteButton
+                    imageSendIntervalToggle
+                }
             }
 
             liquidGlassTabBar
@@ -369,6 +318,28 @@ struct LiveAIView: View {
                 endPoint: .bottom
             )
         )
+    }
+
+    private var imageSendIntervalToggle: some View {
+        Button {
+            let defaultInterval = LiveAIConfig.imageSendIntervalSeconds
+            let fastInterval: TimeInterval = 1.0
+            let newInterval: TimeInterval = viewModel.imageSendInterval == fastInterval ? defaultInterval : fastInterval
+            viewModel.setImageSendInterval(newInterval)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 11))
+                Text(String(format: "%.0fs", viewModel.imageSendInterval))
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .frame(height: 38)
+            .background(viewModel.imageSendInterval <= 1.0 ? Color.green.opacity(0.6) : Color.orange.opacity(0.6))
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private var muteButton: some View {

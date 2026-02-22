@@ -39,7 +39,7 @@ class OmniRealtimeViewModel: ObservableObject {
     private var currentVideoFrame: UIImage?
     private var isImageSendingEnabled = false // Whether image sending is enabled (after first audio)
     private var imageSendTimer: Timer?
-    @Published var imageSendInterval: TimeInterval = 1.0
+    @Published var imageSendInterval: TimeInterval = LiveAIConfig.imageSendIntervalSeconds
     private var lastUserTranscript = ""
     private var lastAssistantTranscript = ""
 
