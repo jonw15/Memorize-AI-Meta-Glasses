@@ -1400,6 +1400,11 @@ private struct NativeYouTubePlayer: UIViewControllerRepresentable {
         let controller = AVPlayerViewController()
         controller.player = player
         controller.allowsPictureInPicturePlayback = false
+        // Disable Visual Look Up (VisionKit image analysis) — its MAD requests
+        // cause brief audio corruption when canceled mid-frame.
+        if #available(iOS 16.0, *) {
+            controller.allowsVideoFrameAnalysis = false
+        }
         controller.view.backgroundColor = .black
 
         context.coordinator.observe(player: player, item: playerItem)
