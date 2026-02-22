@@ -117,6 +117,9 @@ struct LiveAIView: View {
             }
         }
         .onAppear {
+            // Pre-warm WebKit processes so YouTube fullscreen opens instantly
+            WKWebViewWarmer.shared.warmUp()
+
             // Only start features when device is connected
             guard streamViewModel.hasActiveDevice else {
                 print("⚠️ LiveAIView: RayBan Meta glasses not connected, skipping startup")
@@ -1265,6 +1268,21 @@ private struct YouTubeCardWebPreview: UIViewRepresentable {
 
     final class Coordinator {
         var loadedURLString: String?
+    }
+}
+
+/// Spawns WebKit sub-processes (GPU, WebContent, Networking) once so the first
+/// real WKWebView load is instant instead of waiting ~3 seconds.
+private final class WKWebViewWarmer {
+    static let shared = WKWebViewWarmer()
+    private var warmerView: WKWebView?
+
+    func warmUp() {
+        guard warmerView == nil else { return }
+        let webView = WKWebView(frame: .zero)
+        webView.loadHTMLString("<html></html>", baseURL: nil)
+        warmerView = webView
+        print("🔥 [WKWebViewWarmer] WebKit processes pre-warmed")
     }
 }
 
