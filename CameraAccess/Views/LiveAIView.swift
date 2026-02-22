@@ -240,18 +240,16 @@ struct LiveAIView: View {
         .onChange(of: fullscreenYouTubeVideo) { video in
             print("🎬 [LiveAIView] fullscreenYouTubeVideo changed: \(video?.videoId ?? "nil")")
             if video != nil {
-                savedMutedStateForFullscreen = isMuted
-
                 if LiveAIConfig.useNativeYouTubePlayer {
-                    // Native AVPlayer respects the app's AVAudioSession — no need to
-                    // stop the camera stream or switch audio session. Just stop mic
-                    // recording so Gemini doesn't hear/respond to the YouTube video.
-                    viewModel.stopRecording()
-                    isMuted = true
-                    logAudioSession(label: "BEFORE-YT-NATIVE")
+                    // Native AVPlayer: Live AI stays fully active. AVPlayer and
+                    // AVAudioEngine share the .playAndRecord session — user can
+                    // talk to Gemini while watching YouTube. Camera stream,
+                    // recording, and Gemini playback all continue unchanged.
+                    logAudioSession(label: "YT-OPEN-NATIVE")
                 } else {
                     // WKWebView path: pause camera stream to free Bluetooth bandwidth
                     // for A2DP and switch audio session so WebContent can play audio.
+                    savedMutedStateForFullscreen = isMuted
                     Task { await streamViewModel.stopSession() }
                     viewModel.muteForOverlayVideo()
                     isMuted = true
@@ -263,31 +261,25 @@ struct LiveAIView: View {
                     }
                 }
             } else {
-                audioSessionLogTimer?.invalidate()
-                audioSessionLogTimer = nil
-
-                let savedMuted = savedMutedStateForFullscreen ?? false
-                isMuted = savedMuted
-
                 if LiveAIConfig.useNativeYouTubePlayer {
-                    // Native path: audio session and camera stream were never changed.
-                    // Just restart recording if not muted.
+                    // Native path: nothing to restore — Live AI was never paused.
                     logAudioSession(label: "YT-CLOSED-NATIVE")
-                    if !savedMuted {
-                        viewModel.startRecording()
-                    }
                 } else {
                     // WKWebView path: restore audio session and camera stream.
+                    audioSessionLogTimer?.invalidate()
+                    audioSessionLogTimer = nil
                     logAudioSession(label: "YT-CLOSED")
                     viewModel.unmuteAfterOverlayVideo()
                     Task { await streamViewModel.startSession() }
+                    let savedMuted = savedMutedStateForFullscreen ?? false
+                    isMuted = savedMuted
                     if savedMuted {
                         viewModel.stopRecording()
                     } else {
                         restartChatAudioCaptureWithRetry()
                     }
+                    savedMutedStateForFullscreen = nil
                 }
-                savedMutedStateForFullscreen = nil
             }
         }
     }
