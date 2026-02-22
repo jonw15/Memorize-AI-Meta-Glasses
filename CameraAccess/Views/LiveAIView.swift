@@ -25,12 +25,6 @@ struct LiveAIView: View {
         var hasItem: Bool
     }
 
-    private struct VideoChapter: Identifiable {
-        let id = UUID()
-        let startSeconds: Double
-        let title: String
-    }
-
     private struct TutorialVideo: Identifiable {
         let id = UUID()
         let title: String
@@ -65,14 +59,10 @@ struct LiveAIView: View {
     @State private var instructionSteps = Self.defaultInstructionSteps
     @State private var shopItems = Self.defaultShopItems
     @State private var lastLoggedShopItemsSignature = ""
-    @State private var currentChapterIndex = 0
-    @State private var activeVideoURLIndex = 0
-    @State private var placeholderVideoPlayer = AVPlayer(url: Self.placeholderVideoURL)
     @State private var streamSuspendedForNonChatTab = false
     @State private var fullscreenYouTubeVideo: OmniRealtimeViewModel.YouTubeVideoItem?
     @State private var savedMutedStateForFullscreen: Bool?
     private let feedbackSynth = AVSpeechSynthesizer()
-    private let videoProgressTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
     private static let defaultInstructionSteps: [InstructionStep] = []
     private static let shopSections: [String] = ["LUMBER", "HARDWARE", "PAINT & FINISH"]
     private static let defaultShopItems: [ShopItem] = [
@@ -86,24 +76,10 @@ struct LiveAIView: View {
         .init(section: "PAINT & FINISH", name: "Matte Paint", quantity: "2 gallons", amazonQuery: "matte interior paint", hasItem: false),
         .init(section: "PAINT & FINISH", name: "Foam Rollers", quantity: "6", amazonQuery: "foam paint rollers", hasItem: false)
     ]
-    private static let videoChapters: [VideoChapter] = [
-        .init(startSeconds: 0, title: "Introduction & Safety Gear"),
-        .init(startSeconds: 22, title: "Measuring & Marking the Wall"),
-        .init(startSeconds: 44, title: "Cutting the Timber to Size"),
-        .init(startSeconds: 66, title: "Assembly & Mounting Brackets"),
-        .init(startSeconds: 88, title: "Sanding & Finishing"),
-        .init(startSeconds: 110, title: "Final Installation")
-    ]
     private static let tutorialVideos: [TutorialVideo] = [
         .init(title: "Proper Ignition Coil Removal Techniques", duration: "4:20"),
         .init(title: "How to Gap Your Spark Plugs", duration: "6:05")
     ]
-    private static let videoURLs: [URL] = [
-        // DIY-style clips only.
-        URL(string: "https://cdn.coverr.co/videos/coverr-carpenter-working-in-a-workshop-1579/1080p.mp4")!,
-        URL(string: "https://assets.mixkit.co/videos/preview/mixkit-man-sawing-wood-boards-3469-large.mp4")!
-    ]
-    private static let placeholderVideoURL = videoURLs[0]
 
     init(streamViewModel: StreamSessionViewModel, apiKey: String) {
         self.streamViewModel = streamViewModel
@@ -677,70 +653,6 @@ struct LiveAIView: View {
     private var videosPanel: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 14) {
-                VideoPlayer(player: placeholderVideoPlayer)
-                    .frame(height: 190)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                    )
-                    .onAppear {
-                        loadActiveVideo()
-                    }
-                    .onDisappear {
-                        placeholderVideoPlayer.pause()
-                    }
-                    .onReceive(videoProgressTimer) { _ in
-                        if placeholderVideoPlayer.currentItem?.status == .failed {
-                            switchToNextVideoURLIfAvailable()
-                            return
-                        }
-                        guard selectedBottomTab == .videos else { return }
-                        let seconds = max(0, placeholderVideoPlayer.currentTime().seconds)
-                        guard seconds.isFinite else { return }
-                        let matchedIndex = chapterIndex(for: seconds)
-                        if matchedIndex != currentChapterIndex {
-                            currentChapterIndex = matchedIndex
-                        }
-                    }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Building a Modern\nFloating Shelf with\nHidden Brackets")
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundColor(.white)
-                        .lineLimit(3)
-                        .minimumScaleFactor(0.8)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-                VStack(spacing: 0) {
-                    HStack {
-                        Label("Project Chapters", systemImage: "list.bullet.indent")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
-                        Spacer()
-                        Text("12:20 Total")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(Color.white.opacity(0.7))
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color.white.opacity(0.05))
-
-                    ForEach(Array(Self.videoChapters.enumerated()), id: \.offset) { index, chapter in
-                        chapterRow(chapter: chapter, index: index)
-                    }
-                }
-                .background(Color.white.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
-
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Tutorial Videos")
                         .font(.system(size: 28, weight: .bold))
@@ -767,64 +679,6 @@ struct LiveAIView: View {
             .padding(.bottom, 18)
         }
         .background(Color.black.opacity(0.28))
-    }
-
-    private func chapterRow(chapter: VideoChapter, index: Int) -> some View {
-        let isCurrent = index == currentChapterIndex
-        return Button {
-            currentChapterIndex = index
-            let target = CMTime(seconds: chapter.startSeconds, preferredTimescale: 600)
-            placeholderVideoPlayer.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
-            placeholderVideoPlayer.play()
-        } label: {
-            HStack(spacing: 12) {
-                Text(formatTimestamp(chapter.startSeconds))
-                    .font(.system(size: 13, weight: .medium, design: .monospaced))
-                    .foregroundColor(Color.white.opacity(0.65))
-                    .frame(width: 40, alignment: .leading)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(chapter.title)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(isCurrent ? Color(red: 0.24, green: 0.42, blue: 0.93) : .white)
-                        .multilineTextAlignment(.leading)
-                    if isCurrent {
-                        Text("CURRENTLY PLAYING")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(Color(red: 0.24, green: 0.42, blue: 0.93))
-                    }
-                }
-                Spacer()
-                if isCurrent {
-                    Image(systemName: "chart.bar.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(Color(red: 0.24, green: 0.42, blue: 0.93))
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(
-                isCurrent
-                    ? Color(red: 0.24, green: 0.42, blue: 0.93).opacity(0.12)
-                    : Color.clear
-            )
-            .overlay(alignment: .leading) {
-                if isCurrent {
-                    Rectangle()
-                        .fill(Color(red: 0.24, green: 0.42, blue: 0.93))
-                        .frame(width: 3)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func chapterIndex(for seconds: Double) -> Int {
-        var matched = 0
-        for (index, chapter) in Self.videoChapters.enumerated() where seconds >= chapter.startSeconds {
-            matched = index
-        }
-        return matched
     }
 
     private func applyToolCallInstructions(_ instructions: [String]) {
@@ -891,29 +745,6 @@ struct LiveAIView: View {
             normalized.append(cleaned)
         }
         return normalized
-    }
-
-    private func loadActiveVideo() {
-        let url = Self.videoURLs[min(activeVideoURLIndex, Self.videoURLs.count - 1)]
-        let item = AVPlayerItem(url: url)
-        placeholderVideoPlayer.replaceCurrentItem(with: item)
-        // Keep the local demo player silent so it doesn't compete with YouTube card audio.
-        placeholderVideoPlayer.isMuted = true
-        placeholderVideoPlayer.volume = 0
-        placeholderVideoPlayer.play()
-    }
-
-    private func switchToNextVideoURLIfAvailable() {
-        guard activeVideoURLIndex + 1 < Self.videoURLs.count else { return }
-        activeVideoURLIndex += 1
-        loadActiveVideo()
-    }
-
-    private func formatTimestamp(_ seconds: Double) -> String {
-        let total = max(0, Int(seconds.rounded()))
-        let minutes = total / 60
-        let secs = total % 60
-        return String(format: "%d:%02d", minutes, secs)
     }
 
     private func tutorialVideoCard(video: TutorialVideo) -> some View {
