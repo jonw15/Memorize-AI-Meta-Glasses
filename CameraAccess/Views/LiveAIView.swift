@@ -1389,8 +1389,14 @@ private struct NativeYouTubePlayer: UIViewControllerRepresentable {
     }
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
-        let playerItem = AVPlayerItem(url: url)
+        // Use AVURLAsset with headers to avoid YouTube rejecting bare AVPlayer requests.
+        let headers = ["User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"]
+        let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+        let playerItem = AVPlayerItem(asset: asset)
+        // Buffer 10 seconds before playback to reduce mid-stream stalls.
+        playerItem.preferredForwardBufferDuration = 10
         let player = AVPlayer(playerItem: playerItem)
+        player.automaticallyWaitsToMinimizeStalling = true
         let controller = AVPlayerViewController()
         controller.player = player
         controller.allowsPictureInPicturePlayback = false
