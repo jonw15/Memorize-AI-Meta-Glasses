@@ -652,27 +652,20 @@ struct LiveAIView: View {
 
     private var videosPanel: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 14) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Tutorial Videos")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(.white)
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Tutorial Videos")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(.white)
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            if !viewModel.youtubeVideos.isEmpty {
-                                ForEach(viewModel.youtubeVideos) { video in
-                                    youtubeVideoCard(video: video)
-                                }
-                            } else {
-                                ForEach(Self.tutorialVideos) { video in
-                                    tutorialVideoCard(video: video)
-                                }
-                            }
-                        }
+                if !viewModel.youtubeVideos.isEmpty {
+                    ForEach(viewModel.youtubeVideos) { video in
+                        youtubeVideoCard(video: video)
+                    }
+                } else {
+                    ForEach(Self.tutorialVideos) { video in
+                        tutorialVideoCard(video: video)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 14)
             .padding(.top, 8)
@@ -758,7 +751,8 @@ struct LiveAIView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 180, height: 110)
+                    .frame(maxWidth: .infinity)
+                    .aspectRatio(16/9, contentMode: .fit)
 
                 Circle()
                     .fill(Color(red: 0.24, green: 0.42, blue: 0.93))
@@ -784,7 +778,7 @@ struct LiveAIView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.white)
                 .lineLimit(2)
-                .frame(width: 180, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -835,7 +829,8 @@ struct LiveAIView: View {
                                 .offset(x: 2)
                         )
                 }
-                .frame(width: 180, height: 110)
+                .frame(maxWidth: .infinity)
+                .aspectRatio(16/9, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -844,7 +839,7 @@ struct LiveAIView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.white)
                 .lineLimit(2)
-                .frame(width: 180, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -857,7 +852,8 @@ struct LiveAIView: View {
                     endPoint: .bottomTrailing
                 )
             )
-            .frame(width: 180, height: 110)
+            .frame(maxWidth: .infinity)
+            .aspectRatio(16/9, contentMode: .fit)
     }
 
     private func extractYouTubeVideoId(from url: String) -> String? {
