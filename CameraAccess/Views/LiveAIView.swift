@@ -216,6 +216,11 @@ struct LiveAIView: View {
         .onChange(of: viewModel.toolCallParts) { _ in
             applyToolCallShopItemsIfNeeded()
         }
+        .onChange(of: viewModel.youtubeVideos) { videos in
+            if !videos.isEmpty {
+                selectedBottomTab = .videos
+            }
+        }
         .alert("error".localized, isPresented: $viewModel.showError) {
             Button("ok".localized) {
                 viewModel.dismissError()
