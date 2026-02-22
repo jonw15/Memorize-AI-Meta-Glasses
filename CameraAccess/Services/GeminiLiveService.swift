@@ -169,7 +169,11 @@ class GeminiLiveService: NSObject {
         isDisconnecting = false
         // Gemini Live WebSocket URL with API key (dynamic from server config)
         let baseURL = APIProviderManager.staticLiveAIWebsocketURL
-        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Re-read the latest key in case the config fetch completed after init
+        var trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedKey.isEmpty {
+            trimmedKey = APIProviderManager.staticLiveAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
 
         guard !trimmedKey.isEmpty else {
             print("❌ [Gemini] Missing API key for Live AI")
