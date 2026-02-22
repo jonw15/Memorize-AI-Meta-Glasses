@@ -301,10 +301,8 @@ struct LiveAIView: View {
                 .background(Color.black.opacity(0.6))
                 .cornerRadius(AppCornerRadius.xl)
 
-                HStack(spacing: 12) {
-                    muteButton
-                    imageSendIntervalToggle
-                }
+                muteButton
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
 
             liquidGlassTabBar
@@ -498,6 +496,12 @@ struct LiveAIView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.white.opacity(0.14), lineWidth: 1)
         )
+        .overlay(alignment: .topTrailing) {
+            if streamViewModel.hasReceivedFirstFrame {
+                imageSendIntervalToggle
+                    .padding(8)
+            }
+        }
     }
 
     @ViewBuilder
