@@ -368,10 +368,19 @@ Do not apologize.
 
     func resumeAudioForConversation() {
         isPlaybackEnabled = true
-        configureAudioSession()
-        // Route discovery can lag briefly after tab/session switches.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.selectBluetoothRouteIfAvailable()
+        // Reinitialize the playback engine — the audio-session category switch
+        // (.playAndRecord → .playback → .playAndRecord) invalidates the engine's
+        // internal format chain, causing silence even though start() succeeds.
+        // A fresh setup guarantees the node graph matches the current session.
+        setupPlaybackEngine()
+        startPlaybackEngine()
+        // Bluetooth route discovery can lag after an audio-session category switch
+        // (e.g. returning from .playback used by YouTube video).  Retry several
+        // times so the HFP route is selected as soon as Core Audio exposes it.
+        for delay in [0.3, 0.8, 1.5] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.selectBluetoothRouteIfAvailable()
+            }
         }
         print("🔊 [Gemini] Resumed audio I/O for conversation")
     }

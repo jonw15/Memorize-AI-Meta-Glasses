@@ -1221,7 +1221,11 @@ struct LiveAIView: View {
 
     private func deactivateVideoPlaybackAudioSessionOverride() {
         do {
-            try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+            let session = AVAudioSession.sharedInstance()
+            // Reset category to .playAndRecord BEFORE deactivating so the Bluetooth HFP
+            // route is available immediately when the session is reactivated for Live AI.
+            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetoothHFP])
+            try session.setActive(false, options: [.notifyOthersOnDeactivation])
             print("🔉 [LiveAIView] Video playback audio session override deactivated")
         } catch {
             print("⚠️ [LiveAIView] Failed to deactivate video playback audio session override: \(error)")
@@ -1319,6 +1323,17 @@ private struct YouTubeCardWebPreview: UIViewRepresentable {
             context.coordinator.loadedURLString = urlString
             uiView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData))
         }
+    }
+
+    /// Stop all media playback when SwiftUI removes the WebView (e.g. tab switch).
+    /// This prevents the YouTube iframe from holding the audio session and blocking
+    /// the Live AI .playAndRecord category from restoring Bluetooth HFP output.
+    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        uiView.evaluateJavaScript(
+            "document.querySelectorAll('video,audio').forEach(function(e){e.pause()})",
+            completionHandler: nil
+        )
+        uiView.loadHTMLString("", baseURL: nil)
     }
 
     final class Coordinator {
