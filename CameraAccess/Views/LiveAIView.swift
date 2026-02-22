@@ -1402,7 +1402,7 @@ private struct NativeYouTubePlayer: UIViewControllerRepresentable {
         controller.allowsPictureInPicturePlayback = false
         controller.view.backgroundColor = .black
 
-        context.coordinator.observe(playerItem)
+        context.coordinator.observe(player: player, item: playerItem)
         player.play()
         return controller
     }
@@ -1418,13 +1418,20 @@ private struct NativeYouTubePlayer: UIViewControllerRepresentable {
     final class Coordinator {
         @Binding var playbackFailed: Bool
         private var statusObservation: NSKeyValueObservation?
-        private var errorObservation: NSKeyValueObservation?
+        private var timeControlObservation: NSKeyValueObservation?
+        private var interruptionObserver: NSObjectProtocol?
+        private weak var player: AVPlayer?
+        /// True while the user hasn't manually paused via the AVPlayerViewController controls.
+        private var shouldBePlaying = true
 
         init(playbackFailed: Binding<Bool>) {
             self._playbackFailed = playbackFailed
         }
 
-        func observe(_ item: AVPlayerItem) {
+        func observe(player: AVPlayer, item: AVPlayerItem) {
+            self.player = player
+
+            // Watch for item-level failures → trigger WKWebView fallback.
             statusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
                 switch item.status {
                 case .failed:
@@ -1436,11 +1443,60 @@ private struct NativeYouTubePlayer: UIViewControllerRepresentable {
                     break
                 }
             }
+
+            // Watch timeControlStatus — auto-resume if paused by audio session
+            // interruption (e.g. Gemini's playback engine reconfiguring the session).
+            timeControlObservation = player.observe(\.timeControlStatus, options: [.new, .old]) { [weak self] player, change in
+                guard let self, self.shouldBePlaying else { return }
+                let status = player.timeControlStatus
+                switch status {
+                case .paused:
+                    print("⏸️ [NativeYouTubePlayer] Paused unexpectedly, auto-resuming in 0.3s")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                        guard let self, self.shouldBePlaying, player.timeControlStatus == .paused else { return }
+                        player.play()
+                        print("▶️ [NativeYouTubePlayer] Auto-resumed after interruption")
+                    }
+                case .waitingToPlayAtSpecifiedRate:
+                    print("⏳ [NativeYouTubePlayer] Buffering...")
+                case .playing:
+                    break
+                @unknown default:
+                    break
+                }
+            }
+
+            // Listen for audio session interruptions and resume when they end.
+            interruptionObserver = NotificationCenter.default.addObserver(
+                forName: AVAudioSession.interruptionNotification,
+                object: AVAudioSession.sharedInstance(),
+                queue: .main
+            ) { [weak self] notification in
+                guard let self, self.shouldBePlaying,
+                      let info = notification.userInfo,
+                      let typeValue = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+                      let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+
+                if type == .ended {
+                    print("▶️ [NativeYouTubePlayer] Audio interruption ended, resuming")
+                    self.player?.play()
+                } else {
+                    print("⏸️ [NativeYouTubePlayer] Audio interruption began")
+                }
+            }
         }
 
         func invalidate() {
+            shouldBePlaying = false
             statusObservation?.invalidate()
             statusObservation = nil
+            timeControlObservation?.invalidate()
+            timeControlObservation = nil
+            if let observer = interruptionObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            interruptionObserver = nil
+            player = nil
         }
     }
 }
