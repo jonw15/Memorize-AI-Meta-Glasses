@@ -652,9 +652,18 @@ Do not apologize.
             }
 
             // Some backends emit transcript events at the top level.
-            if let text = self.extractTranscript(from: json, containerKeys: ["inputTranscription", "input_transcription", "inputAudioTranscription", "input_audio_transcription"]) {
-                print("👤 [Gemini] User said (top-level): \(text)")
-                self.onUserTranscript?(text)
+            // Preserve raw text (including leading spaces for word boundaries).
+            for key in ["inputTranscription", "input_transcription", "inputAudioTranscription", "input_audio_transcription"] {
+                if let container = json[key] as? [String: Any] {
+                    for textKey in ["text", "transcript"] {
+                        if let raw = container[textKey] as? String, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            print("👤 [Gemini] User said (top-level): \(raw)")
+                            self.onUserTranscript?(raw)
+                            break
+                        }
+                    }
+                    break
+                }
             }
             if let text = self.extractTranscript(from: json, containerKeys: ["outputTranscription", "output_transcription", "outputAudioTranscription", "output_audio_transcription"]) {
                 print("💬 [Gemini] AI text (top-level): \(text)")
@@ -742,9 +751,18 @@ Do not apologize.
         }
 
         // Handle input transcription (user speech)
-        if let text = extractTranscript(from: content, containerKeys: ["inputTranscription", "input_transcription", "inputAudioTranscription", "input_audio_transcription"]) {
-            print("👤 [Gemini] User said: \(text)")
-            onUserTranscript?(text)
+        // Preserve raw text (including leading spaces that indicate word boundaries).
+        for key in ["inputTranscription", "input_transcription", "inputAudioTranscription", "input_audio_transcription"] {
+            if let container = content[key] as? [String: Any] {
+                for textKey in ["text", "transcript"] {
+                    if let raw = container[textKey] as? String, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        print("👤 [Gemini] User said: \(raw)")
+                        onUserTranscript?(raw)
+                        break
+                    }
+                }
+                break
+            }
         }
     }
 

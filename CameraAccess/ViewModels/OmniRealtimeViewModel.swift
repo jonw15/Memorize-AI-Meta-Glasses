@@ -93,28 +93,21 @@ class OmniRealtimeViewModel: ObservableObject {
         geminiService.onUserTranscript = { [weak self] (userText: String) in
             Task { @MainActor in
                 guard let self = self else { return }
-                let cleaned = userText.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !cleaned.isEmpty else { return }
-                guard cleaned != self.lastUserTranscript else { return }
-                self.lastUserTranscript = cleaned
-                print("💬 [LiveAI-VM] Saving user speech: \(cleaned)")
+                let trimmed = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                guard trimmed != self.lastUserTranscript else { return }
+                self.lastUserTranscript = trimmed
                 // Accumulate user speech fragments into a single bubble.
+                // Gemini sends fragments with leading spaces for word boundaries
+                // (e.g. " Se", "arch", " YouTu", "be") — concatenate raw to preserve spacing.
                 if let lastIndex = self.conversationHistory.indices.last,
                    self.conversationHistory[lastIndex].role == .user {
                     let existing = self.conversationHistory[lastIndex].content
-                    // If the new text already contains the old text, it's a running transcript — use it as-is.
-                    // Otherwise it's an incremental fragment — append it.
-                    let merged: String
-                    if cleaned.hasPrefix(existing) {
-                        merged = cleaned
-                    } else {
-                        let needsSpace = !existing.hasSuffix(" ") && !cleaned.hasPrefix(" ")
-                        merged = existing + (needsSpace ? " " : "") + cleaned
-                    }
+                    let merged = (existing + userText).trimmingCharacters(in: .whitespacesAndNewlines)
                     self.conversationHistory[lastIndex] = ConversationMessage(role: .user, content: merged)
                 } else {
                     self.conversationHistory.append(
-                        ConversationMessage(role: .user, content: cleaned)
+                        ConversationMessage(role: .user, content: trimmed)
                     )
                 }
             }
