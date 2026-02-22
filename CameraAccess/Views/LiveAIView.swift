@@ -62,6 +62,7 @@ struct LiveAIView: View {
     @State private var streamSuspendedForNonChatTab = false
     @State private var fullscreenYouTubeVideo: OmniRealtimeViewModel.YouTubeVideoItem?
     @State private var savedMutedStateForFullscreen: Bool?
+    @State private var audioSessionLogTimer: Timer?
     private let feedbackSynth = AVSpeechSynthesizer()
     private static let defaultInstructionSteps: [InstructionStep] = []
     private static let shopSections: [String] = ["LUMBER", "HARDWARE", "PAINT & FINISH"]
@@ -237,36 +238,36 @@ struct LiveAIView: View {
             FullscreenYouTubePlayerView(video: video)
         }
         .onChange(of: fullscreenYouTubeVideo) { video in
-            let liveAITabs: Set<BottomTab> = [.chatLog, .videos, .shop, .instructions]
+            print("🎬 [LiveAIView] fullscreenYouTubeVideo changed: \(video?.videoId ?? "nil")")
             if video != nil {
-                // Opening fullscreen: suspend Live AI
+                // Pause the camera stream to give Meta glasses bandwidth for A2DP Bluetooth audio
+                Task { await streamViewModel.stopSession() }
+                
                 savedMutedStateForFullscreen = isMuted
-                viewModel.suspendAudioForEmbeddedVideo()
+                viewModel.muteForOverlayVideo()
                 isMuted = true
-                activateVideoPlaybackAudioSession()
-                if streamViewModel.streamingStatus != .stopped {
-                    streamSuspendedForNonChatTab = true
-                    Task { await streamViewModel.stopSession() }
+                // Start audio session logging every second
+                logAudioSession(label: "BEFORE-YT")
+                audioSessionLogTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                    Task { @MainActor in
+                        logAudioSession(label: "YT-PLAYING")
+                    }
                 }
             } else {
-                // Closing fullscreen: resume Live AI (only if on a compatible tab)
-                guard liveAITabs.contains(selectedBottomTab) else { return }
-                deactivateVideoPlaybackAudioSessionOverride()
-                viewModel.resumeAudioAfterEmbeddedVideo()
+                audioSessionLogTimer?.invalidate()
+                audioSessionLogTimer = nil
+                logAudioSession(label: "YT-CLOSED")
+                viewModel.unmuteAfterOverlayVideo()
+                
+                // Resume the camera stream now that we don't need A2DP bandwidth
+                Task { await streamViewModel.startSession() }
+                
                 let savedMuted = savedMutedStateForFullscreen ?? false
                 isMuted = savedMuted
                 if savedMuted {
                     viewModel.stopRecording()
                 } else {
-                    if streamSuspendedForNonChatTab, streamViewModel.hasActiveDevice {
-                        streamSuspendedForNonChatTab = false
-                        Task {
-                            await streamViewModel.handleStartStreaming()
-                            await MainActor.run { restartChatAudioCaptureWithRetry() }
-                        }
-                    } else {
-                        restartChatAudioCaptureWithRetry()
-                    }
+                    restartChatAudioCaptureWithRetry()
                 }
                 savedMutedStateForFullscreen = nil
             }
@@ -1153,6 +1154,27 @@ struct LiveAIView: View {
         }
     }
 
+    private func logAudioSession(label: String) {
+        let session = AVAudioSession.sharedInstance()
+        let cat = session.category.rawValue
+        let mode = session.mode.rawValue
+        let opts = session.categoryOptions
+        var optNames: [String] = []
+        if opts.contains(.mixWithOthers) { optNames.append("mixWithOthers") }
+        if opts.contains(.duckOthers) { optNames.append("duckOthers") }
+        if opts.contains(.allowBluetooth) { optNames.append("allowBT") }
+        if opts.contains(.allowBluetoothA2DP) { optNames.append("allowBTA2DP") }
+        if opts.contains(.defaultToSpeaker) { optNames.append("defaultToSpeaker") }
+        if opts.contains(.interruptSpokenAudioAndMixWithOthers) { optNames.append("interruptSpoken") }
+        if opts.contains(.allowAirPlay) { optNames.append("allowAirPlay") }
+        if opts.contains(.overrideMutedMicrophoneInterruption) { optNames.append("overrideMutedMic") }
+        let route = session.currentRoute
+        let outputs = route.outputs.map { "\($0.portType.rawValue)(\($0.portName))" }.joined(separator: ",")
+        let inputs = route.inputs.map { "\($0.portType.rawValue)(\($0.portName))" }.joined(separator: ",")
+        let isActive = session.isOtherAudioPlaying ? "otherAudioPlaying" : "noOtherAudio"
+        print("🔎 [AudioSession:\(label)] cat=\(cat) mode=\(mode) opts=[\(optNames.joined(separator: ","))] out=[\(outputs)] in=[\(inputs)] \(isActive)")
+    }
+
     // MARK: - Device Not Connected View
 
     private var deviceNotConnectedView: some View {
@@ -1211,7 +1233,31 @@ private struct YouTubeCardWebPreview: UIViewRepresentable {
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        configuration.websiteDataStore = .nonPersistent()
+        // Use the default (persistent) data store so YouTube can set cookies
+        // it needs for playback. .nonPersistent() blocked cookies and could
+        // cause YouTube error 150/153.
+        
+        // --- Inject Silent Audio Keepalive ---
+        // Forces the WebContent process to maintain a media playback assertion
+        // preventing iOS from suspending the WKWebView when the host app holds
+        // the primary AVAudioSession (even in .multiRoute mode).
+        let script = WKUserScript(
+            source: """
+            var audioData = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"; // 1 sample silent wav
+            var audio = new Audio(audioData);
+            audio.loop = true;
+            audio.play().catch(e => console.log('Silent audio failed:', e));
+            
+            // Re-trigger on any interaction just in case
+            document.addEventListener('touchstart', function() {
+                audio.play();
+            }, { once: true });
+            """,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        )
+        configuration.userContentController.addUserScript(script)
+
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isUserInteractionEnabled = true
@@ -1265,27 +1311,12 @@ private struct FullscreenYouTubePlayerView: View {
     let video: OmniRealtimeViewModel.YouTubeVideoItem
     @Environment(\.dismiss) private var dismiss
 
-    private var playerURLString: String? {
-        let pattern = #"embed/([a-zA-Z0-9_-]{11})(?:\?|/|$)"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
-        let range = NSRange(video.url.startIndex..<video.url.endIndex, in: video.url)
-        guard
-            let match = regex.firstMatch(in: video.url, options: [], range: range),
-            match.numberOfRanges > 1,
-            let idRange = Range(match.range(at: 1), in: video.url)
-        else { return nil }
-        let videoID = String(video.url[idRange])
-        return "https://app.ariaspark.com/yt/?v=\(videoID)"
-    }
-
     var body: some View {
         ZStack(alignment: .topLeading) {
             Color.black.ignoresSafeArea()
 
-            if let urlString = playerURLString {
-                YouTubeCardWebPreview(urlString: urlString)
-                    .ignoresSafeArea()
-            }
+            YouTubeCardWebPreview(urlString: "https://app.ariaspark.com/yt/?v=\(video.videoId)")
+                .ignoresSafeArea()
 
             // Close button
             Button {

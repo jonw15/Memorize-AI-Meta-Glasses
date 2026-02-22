@@ -73,6 +73,7 @@ class GeminiLiveService: NSObject {
     private var isSessionConfigured = false
     private var isDisconnecting = false
     private var isPlaybackEnabled = true
+    private var connectWaitTask: Task<Void, Never>?
 
     init(apiKey: String, model: String? = nil) {
         self.apiKey = apiKey
@@ -166,6 +167,8 @@ class GeminiLiveService: NSObject {
     // MARK: - WebSocket Connection
 
     func connect() {
+        connectWaitTask?.cancel()
+        connectWaitTask = nil
         isDisconnecting = false
         // Gemini Live WebSocket URL with API key (dynamic from server config)
         let baseURL = APIProviderManager.staticLiveAIWebsocketURL
@@ -176,10 +179,32 @@ class GeminiLiveService: NSObject {
         }
 
         guard !trimmedKey.isEmpty else {
-            print("❌ [Gemini] Missing API key for Live AI")
-            onError?("Missing Live AI API key")
+            // Config server fetch may still be in progress (serverless cold start).
+            // Poll until the key becomes available.
+            print("⏳ [Gemini] API key not available yet, waiting for config fetch...")
+            connectWaitTask = Task { [weak self] in
+                var waited = 0.0
+                while waited < 10.0 {
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+                    if Task.isCancelled { return }
+                    waited += 0.5
+                    let key = APIProviderManager.staticLiveAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !key.isEmpty {
+                        print("✅ [Gemini] API key became available after \(waited)s, connecting")
+                        DispatchQueue.main.async { self?.connect() }
+                        return
+                    }
+                }
+                if Task.isCancelled { return }
+                // Still no key — re-trigger the config fetch and keep trying
+                print("⏳ [Gemini] API key still missing after 10s, re-fetching config...")
+                try? await AIConfigService.fetchConfig()
+                if Task.isCancelled { return }
+                DispatchQueue.main.async { self?.connect() }
+            }
             return
         }
+        connectWaitTask = nil
 
         print("🔌 [Gemini] Preparing to connect WebSocket")
 
@@ -387,6 +412,75 @@ Do not apologize.
             }
         }
         print("🔊 [Gemini] Resumed audio I/O for conversation")
+    }
+
+    /// Suspend audio engines and release Voice Processing I/O so the WKWebView
+    /// WebContent process can play YouTube audio.
+    ///
+    /// Root cause: `.voiceChat` mode activates Apple's Voice Processing I/O
+    /// audio unit which takes exclusive control of the audio hardware route.
+    /// The WebContent process's FigXPC negotiation for an audio output context
+    /// fails (err=-16155) because Voice Processing I/O has locked the route.
+    ///
+    /// Fix: switch mode from `.voiceChat` → `.default`, deactivate to release
+    /// Voice Processing I/O, then reactivate with `.mixWithOthers` so the
+    /// WebContent process can share the audio output.
+    /// WebSocket and camera stream stay alive.
+    func muteForOverlayPlayback() {
+        print("🔇 [Gemini] Muting for overlay video")
+        // 1. Stop recording engine
+        if isRecording {
+            audioEngine?.inputNode.removeTap(onBus: 0)
+            audioEngine?.stop()
+            isRecording = false
+            hasAudioBeenSent = false
+        }
+        // 2. Prevent incoming Gemini audio from restarting the playback engine
+        isPlaybackEnabled = false
+        // 3. Stop playback engine (inline — don't call stopPlaybackEngine()
+        //    which triggers deactivateAudioSessionIfIdle prematurely)
+        if let playbackEngine = playbackEngine, isPlaybackEngineRunning {
+            playerNode?.stop()
+            playerNode?.reset()
+            playbackEngine.stop()
+            isPlaybackEngineRunning = false
+            print("⏹️ [Gemini] Playback engine stopped for overlay")
+        }
+        // 4. Release Voice Processing I/O and route audio to phone speaker.
+        //    BluetoothHFP is voice-only — WKWebView can't play media through it.
+        //    BluetoothA2DP on Meta glasses drops after a few frames.
+        //    Force speaker output for reliable YouTube playback.
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setActive(false, options: [.notifyOthersOnDeactivation])
+            try session.setCategory(
+                .playback, mode: .default,
+                options: []
+            )
+            try session.setActive(true)
+            print("🔊 [Gemini] Audio session switched to .playback (A2DP enabled, camera stream paused)")
+        } catch {
+            print("⚠️ [Gemini] Failed to switch audio session for YouTube: \(error)")
+        }
+    }
+
+    /// Restore `.voiceChat` mode and restart audio engines after YouTube
+    /// overlay is dismissed.
+    func unmuteAfterOverlayPlayback() {
+        isPlaybackEnabled = true
+        // Full reinitialisation — the mode switch invalidates the engine's
+        // internal format chain. setupPlaybackEngine rebuilds the node graph
+        // and startPlaybackEngine calls configureAudioSession() which restores
+        // .playAndRecord + .voiceChat + .allowBluetoothHFP.
+        setupPlaybackEngine()
+        startPlaybackEngine()
+        // Bluetooth route discovery can lag after a mode switch.
+        for delay in [0.3, 0.8, 1.5] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.selectBluetoothRouteIfAvailable()
+            }
+        }
+        print("🔊 [Gemini] Restored .voiceChat mode after overlay video")
     }
 
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat) {
@@ -953,7 +1047,7 @@ Do not apologize.
             audioChunkCount = 0
             hasStartedPlaying = false
 
-            if isPlaybackEngineRunning {
+            if isPlaybackEngineRunning, isPlaybackEnabled {
                 stopPlaybackEngine()
                 setupPlaybackEngine()
                 startPlaybackEngine()
@@ -991,7 +1085,8 @@ Do not apologize.
     }
 
     private func playAudio(_ audioData: Data) {
-        guard let playerNode = playerNode,
+        guard isPlaybackEnabled,
+              let playerNode = playerNode,
               let playbackAudioFormat else {
             return
         }

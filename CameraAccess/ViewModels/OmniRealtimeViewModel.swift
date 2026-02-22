@@ -256,6 +256,23 @@ class OmniRealtimeViewModel: ObservableObject {
         geminiService?.resumeAudioForConversation()
     }
 
+    /// Light mute for YouTube overlay — keeps WebSocket + camera stream alive.
+    /// Stops sending images so Gemini won't respond with audio that could
+    /// trigger configureAudioSession() on the background WebSocket thread.
+    func muteForOverlayVideo() {
+        stopImageSendTimer()
+        geminiService?.muteForOverlayPlayback()
+        isRecording = false
+    }
+
+    /// Light unmute after YouTube overlay.
+    func unmuteAfterOverlayVideo() {
+        geminiService?.unmuteAfterOverlayPlayback()
+        if isImageSendingEnabled {
+            startImageSendTimer()
+        }
+    }
+
     // MARK: - Video Frames
 
     func updateVideoFrame(_ frame: UIImage) {
