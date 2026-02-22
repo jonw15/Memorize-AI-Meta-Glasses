@@ -47,6 +47,11 @@
 		<string>0</string>
 		<key>TeamID</key>
 		<string>$(DEVELOPMENT_TEAM)</string>
+        <key>Analytics</key>
+        <dict>
+            <key>OptOut</key>
+            <true/>
+        </dict>
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Needed to connect to Meta AI Glasses</string>
