@@ -92,6 +92,8 @@
 		LT0003000300030003 /* LiveTranslateViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1003000300030003 /* LiveTranslateViewModel.swift */; };
 		LT0004000400040004 /* LiveTranslateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1004000400040004 /* LiveTranslateView.swift */; };
 		LT0005000500050005 /* LiveTranslateSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1005000500050005 /* LiveTranslateSettingsView.swift */; };
+		YT0001000100010001 /* YouTubeStreamExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = YT1001000100010001 /* YouTubeStreamExtractor.swift */; };
+		YT0002000200020002 /* YouTubeKit in Frameworks */ = {isa = PBXBuildFile; productRef = YT2001000100010001 /* YouTubeKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -200,6 +202,7 @@
 		LT1003000300030003 /* LiveTranslateViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateViewModel.swift; sourceTree = "<group>"; };
 		LT1004000400040004 /* LiveTranslateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateView.swift; sourceTree = "<group>"; };
 		LT1005000500050005 /* LiveTranslateSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateSettingsView.swift; sourceTree = "<group>"; };
+		YT1001000100010001 /* YouTubeStreamExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeStreamExtractor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -216,6 +219,7 @@
 				8FD96B952E6F0F7D00F56AB3 /* MWDATMockDevice in Frameworks */,
 				4B69CCCA2F050E0000D1D025 /* HaishinKit in Frameworks */,
 				4B69CCCC2F050E0000D1D025 /* RTMPHaishinKit in Frameworks */,
+				YT0002000200020002 /* YouTubeKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -286,6 +290,7 @@
 				C7F490219E64EC144DAF8A8C /* QuickVisionStorage.swift */,
 				LT1002000200020002 /* LiveTranslateService.swift */,
 				LA1002000200020002 /* AIConfigService.swift */,
+				YT1001000100010001 /* YouTubeStreamExtractor.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -526,6 +531,7 @@
 				95F7F3332DEF0D91006D1C1A /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */,
 				4B69CCC82F050E0000D1D025 /* XCRemoteSwiftPackageReference "HaishinKit" */,
 				E47E9C962F2D4CA600BCAD53 /* XCRemoteSwiftPackageReference "arcore-ios-sdk" */,
+				YT3001000100010001 /* XCRemoteSwiftPackageReference "YouTubeKit" */,
 			);
 			productRefGroup = 7A7A7A7A7A7A7A7A7A7A7A7A /* Products */;
 			projectDirPath = "";
@@ -637,6 +643,7 @@
 				LC0002000200020002 /* LiveChatWebView.swift in Sources */,
 				LA0001000100010001 /* AIConfig.swift in Sources */,
 				LA0002000200020002 /* AIConfigService.swift in Sources */,
+				YT0001000100010001 /* YouTubeStreamExtractor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -981,6 +988,14 @@
 				minimumVersion = 1.52.0;
 			};
 		};
+		YT3001000100010001 /* XCRemoteSwiftPackageReference "YouTubeKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/alexeichhorn/YouTubeKit";
+			requirement = {
+				kind = exactVersion;
+				version = 0.4.3;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1018,6 +1033,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 95F7F3332DEF0D91006D1C1A /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
 			productName = MWDATMockDevice;
+		};
+		YT2001000100010001 /* YouTubeKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = YT3001000100010001 /* XCRemoteSwiftPackageReference "YouTubeKit" */;
+			productName = YouTubeKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

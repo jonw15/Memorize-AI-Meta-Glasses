@@ -240,34 +240,52 @@ struct LiveAIView: View {
         .onChange(of: fullscreenYouTubeVideo) { video in
             print("🎬 [LiveAIView] fullscreenYouTubeVideo changed: \(video?.videoId ?? "nil")")
             if video != nil {
-                // Pause the camera stream to give Meta glasses bandwidth for A2DP Bluetooth audio
-                Task { await streamViewModel.stopSession() }
-                
                 savedMutedStateForFullscreen = isMuted
-                viewModel.muteForOverlayVideo()
-                isMuted = true
-                // Start audio session logging every second
-                logAudioSession(label: "BEFORE-YT")
-                audioSessionLogTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-                    Task { @MainActor in
-                        logAudioSession(label: "YT-PLAYING")
+
+                if LiveAIConfig.useNativeYouTubePlayer {
+                    // Native AVPlayer respects the app's AVAudioSession — no need to
+                    // stop the camera stream or switch audio session. Just stop mic
+                    // recording so Gemini doesn't hear/respond to the YouTube video.
+                    viewModel.stopRecording()
+                    isMuted = true
+                    logAudioSession(label: "BEFORE-YT-NATIVE")
+                } else {
+                    // WKWebView path: pause camera stream to free Bluetooth bandwidth
+                    // for A2DP and switch audio session so WebContent can play audio.
+                    Task { await streamViewModel.stopSession() }
+                    viewModel.muteForOverlayVideo()
+                    isMuted = true
+                    logAudioSession(label: "BEFORE-YT")
+                    audioSessionLogTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                        Task { @MainActor in
+                            logAudioSession(label: "YT-PLAYING")
+                        }
                     }
                 }
             } else {
                 audioSessionLogTimer?.invalidate()
                 audioSessionLogTimer = nil
-                logAudioSession(label: "YT-CLOSED")
-                viewModel.unmuteAfterOverlayVideo()
-                
-                // Resume the camera stream now that we don't need A2DP bandwidth
-                Task { await streamViewModel.startSession() }
-                
+
                 let savedMuted = savedMutedStateForFullscreen ?? false
                 isMuted = savedMuted
-                if savedMuted {
-                    viewModel.stopRecording()
+
+                if LiveAIConfig.useNativeYouTubePlayer {
+                    // Native path: audio session and camera stream were never changed.
+                    // Just restart recording if not muted.
+                    logAudioSession(label: "YT-CLOSED-NATIVE")
+                    if !savedMuted {
+                        viewModel.startRecording()
+                    }
                 } else {
-                    restartChatAudioCaptureWithRetry()
+                    // WKWebView path: restore audio session and camera stream.
+                    logAudioSession(label: "YT-CLOSED")
+                    viewModel.unmuteAfterOverlayVideo()
+                    Task { await streamViewModel.startSession() }
+                    if savedMuted {
+                        viewModel.stopRecording()
+                    } else {
+                        restartChatAudioCaptureWithRetry()
+                    }
                 }
                 savedMutedStateForFullscreen = nil
             }
@@ -1310,13 +1328,28 @@ private final class WKWebViewWarmer {
 private struct FullscreenYouTubePlayerView: View {
     let video: OmniRealtimeViewModel.YouTubeVideoItem
     @Environment(\.dismiss) private var dismiss
+    @State private var streamURL: URL?
+    @State private var isLoading = true
+    @State private var useWebViewFallback = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             Color.black.ignoresSafeArea()
 
-            YouTubeCardWebPreview(urlString: "https://app.ariaspark.com/yt/?v=\(video.videoId)")
-                .ignoresSafeArea()
+            if LiveAIConfig.useNativeYouTubePlayer && !useWebViewFallback {
+                if isLoading {
+                    ProgressView()
+                        .tint(.white)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let streamURL {
+                    NativeYouTubePlayer(url: streamURL, playbackFailed: $useWebViewFallback)
+                        .ignoresSafeArea()
+                }
+            } else {
+                // WKWebView fallback
+                YouTubeCardWebPreview(urlString: "https://app.ariaspark.com/yt/?v=\(video.videoId)")
+                    .ignoresSafeArea()
+            }
 
             // Close button
             Button {
@@ -1331,6 +1364,85 @@ private struct FullscreenYouTubePlayerView: View {
             }
             .padding(.top, 8)
             .padding(.leading, 16)
+        }
+        .task {
+            guard LiveAIConfig.useNativeYouTubePlayer else {
+                isLoading = false
+                return
+            }
+            if let url = await YouTubeStreamExtractor.extractStreamURL(videoId: video.videoId) {
+                streamURL = url
+            } else {
+                print("⚠️ [FullscreenYT] Stream extraction failed, falling back to WKWebView")
+                useWebViewFallback = true
+            }
+            isLoading = false
+        }
+        .onChange(of: useWebViewFallback) { failed in
+            if failed {
+                print("⚠️ [FullscreenYT] Falling back to WKWebView for \(video.videoId)")
+            }
+        }
+    }
+}
+
+/// Wraps AVPlayerViewController for native fullscreen video playback with standard controls.
+/// Observes AVPlayerItem status and signals fallback via `playbackFailed` binding on error.
+private struct NativeYouTubePlayer: UIViewControllerRepresentable {
+    let url: URL
+    @Binding var playbackFailed: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(playbackFailed: $playbackFailed)
+    }
+
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        let playerItem = AVPlayerItem(url: url)
+        let player = AVPlayer(playerItem: playerItem)
+        let controller = AVPlayerViewController()
+        controller.player = player
+        controller.allowsPictureInPicturePlayback = false
+        controller.view.backgroundColor = .black
+
+        context.coordinator.observe(playerItem)
+        player.play()
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {}
+
+    static func dismantleUIViewController(_ uiViewController: AVPlayerViewController, coordinator: Coordinator) {
+        coordinator.invalidate()
+        uiViewController.player?.pause()
+        uiViewController.player = nil
+    }
+
+    final class Coordinator {
+        @Binding var playbackFailed: Bool
+        private var statusObservation: NSKeyValueObservation?
+        private var errorObservation: NSKeyValueObservation?
+
+        init(playbackFailed: Binding<Bool>) {
+            self._playbackFailed = playbackFailed
+        }
+
+        func observe(_ item: AVPlayerItem) {
+            statusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+                switch item.status {
+                case .failed:
+                    print("⚠️ [NativeYouTubePlayer] AVPlayerItem failed: \(item.error?.localizedDescription ?? "unknown")")
+                    DispatchQueue.main.async { self?.playbackFailed = true }
+                case .readyToPlay:
+                    print("▶️ [NativeYouTubePlayer] AVPlayerItem ready to play")
+                default:
+                    break
+                }
+            }
+        }
+
+        func invalidate() {
+            statusObservation?.invalidate()
+            statusObservation = nil
         }
     }
 }

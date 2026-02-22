@@ -20,4 +20,8 @@ struct AIConfig {
 struct LiveAIConfig {
     /// How often (in seconds) to send a camera frame to Gemini during Live AI.
     static let imageSendIntervalSeconds: TimeInterval = 1.0
+
+    /// When true, YouTube videos play via native AVPlayer (better Bluetooth routing).
+    /// When false, uses WKWebView via app.ariaspark.com/yt/ (original behavior).
+    static let useNativeYouTubePlayer: Bool = true
 }
