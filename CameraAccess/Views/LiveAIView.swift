@@ -223,6 +223,11 @@ struct LiveAIView: View {
         .onChange(of: viewModel.youtubeVideos) { videos in
             if !videos.isEmpty {
                 selectedBottomTab = .videos
+                // Pre-extract stream URLs so playback is instant when user taps a video.
+                if LiveAIConfig.useNativeYouTubePlayer {
+                    let ids = videos.map { $0.videoId }
+                    Task { await YouTubeStreamExtractor.shared.preExtract(videoIds: ids) }
+                }
             }
         }
         .alert("error".localized, isPresented: $viewModel.showError) {
@@ -1362,7 +1367,7 @@ private struct FullscreenYouTubePlayerView: View {
                 isLoading = false
                 return
             }
-            if let url = await YouTubeStreamExtractor.extractStreamURL(videoId: video.videoId) {
+            if let url = await YouTubeStreamExtractor.shared.streamURL(videoId: video.videoId) {
                 streamURL = url
             } else {
                 print("⚠️ [FullscreenYT] Stream extraction failed, falling back to WKWebView")
@@ -1393,8 +1398,7 @@ private struct NativeYouTubePlayer: UIViewControllerRepresentable {
         let headers = ["User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"]
         let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
         let playerItem = AVPlayerItem(asset: asset)
-        // Buffer 10 seconds before playback to reduce mid-stream stalls.
-        playerItem.preferredForwardBufferDuration = 10
+        playerItem.preferredForwardBufferDuration = 2
         let player = AVPlayer(playerItem: playerItem)
         player.automaticallyWaitsToMinimizeStalling = true
         let controller = AVPlayerViewController()

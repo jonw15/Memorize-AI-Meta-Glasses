@@ -203,6 +203,7 @@
 		LT1004000400040004 /* LiveTranslateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateView.swift; sourceTree = "<group>"; };
 		LT1005000500050005 /* LiveTranslateSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateSettingsView.swift; sourceTree = "<group>"; };
 		YT1001000100010001 /* YouTubeStreamExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeStreamExtractor.swift; sourceTree = "<group>"; };
+		YT4001000100010001 /* YouTubeKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = YouTubeKit; path = Packages/YouTubeKit; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -413,6 +414,7 @@
 				8F2A14F12DDBCEB900D4E5F2 /* Frameworks */,
 				7A7A7A7A7A7A7A7A7A7A7A7A /* Products */,
 				E699CC962E8150670052C240 /* CameraAccessTests */,
+				YT4001000100010001 /* YouTubeKit */,
 			);
 			sourceTree = "<group>";
 		};
@@ -531,7 +533,7 @@
 				95F7F3332DEF0D91006D1C1A /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */,
 				4B69CCC82F050E0000D1D025 /* XCRemoteSwiftPackageReference "HaishinKit" */,
 				E47E9C962F2D4CA600BCAD53 /* XCRemoteSwiftPackageReference "arcore-ios-sdk" */,
-				YT3001000100010001 /* XCRemoteSwiftPackageReference "YouTubeKit" */,
+				YT5001000100010001 /* XCLocalSwiftPackageReference "YouTubeKit" */,
 			);
 			productRefGroup = 7A7A7A7A7A7A7A7A7A7A7A7A /* Products */;
 			projectDirPath = "";
@@ -988,15 +990,14 @@
 				minimumVersion = 1.52.0;
 			};
 		};
-		YT3001000100010001 /* XCRemoteSwiftPackageReference "YouTubeKit" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/alexeichhorn/YouTubeKit";
-			requirement = {
-				kind = exactVersion;
-				version = 0.4.3;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		YT5001000100010001 /* XCLocalSwiftPackageReference "YouTubeKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/YouTubeKit;
+		};
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		4B69CCC92F050E0000D1D025 /* HaishinKit */ = {
@@ -1036,7 +1037,6 @@
 		};
 		YT2001000100010001 /* YouTubeKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = YT3001000100010001 /* XCRemoteSwiftPackageReference "YouTubeKit" */;
 			productName = YouTubeKit;
 		};
 /* End XCSwiftPackageProductDependency section */
