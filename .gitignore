@@ -21,6 +21,7 @@ DerivedData/
 # Swift Package Manager
 .build/
 Packages/
+!Packages/YouTubeKit/ 
 Package.resolved
 
 # CocoaPods
