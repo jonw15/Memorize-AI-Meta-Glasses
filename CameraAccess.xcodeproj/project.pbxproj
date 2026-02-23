@@ -533,7 +533,7 @@
 				95F7F3332DEF0D91006D1C1A /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */,
 				4B69CCC82F050E0000D1D025 /* XCRemoteSwiftPackageReference "HaishinKit" */,
 				E47E9C962F2D4CA600BCAD53 /* XCRemoteSwiftPackageReference "arcore-ios-sdk" */,
-				YT5001000100010001 /* XCLocalSwiftPackageReference "YouTubeKit" */,
+				YT5001000100010001 /* XCLocalSwiftPackageReference "Packages/YouTubeKit" */,
 			);
 			productRefGroup = 7A7A7A7A7A7A7A7A7A7A7A7A /* Products */;
 			projectDirPath = "";
@@ -697,7 +697,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = 3DQL2FN458;
+				DEVELOPMENT_TEAM = XGVZVJM2A6;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
 				INFOPLIST_FILE = CameraAccess/Info.plist;
@@ -732,7 +732,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = 3DQL2FN458;
+				DEVELOPMENT_TEAM = XGVZVJM2A6;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = CameraAccess/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Aria Spark";
@@ -964,6 +964,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		YT5001000100010001 /* XCLocalSwiftPackageReference "Packages/YouTubeKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/YouTubeKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		4B69CCC82F050E0000D1D025 /* XCRemoteSwiftPackageReference "HaishinKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -991,13 +998,6 @@
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCLocalSwiftPackageReference section */
-		YT5001000100010001 /* XCLocalSwiftPackageReference "YouTubeKit" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/YouTubeKit;
-		};
-/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		4B69CCC92F050E0000D1D025 /* HaishinKit */ = {
