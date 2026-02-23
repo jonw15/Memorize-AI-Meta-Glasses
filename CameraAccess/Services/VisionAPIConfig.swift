@@ -39,7 +39,7 @@ struct VisionAPIConfig {
 
     // MARK: - Default Models
 
-    static let defaultGoogleModel = "gemini-3.0-flash"
+    static let defaultGoogleModel = "gemini-3-flash-preview"
     static let defaultOpenRouterModel = "google/gemini-3-flash-preview"
 
     // MARK: - Request Headers

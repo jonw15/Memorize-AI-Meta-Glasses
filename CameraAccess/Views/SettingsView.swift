@@ -519,8 +519,8 @@ struct VisionModelSettingsView: View {
 
     private var googleModelList: some View {
         let models = [
-            ("gemini-3.0-flash", "Gemini 3.0 Flash", "settings.model.gemini30flash.desc".localized),
-            ("gemini-3.0-pro", "Gemini 3.0 Pro", "settings.model.gemini30pro.desc".localized)
+            ("gemini-3-flash-preview", "Gemini 3 Flash", "settings.model.gemini3flash.desc".localized),
+            ("gemini-3-pro-preview", "Gemini 3 Pro", "settings.model.gemini3pro.desc".localized)
         ]
 
         return List {

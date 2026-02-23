@@ -156,8 +156,8 @@
 "settings.model.current" = "当前使用";
 "settings.model.google" = "Google 模型";
 "settings.model.openrouter" = "OpenRouter 模型";
-"settings.model.gemini30flash.desc" = "快速高效视觉模型";
-"settings.model.gemini30pro.desc" = "最强视觉模型";
+"settings.model.gemini3flash.desc" = "快速高效视觉模型";
+"settings.model.gemini3pro.desc" = "最强视觉模型";
 "settings.model.search" = "搜索模型...";
 "settings.model.visiononly" = "仅显示支持视觉的模型";
 "settings.model.loading" = "加载模型列表...";
