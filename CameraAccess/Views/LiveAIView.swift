@@ -61,6 +61,7 @@ struct LiveAIView: View {
     @State private var lastLoggedShopItemsSignature = ""
     @State private var streamSuspendedForNonChatTab = false
     @State private var fullscreenYouTubeVideo: OmniRealtimeViewModel.YouTubeVideoItem?
+    @State private var youtubeUsedWebViewFallback = false
     @State private var savedMutedStateForFullscreen: Bool?
     @State private var audioSessionLogTimer: Timer?
     private let feedbackSynth = AVSpeechSynthesizer()
@@ -118,8 +119,9 @@ struct LiveAIView: View {
             }
         }
         .onAppear {
-            // Pre-warm WebKit processes so YouTube fullscreen opens instantly
-            WKWebViewWarmer.shared.warmUp()
+            if !LiveAIConfig.useNativeYouTubePlayer {
+                WKWebViewWarmer.shared.warmUp()
+            }
 
             // Only start features when device is connected
             guard streamViewModel.hasActiveDevice else {
@@ -224,7 +226,7 @@ struct LiveAIView: View {
             if !videos.isEmpty {
                 selectedBottomTab = .videos
                 // Pre-extract stream URLs so playback is instant when user taps a video.
-                if LiveAIConfig.useNativeYouTubePlayer {
+                if LiveAIConfig.useNativeYouTubePlayer && LiveAIConfig.isPreDecryptVideo {
                     let ids = videos.map { $0.videoId }
                     Task { await YouTubeStreamExtractor.shared.preExtract(videoIds: ids) }
                 }
@@ -240,7 +242,14 @@ struct LiveAIView: View {
             }
         }
         .fullScreenCover(item: $fullscreenYouTubeVideo) { video in
-            FullscreenYouTubePlayerView(video: video)
+            FullscreenYouTubePlayerView(video: video, onWebViewFallback: {
+                // WKWebView needs audio session switched to play audio
+                youtubeUsedWebViewFallback = true
+                savedMutedStateForFullscreen = isMuted
+                Task { await streamViewModel.stopSession() }
+                viewModel.muteForOverlayVideo()
+                isMuted = true
+            })
         }
         .onChange(of: fullscreenYouTubeVideo) { video in
             print("🎬 [LiveAIView] fullscreenYouTubeVideo changed: \(video?.videoId ?? "nil")")
@@ -266,7 +275,7 @@ struct LiveAIView: View {
                     }
                 }
             } else {
-                if LiveAIConfig.useNativeYouTubePlayer {
+                if LiveAIConfig.useNativeYouTubePlayer && !youtubeUsedWebViewFallback {
                     // Native path: nothing to restore — Live AI was never paused.
                     logAudioSession(label: "YT-CLOSED-NATIVE")
                 } else {
@@ -284,6 +293,7 @@ struct LiveAIView: View {
                         restartChatAudioCaptureWithRetry()
                     }
                     savedMutedStateForFullscreen = nil
+                    youtubeUsedWebViewFallback = false
                 }
             }
         }
@@ -1324,6 +1334,7 @@ private final class WKWebViewWarmer {
 
 private struct FullscreenYouTubePlayerView: View {
     let video: OmniRealtimeViewModel.YouTubeVideoItem
+    var onWebViewFallback: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var streamURL: URL?
     @State private var isLoading = true
@@ -1335,9 +1346,20 @@ private struct FullscreenYouTubePlayerView: View {
 
             if LiveAIConfig.useNativeYouTubePlayer && !useWebViewFallback {
                 if isLoading {
-                    ProgressView()
-                        .tint(.white)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Show thumbnail while extracting stream URL
+                    ZStack {
+                        if let thumbURL = URL(string: video.thumbnail) {
+                            AsyncImage(url: thumbURL) { image in
+                                image.resizable().aspectRatio(contentMode: .fit)
+                            } placeholder: {
+                                Color.black
+                            }
+                        }
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(1.5)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let streamURL {
                     NativeYouTubePlayer(url: streamURL, playbackFailed: $useWebViewFallback)
                         .ignoresSafeArea()
@@ -1359,11 +1381,16 @@ private struct FullscreenYouTubePlayerView: View {
                     .background(Color.black.opacity(0.6))
                     .clipShape(Circle())
             }
-            .padding(.top, 8)
+            .padding(.top, 8 + 36)
             .padding(.leading, 16)
         }
         .task {
             guard LiveAIConfig.useNativeYouTubePlayer else {
+                isLoading = false
+                return
+            }
+            if LiveAIConfig.isTestYouTubeWebviewFallback {
+                useWebViewFallback = true
                 isLoading = false
                 return
             }
@@ -1378,6 +1405,7 @@ private struct FullscreenYouTubePlayerView: View {
         .onChange(of: useWebViewFallback) { failed in
             if failed {
                 print("⚠️ [FullscreenYT] Falling back to WKWebView for \(video.videoId)")
+                onWebViewFallback?()
             }
         }
     }
@@ -1398,7 +1426,7 @@ private struct NativeYouTubePlayer: UIViewControllerRepresentable {
         let headers = ["User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"]
         let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
         let playerItem = AVPlayerItem(asset: asset)
-        playerItem.preferredForwardBufferDuration = 2
+        playerItem.preferredForwardBufferDuration = 3
         let player = AVPlayer(playerItem: playerItem)
         player.automaticallyWaitsToMinimizeStalling = true
         let controller = AVPlayerViewController()

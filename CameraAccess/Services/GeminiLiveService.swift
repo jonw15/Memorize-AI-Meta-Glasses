@@ -624,7 +624,7 @@ Do not apologize.
         }
         let base64Image = imageData.base64EncodedString()
 
-        print("📸 [Gemini] Sending image: \(imageData.count) bytes")
+        //print("📸 [Gemini] Sending image: \(imageData.count) bytes")
 
         let message: [String: Any] = [
             "realtime_input": [

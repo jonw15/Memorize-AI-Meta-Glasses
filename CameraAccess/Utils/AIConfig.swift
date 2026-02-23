@@ -24,4 +24,11 @@ struct LiveAIConfig {
     /// When true, YouTube videos play via native AVPlayer (better Bluetooth routing).
     /// When false, uses WKWebView via app.ariaspark.com/yt/ (original behavior).
     static let useNativeYouTubePlayer: Bool = true
+
+    /// When true, pre-decrypt all YouTube video streams when search results arrive.
+    /// When false, decrypt on tap only.
+    static let isPreDecryptVideo: Bool = false
+
+    /// When true, skip native AVPlayer and force WKWebView fallback for testing.
+    static let isTestYouTubeWebviewFallback: Bool = false
 }
