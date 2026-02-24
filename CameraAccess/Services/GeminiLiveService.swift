@@ -65,7 +65,7 @@ class GeminiLiveService: NSObject {
     var onConnected: (() -> Void)?
     var onFirstAudioSent: (() -> Void)?
     var onMultipleStepInstructions: ((MultipleStepInstructionsPayload) -> Void)?
-    var onYouTubeResults: (([YouTubeVideo]) -> Void)?
+    var onYouTubeResults: (([YouTubeVideo], Bool) -> Void)?
 
     // State
     private var isRecording = false
@@ -919,9 +919,10 @@ Do not apologize.
         case "multiple_step_instructions":
             print("🧩 [MultipleStepInstructions] Dispatching multiple_step_instructions")
 
-            let problem = (args["problem"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let rawProblem = (args["problem"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let rawBrand = (args["brand"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let rawModel = (args["model"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let problem = rawProblem.lowercased() == "unknown" ? "" : rawProblem
             let brand = rawBrand.lowercased() == "unknown" ? "" : rawBrand
             let model = rawModel.lowercased() == "unknown" ? "" : rawModel
             let tools = (args["tools"] as? [Any])?.compactMap { $0 as? String } ?? []
@@ -939,6 +940,13 @@ Do not apologize.
                 )
             )
             print("🧩 [MultipleStepInstructions] Parsed payload: problem='\(problem)', brand='\(brand)', model='\(model)', tools=\(tools.count), parts=\(parts.count), steps=\(instructions.count)")
+
+            let youtubeSearchQuery = [problem, brand, model]
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty && $0.lowercased() != "none" }
+                .joined(separator: " ")
+            print("[Youtube] Auto search from multiple_step_instructions query='\(youtubeSearchQuery)'")
+            searchYouTube(youtubeSearchQuery, autoOpenVideos: false)
 
             if !instructions.isEmpty {
                 print("🛠️ [Gemini] multiple_step_instructions first step: \(instructions[0])")
@@ -959,7 +967,7 @@ Do not apologize.
         case "youtube":
             let youtubeSearch = (args["search_string"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             print("[Youtube] DispatchToolCall youtube search_string='\(youtubeSearch)'")
-            searchYouTube(youtubeSearch)
+            searchYouTube(youtubeSearch, autoOpenVideos: true)
             sendFunctionResponse(
                 id: id,
                 functionName: name,
@@ -976,7 +984,7 @@ Do not apologize.
         }
     }
 
-    private func searchYouTube(_ searchString: String) {
+    private func searchYouTube(_ searchString: String, autoOpenVideos: Bool = true) {
         guard let url = URL(string: "https://app.ariaspark.com/ai/json/youtube/search") else {
             print("[Youtube] Invalid endpoint URL")
             return
@@ -1031,7 +1039,7 @@ Do not apologize.
 
             print("[Youtube] Parsed \(videos.count) videos")
             DispatchQueue.main.async {
-                self?.onYouTubeResults?(videos)
+                self?.onYouTubeResults?(videos, autoOpenVideos)
             }
         }.resume()
     }

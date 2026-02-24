@@ -29,7 +29,11 @@ class OmniRealtimeViewModel: ObservableObject {
     @Published var toolCallTools: [String] = []
     @Published var toolCallParts: [String] = []
     @Published var toolCallInstructions: [String] = []
+    @Published var toolCallProblem: String = ""
+    @Published var toolCallBrand: String = ""
+    @Published var toolCallModel: String = ""
     @Published var youtubeVideos: [YouTubeVideoItem] = []
+    @Published var shouldAutoOpenVideos = false
 
     // Service
     private var geminiService: GeminiLiveService?
@@ -160,15 +164,21 @@ class OmniRealtimeViewModel: ObservableObject {
                 let cleanedParts = payload.parts
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
+                let cleanedProblem = payload.problem.trimmingCharacters(in: .whitespacesAndNewlines)
+                let cleanedBrand = payload.brand.trimmingCharacters(in: .whitespacesAndNewlines)
+                let cleanedModel = payload.model.trimmingCharacters(in: .whitespacesAndNewlines)
 
                 self.toolCallInstructions = cleanedInstructions
                 self.toolCallTools = cleanedTools
                 self.toolCallParts = cleanedParts
-                print("🧾 [LiveAI-VM] Tool call mapped: \(cleanedInstructions.count) steps, \(cleanedTools.count) tools, \(cleanedParts.count) parts")
+                self.toolCallProblem = cleanedProblem
+                self.toolCallBrand = cleanedBrand
+                self.toolCallModel = cleanedModel
+                print("🧾 [LiveAI-VM] Tool call mapped: \(cleanedInstructions.count) steps, \(cleanedTools.count) tools, \(cleanedParts.count) parts, problem='\(cleanedProblem)', brand='\(cleanedBrand)', model='\(cleanedModel)'")
             }
         }
 
-        geminiService.onYouTubeResults = { [weak self] videos in
+        geminiService.onYouTubeResults = { [weak self] videos, autoOpenVideos in
             Task { @MainActor in
                 let mapped = videos.map {
                     YouTubeVideoItem(
@@ -179,9 +189,10 @@ class OmniRealtimeViewModel: ObservableObject {
                     )
                 }
                 guard let self else { return }
+                self.shouldAutoOpenVideos = autoOpenVideos
                 if self.youtubeVideos != mapped {
                     self.youtubeVideos = mapped
-                    print("📺 [LiveAI-VM] YouTube videos updated: \(self.youtubeVideos.count)")
+                    print("📺 [LiveAI-VM] YouTube videos updated: \(self.youtubeVideos.count), autoOpen=\(autoOpenVideos)")
                 } else {
                     print("📺 [LiveAI-VM] YouTube videos unchanged, skipping UI refresh")
                 }

@@ -209,12 +209,15 @@ struct LiveAIView: View {
                 if selectedBottomTab != .videos {
                     hasUnreadVideosContent = true
                 }
-                selectedBottomTab = .videos
+                if viewModel.shouldAutoOpenVideos {
+                    selectedBottomTab = .videos
+                }
                 // Pre-extract stream URLs so playback is instant when user taps a video.
                 if LiveAIConfig.useNativeYouTubePlayer && LiveAIConfig.isPreDecryptVideo {
                     let ids = videos.map { $0.videoId }
                     Task { await YouTubeStreamExtractor.shared.preExtract(videoIds: ids) }
                 }
+                viewModel.shouldAutoOpenVideos = false
             } else {
                 hasUnreadVideosContent = false
             }
@@ -744,7 +747,7 @@ struct LiveAIView: View {
     private var videosPanel: some View {
         Group {
             if viewModel.youtubeVideos.isEmpty {
-                tabLoadingPlaceholder(title: "Videos", message: "Waiting to confirm project type")
+                tabLoadingPlaceholder(title: "Videos", message: videosLoadingMessage)
             } else {
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 14) {
@@ -763,6 +766,21 @@ struct LiveAIView: View {
                 .background(Color.black.opacity(0.28))
             }
         }
+    }
+
+    private var videosLoadingMessage: String {
+        let problem = viewModel.toolCallProblem.trimmingCharacters(in: .whitespacesAndNewlines)
+        let brand = viewModel.toolCallBrand.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = viewModel.toolCallModel.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let details = [problem, brand, model]
+            .filter { !$0.isEmpty }
+            .joined(separator: " | ")
+
+        if details.isEmpty {
+            return "Waiting to confirm project type"
+        }
+        return "Finding videos for: \(details)"
     }
 
     private var shopPanel: some View {
