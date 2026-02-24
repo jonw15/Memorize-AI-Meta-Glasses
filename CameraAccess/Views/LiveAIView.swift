@@ -786,7 +786,7 @@ struct LiveAIView: View {
     private var shopPanel: some View {
         Group {
             if shopItems.isEmpty {
-                tabLoadingPlaceholder(title: "Shopping List", message: "Will auto-generate after tool check")
+                tabLoadingPlaceholder(title: "Shopping List", message: "Tell me a bit more about your project, and your shopping list will appear.")
             } else {
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 0) {
