@@ -25,12 +25,6 @@ struct LiveAIView: View {
         var hasItem: Bool
     }
 
-    private struct TutorialVideo: Identifiable {
-        let id = UUID()
-        let title: String
-        let duration: String
-    }
-
     private enum RoomAction {
         case join
         case create
@@ -64,24 +58,12 @@ struct LiveAIView: View {
     @State private var youtubeUsedWebViewFallback = false
     @State private var savedMutedStateForFullscreen: Bool?
     @State private var audioSessionLogTimer: Timer?
+    @State private var hasUnreadVideosContent = false
+    @State private var hasUnreadShopContent = false
+    @State private var hasUnreadInstructionsContent = false
     private let feedbackSynth = AVSpeechSynthesizer()
     private static let defaultInstructionSteps: [InstructionStep] = []
-    private static let shopSections: [String] = ["LUMBER", "HARDWARE", "PAINT & FINISH"]
-    private static let defaultShopItems: [ShopItem] = [
-        .init(section: "LUMBER", name: "2x4 Studs", quantity: "12", amazonQuery: "2x4 wood studs", hasItem: false),
-        .init(section: "LUMBER", name: "3/4\" Plywood Sheets", quantity: "4", amazonQuery: "3/4 plywood sheets", hasItem: false),
-        .init(section: "LUMBER", name: "Pine Trim", quantity: "20ft", amazonQuery: "pine trim boards", hasItem: false),
-        .init(section: "HARDWARE", name: "Wood Screws (Box)", quantity: "1", amazonQuery: "wood screws box", hasItem: false),
-        .init(section: "HARDWARE", name: "Pocket Hole Screws", quantity: "50ct", amazonQuery: "pocket hole screws", hasItem: false),
-        .init(section: "HARDWARE", name: "Shelf Pins", quantity: "24", amazonQuery: "shelf pins", hasItem: false),
-        .init(section: "PAINT & FINISH", name: "Primer", quantity: "1 gallon", amazonQuery: "interior wood primer", hasItem: false),
-        .init(section: "PAINT & FINISH", name: "Matte Paint", quantity: "2 gallons", amazonQuery: "matte interior paint", hasItem: false),
-        .init(section: "PAINT & FINISH", name: "Foam Rollers", quantity: "6", amazonQuery: "foam paint rollers", hasItem: false)
-    ]
-    private static let tutorialVideos: [TutorialVideo] = [
-        .init(title: "Proper Ignition Coil Removal Techniques", duration: "4:20"),
-        .init(title: "How to Gap Your Spark Plugs", duration: "6:05")
-    ]
+    private static let defaultShopItems: [ShopItem] = []
 
     init(streamViewModel: StreamSessionViewModel, apiKey: String) {
         self.streamViewModel = streamViewModel
@@ -224,12 +206,31 @@ struct LiveAIView: View {
         }
         .onChange(of: viewModel.youtubeVideos) { videos in
             if !videos.isEmpty {
+                if selectedBottomTab != .videos {
+                    hasUnreadVideosContent = true
+                }
                 selectedBottomTab = .videos
                 // Pre-extract stream URLs so playback is instant when user taps a video.
                 if LiveAIConfig.useNativeYouTubePlayer && LiveAIConfig.isPreDecryptVideo {
                     let ids = videos.map { $0.videoId }
                     Task { await YouTubeStreamExtractor.shared.preExtract(videoIds: ids) }
                 }
+            } else {
+                hasUnreadVideosContent = false
+            }
+        }
+        .onChange(of: instructionSteps.count) { count in
+            if count == 0 {
+                hasUnreadInstructionsContent = false
+            } else if selectedBottomTab != .instructions {
+                hasUnreadInstructionsContent = true
+            }
+        }
+        .onChange(of: shopItems.count) { count in
+            if count == 0 {
+                hasUnreadShopContent = false
+            } else if selectedBottomTab != .shop {
+                hasUnreadShopContent = true
             }
         }
         .alert("error".localized, isPresented: $viewModel.showError) {
@@ -429,6 +430,7 @@ struct LiveAIView: View {
             }
 
             selectedBottomTab = tab
+            markTabAsRead(tab)
             withAnimation(.easeInOut(duration: 0.2)) {
                 showConnectPanel = false
                 selectedRoomAction = nil
@@ -436,8 +438,19 @@ struct LiveAIView: View {
             }
         } label: {
             VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(width: 20, height: 20)
+
+                    if shouldShowContentBadge(for: tab) {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 8, height: 8)
+                            .offset(x: 4, y: -4)
+                    }
+                }
+
                 Text(tab.rawValue)
                     .font(.system(size: 10, weight: .semibold))
                     .lineLimit(1)
@@ -554,7 +567,76 @@ struct LiveAIView: View {
         }
     }
 
+    private var hasVideosContent: Bool {
+        !viewModel.youtubeVideos.isEmpty
+    }
+
+    private var hasShopContent: Bool {
+        !shopItems.isEmpty
+    }
+
+    private var hasInstructionsContent: Bool {
+        !instructionSteps.isEmpty
+    }
+
+    private func shouldShowContentBadge(for tab: BottomTab) -> Bool {
+        switch tab {
+        case .videos:
+            return hasVideosContent && hasUnreadVideosContent
+        case .shop:
+            return hasShopContent && hasUnreadShopContent
+        case .instructions:
+            return hasInstructionsContent && hasUnreadInstructionsContent
+        default:
+            return false
+        }
+    }
+
+    private func markTabAsRead(_ tab: BottomTab) {
+        switch tab {
+        case .videos:
+            hasUnreadVideosContent = false
+        case .shop:
+            hasUnreadShopContent = false
+        case .instructions:
+            hasUnreadInstructionsContent = false
+        default:
+            break
+        }
+    }
+
+    private func tabLoadingPlaceholder(title: String, message: String) -> some View {
+        VStack(spacing: 14) {
+            ProgressView()
+                .progressViewStyle(.circular)
+                .tint(Color(red: 0.95, green: 0.30, blue: 0.20))
+                .scaleEffect(1.3)
+
+            Text(title)
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(.white)
+
+            Text(message)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(Color.white.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.28))
+    }
+
     private var instructionsPanel: some View {
+        Group {
+            if instructionSteps.isEmpty {
+                tabLoadingPlaceholder(title: "Instructions", message: "Answer more questions to generate steps")
+            } else {
+                instructionsContentPanel
+            }
+        }
+    }
+
+    private var instructionsContentPanel: some View {
         VStack {
             HStack {
                 Text("Steps")
@@ -660,27 +742,51 @@ struct LiveAIView: View {
     }
 
     private var videosPanel: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Tutorial Videos")
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundColor(.white)
+        Group {
+            if viewModel.youtubeVideos.isEmpty {
+                tabLoadingPlaceholder(title: "Videos", message: "Waiting to confirm project type")
+            } else {
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Tutorial Videos")
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.white)
 
-                if !viewModel.youtubeVideos.isEmpty {
-                    ForEach(viewModel.youtubeVideos) { video in
-                        youtubeVideoCard(video: video)
+                        ForEach(viewModel.youtubeVideos) { video in
+                            youtubeVideoCard(video: video)
+                        }
                     }
-                } else {
-                    ForEach(Self.tutorialVideos) { video in
-                        tutorialVideoCard(video: video)
-                    }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
+                    .padding(.bottom, 18)
                 }
+                .background(Color.black.opacity(0.28))
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 8)
-            .padding(.bottom, 18)
         }
-        .background(Color.black.opacity(0.28))
+    }
+
+    private var shopPanel: some View {
+        Group {
+            if shopItems.isEmpty {
+                tabLoadingPlaceholder(title: "Shopping List", message: "Will auto-generate after tool check")
+            } else {
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 0) {
+                        ForEach(shopSectionsForDisplay, id: \.self) { section in
+                            sectionHeader(title: section)
+                            ForEach(shopItemIndices(for: section), id: \.self) { index in
+                                shopItemRow(item: $shopItems[index])
+                                Divider()
+                                    .background(Color.white.opacity(0.08))
+                            }
+                        }
+                    }
+                    .padding(.top, 8)
+                    .padding(.bottom, 16)
+                }
+                .background(Color.black.opacity(0.28))
+            }
+        }
     }
 
     private func applyToolCallInstructions(_ instructions: [String]) {
@@ -747,48 +853,6 @@ struct LiveAIView: View {
             normalized.append(cleaned)
         }
         return normalized
-    }
-
-    private func tutorialVideoCard(video: TutorialVideo) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .bottomTrailing) {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.14), Color.white.opacity(0.06)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(maxWidth: .infinity)
-                    .aspectRatio(16/9, contentMode: .fit)
-
-                Circle()
-                    .fill(Color(red: 0.24, green: 0.42, blue: 0.93))
-                    .frame(width: 42, height: 42)
-                    .overlay(
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
-                            .offset(x: 1)
-                    )
-
-                Text(video.duration)
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(Color.black.opacity(0.65))
-                    .clipShape(Capsule())
-                    .padding(8)
-            }
-
-            Text(video.title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.white)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
     }
 
     private func youtubeVideoCard(video: OmniRealtimeViewModel.YouTubeVideoItem) -> some View {
@@ -877,24 +941,6 @@ struct LiveAIView: View {
             return nil
         }
         return String(url[idRange])
-    }
-
-    private var shopPanel: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 0) {
-                ForEach(shopSectionsForDisplay, id: \.self) { section in
-                    sectionHeader(title: section)
-                    ForEach(shopItemIndices(for: section), id: \.self) { index in
-                        shopItemRow(item: $shopItems[index])
-                        Divider()
-                            .background(Color.white.opacity(0.08))
-                    }
-                }
-            }
-            .padding(.top, 8)
-            .padding(.bottom, 16)
-        }
-        .background(Color.black.opacity(0.28))
     }
 
     private func sectionHeader(title: String) -> some View {
