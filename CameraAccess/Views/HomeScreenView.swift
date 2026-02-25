@@ -17,16 +17,32 @@ import MWDATCore
 import SwiftUI
 
 struct HomeScreenView: View {
+  struct PastProject: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let context: ProjectContextSnapshot?
+
+    init(title: String, context: ProjectContextSnapshot? = nil) {
+      self.title = title
+      self.id = title.lowercased()
+      self.context = context
+    }
+  }
+
   @ObservedObject var viewModel: WearablesViewModel
   let forceProjectIntroOnly: Bool
-  let onNewProject: (() -> Void)?
+  let onNewProject: ((ProjectContextSnapshot?) -> Void)?
   @State private var showConnectionSuccess = false
   @State private var currentPage = 0
+  @State private var pastProjects: [PastProject] = []
+  @State private var projectPendingDelete: PastProject?
+  @State private var pastProjectsScrollOffset: CGFloat = 0
+  @State private var pastProjectsInitialMinY: CGFloat?
 
   init(
     viewModel: WearablesViewModel,
     forceProjectIntroOnly: Bool = false,
-    onNewProject: (() -> Void)? = nil
+    onNewProject: ((ProjectContextSnapshot?) -> Void)? = nil
   ) {
     self.viewModel = viewModel
     self.forceProjectIntroOnly = forceProjectIntroOnly
@@ -91,6 +107,9 @@ struct HomeScreenView: View {
         }
       }
     }
+    .onAppear {
+      loadPastProjects()
+    }
   }
 
   private var projectIntroPage: some View {
@@ -113,7 +132,7 @@ struct HomeScreenView: View {
 
       Button {
         if let onNewProject {
-          onNewProject()
+          onNewProject(nil)
         } else {
           currentPage = 1
         }
@@ -143,47 +162,139 @@ struct HomeScreenView: View {
       .padding(.horizontal, 28)
       .padding(.top, 36)
 
-      VStack(spacing: 12) {
-        comingSoonButton(title: "Hanging Pictures")
-        comingSoonButton(title: "Declutter")
-      }
+      pastProjectsSection
       .padding(.horizontal, 28)
-      .padding(.top, 12)
+      .padding(.top, 36)
 
       Spacer()
-        .frame(height: 160)
+        .frame(height: 120)
     }
   }
 
-  private func comingSoonButton(title: String) -> some View {
-    Button {} label: {
-      HStack {
-        Text(title)
-          .font(.system(size: 16, weight: .semibold))
-          .foregroundStyle(.white.opacity(0.85))
+  private var pastProjectsSection: some View {
+    let panelHeight: CGFloat = 170
+    let rowHeight: CGFloat = 56
+    let rowSpacing: CGFloat = 10
+    let verticalPadding: CGFloat = 20
+    let contentHeight = max(
+      (CGFloat(pastProjects.count) * rowHeight)
+        + (CGFloat(max(pastProjects.count - 1, 0)) * rowSpacing)
+        + verticalPadding,
+      panelHeight
+    )
+    let rawThumbHeight = panelHeight * panelHeight / contentHeight
+    let thumbHeight = min(panelHeight, max(32, rawThumbHeight))
+    let scrollableHeight = max(contentHeight - panelHeight, 1)
+    let progress = min(max(-pastProjectsScrollOffset / scrollableHeight, 0), 1)
+    let thumbTravel = max(panelHeight - thumbHeight, 0)
+    let thumbOffset = progress * thumbTravel
 
-        Spacer()
+    return VStack(alignment: .leading, spacing: 12) {
+      Text("Past Projects")
+        .font(.system(size: 14, weight: .semibold))
+        .foregroundStyle(.white.opacity(0.75))
 
-        Text("Coming Soon")
-          .font(.system(size: 12, weight: .semibold))
-          .foregroundStyle(.white.opacity(0.75))
-          .padding(.horizontal, 10)
-          .padding(.vertical, 6)
-          .background(Color.white.opacity(0.12))
-          .cornerRadius(12)
+      if pastProjects.isEmpty {
+        Text("No past projects yet.")
+          .font(.system(size: 15, weight: .regular))
+          .foregroundStyle(.white.opacity(0.6))
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal, 16)
+          .padding(.vertical, 18)
+          .background(Color.white.opacity(0.06))
+          .cornerRadius(16)
+      } else {
+        ZStack(alignment: .trailing) {
+          ScrollView(showsIndicators: false) {
+            LazyVStack(spacing: 10) {
+              ForEach(pastProjects) { project in
+                pastProjectRow(project)
+              }
+            }
+            .background(
+              GeometryReader { geo in
+                Color.clear
+                  .preference(key: PastProjectsScrollOffsetKey.self, value: geo.frame(in: .named("PastProjectsScrollArea")).minY)
+              }
+            )
+            .padding(10)
+            .padding(.trailing, 12)
+          }
+          .coordinateSpace(name: "PastProjectsScrollArea")
+          .frame(height: panelHeight)
+
+          Capsule()
+            .fill(Color.white.opacity(0.18))
+            .frame(width: 3, height: panelHeight - 16)
+            .overlay(alignment: .top) {
+              Capsule()
+                .fill(Color.white.opacity(0.85))
+                .frame(width: 3, height: thumbHeight)
+                .offset(y: thumbOffset)
+            }
+            .padding(.trailing, 6)
+            .allowsHitTesting(false)
+        }
+        .onPreferenceChange(PastProjectsScrollOffsetKey.self) { value in
+          if pastProjectsInitialMinY == nil {
+            pastProjectsInitialMinY = value
+          }
+          let baseline = pastProjectsInitialMinY ?? value
+          let scrollAmount = max(0, baseline - value)
+          pastProjectsScrollOffset = -scrollAmount
+        }
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(16)
       }
-      .padding(.horizontal, 16)
-      .frame(maxWidth: .infinity)
-      .frame(height: 56)
-      .background(Color.white.opacity(0.06))
-      .cornerRadius(16)
-      .overlay(
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-          .stroke(Color.white.opacity(0.16), lineWidth: 1)
-      )
     }
-    .disabled(true)
-    .buttonStyle(.plain)
+    .sheet(item: $projectPendingDelete) { project in
+      DeleteProjectConfirmationView(projectTitle: project.title) {
+        ConversationStorage.shared.deleteConversations(withTitle: project.title)
+        loadPastProjects()
+      }
+    }
+  }
+
+  private func pastProjectRow(_ project: PastProject) -> some View {
+    HStack {
+      Button {
+        if let onNewProject {
+          onNewProject(project.context)
+        } else {
+          currentPage = 1
+        }
+      } label: {
+        Text(project.title)
+          .font(.system(size: 16, weight: .semibold))
+          .foregroundStyle(.white.opacity(0.9))
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .buttonStyle(.plain)
+
+      Spacer()
+
+      Button {
+        projectPendingDelete = project
+      } label: {
+        Image(systemName: "trash")
+          .font(.system(size: 16, weight: .semibold))
+          .foregroundStyle(Color.red.opacity(0.9))
+          .frame(width: 34, height: 34)
+          .background(Color.red.opacity(0.12))
+          .clipShape(Circle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Delete \(project.title)")
+    }
+    .padding(.horizontal, 16)
+    .frame(maxWidth: .infinity)
+    .frame(height: 56)
+    .background(Color.white.opacity(0.06))
+    .cornerRadius(16)
+    .overlay(
+      RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .stroke(Color.white.opacity(0.16), lineWidth: 1)
+    )
   }
 
   private var connectPage: some View {
@@ -241,5 +352,90 @@ struct HomeScreenView: View {
       .padding(.bottom, AppSpacing.xl)
     }
     .padding(.vertical, AppSpacing.xl)
+  }
+
+  private func loadPastProjects() {
+    let sessions = ConversationStorage.shared.loadPastProjectSessions(limit: 20)
+    pastProjects = sessions.map { PastProject(title: $0.title, context: $0.context) }
+    pastProjectsInitialMinY = nil
+    pastProjectsScrollOffset = 0
+  }
+}
+
+private struct PastProjectsScrollOffsetKey: PreferenceKey {
+  static var defaultValue: CGFloat = 0
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+    value += nextValue()
+  }
+}
+
+private struct DeleteProjectConfirmationView: View {
+  @Environment(\.dismiss) private var dismiss
+
+  let projectTitle: String
+  let onConfirmDelete: () -> Void
+
+  var body: some View {
+    NavigationView {
+      VStack(spacing: 20) {
+        Spacer()
+
+        Image(systemName: "trash.circle.fill")
+          .font(.system(size: 68))
+          .foregroundStyle(.red)
+
+        Text("Delete Project?")
+          .font(.system(size: 26, weight: .semibold))
+          .foregroundStyle(.white)
+
+        Text("Are you sure you want to delete \"\(projectTitle)\"? This action cannot be undone.")
+          .font(.system(size: 16))
+          .foregroundStyle(.white.opacity(0.8))
+          .multilineTextAlignment(.center)
+          .padding(.horizontal, 28)
+
+        Spacer()
+
+        VStack(spacing: 12) {
+          Button {
+            onConfirmDelete()
+            dismiss()
+          } label: {
+            Text("Delete Project")
+              .font(.system(size: 17, weight: .semibold))
+              .foregroundStyle(.white)
+              .frame(maxWidth: .infinity)
+              .frame(height: 54)
+              .background(Color.red.opacity(0.9))
+              .cornerRadius(16)
+          }
+
+          Button {
+            dismiss()
+          } label: {
+            Text("Cancel")
+              .font(.system(size: 17, weight: .semibold))
+              .foregroundStyle(.white)
+              .frame(maxWidth: .infinity)
+              .frame(height: 54)
+              .background(Color.white.opacity(0.12))
+              .cornerRadius(16)
+          }
+        }
+        .padding(.horizontal, 28)
+        .padding(.bottom, 24)
+      }
+      .background(Color.black.ignoresSafeArea())
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button("Close") {
+            dismiss()
+          }
+          .foregroundStyle(.white)
+        }
+      }
+    }
+    .preferredColorScheme(.dark)
   }
 }

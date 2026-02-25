@@ -25,6 +25,7 @@ struct MainAppView: View {
   @State private var hasCheckedPermissions = false
   @State private var shouldAutoLaunchLiveAI = false
   @State private var showLaunchIntro = true
+  @State private var restoreProjectContext: ProjectContextSnapshot?
 
   init(wearables: WearablesInterface, viewModel: WearablesViewModel) {
     self.wearables = wearables
@@ -39,7 +40,8 @@ struct MainAppView: View {
           HomeScreenView(
             viewModel: viewModel,
             forceProjectIntroOnly: true,
-            onNewProject: {
+            onNewProject: { context in
+              restoreProjectContext = context
               showLaunchIntro = false
 
               if PermissionsManager.shared.checkAllPermissions() {
@@ -62,7 +64,8 @@ struct MainAppView: View {
             MainTabView(
               streamViewModel: streamViewModel,
               wearablesViewModel: viewModel,
-              autoLaunchLiveAI: $shouldAutoLaunchLiveAI
+              autoLaunchLiveAI: $shouldAutoLaunchLiveAI,
+              restoreProjectContext: $restoreProjectContext
             )
               .onAppear {
                 // Set up QuickVisionManager's StreamViewModel reference

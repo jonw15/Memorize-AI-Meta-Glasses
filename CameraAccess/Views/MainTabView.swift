@@ -9,6 +9,7 @@ struct MainTabView: View {
     @ObservedObject var streamViewModel: StreamSessionViewModel
     @ObservedObject var wearablesViewModel: WearablesViewModel
     @Binding var autoLaunchLiveAI: Bool
+    @Binding var restoreProjectContext: ProjectContextSnapshot?
 
     @State private var selectedTab = 0
 
@@ -24,7 +25,8 @@ struct MainTabView: View {
                 streamViewModel: streamViewModel,
                 wearablesViewModel: wearablesViewModel,
                 apiKey: apiKey,
-                autoLaunchLiveAI: $autoLaunchLiveAI
+                autoLaunchLiveAI: $autoLaunchLiveAI,
+                restoreProjectContext: $restoreProjectContext
             )
                 .toolbar(.hidden, for: .tabBar)
                 .tabItem {

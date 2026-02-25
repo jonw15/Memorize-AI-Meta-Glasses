@@ -60,6 +60,43 @@ class ConversationStorage {
         return Array(allConversations[offset..<endIndex])
     }
 
+    func loadPastProjectSessions(limit: Int = 10) -> [PastProjectSession] {
+        let conversations = loadAllConversations()
+        var seen: Set<String> = []
+        var sessions: [PastProjectSession] = []
+
+        for conversation in conversations {
+            let trimmed = conversation.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty || trimmed == "AI Conversation" {
+                continue
+            }
+
+            let key = trimmed.lowercased()
+            if seen.contains(key) {
+                continue
+            }
+
+            seen.insert(key)
+            sessions.append(
+                PastProjectSession(
+                    id: key,
+                    title: trimmed,
+                    context: conversation.projectContext
+                )
+            )
+
+            if sessions.count >= limit {
+                break
+            }
+        }
+
+        return sessions
+    }
+
+    func loadPastProjectTitles(limit: Int = 10) -> [String] {
+        loadPastProjectSessions(limit: limit).map { $0.title }
+    }
+
     // MARK: - Delete Conversation
 
     func deleteConversation(_ id: UUID) {
@@ -69,6 +106,26 @@ class ConversationStorage {
         if let encoded = try? JSONEncoder().encode(conversations) {
             userDefaults.set(encoded, forKey: conversationsKey)
             print("🗑️ [Storage] Conversation deleted: \(id)")
+        }
+    }
+
+    func deleteConversations(withTitle title: String) {
+        let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return }
+
+        var conversations = loadAllConversations()
+        let beforeCount = conversations.count
+        conversations.removeAll {
+            $0.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalized
+        }
+
+        if conversations.count == beforeCount {
+            return
+        }
+
+        if let encoded = try? JSONEncoder().encode(conversations) {
+            userDefaults.set(encoded, forKey: conversationsKey)
+            print("🗑️ [Storage] Deleted conversations for title: \(title)")
         }
     }
 

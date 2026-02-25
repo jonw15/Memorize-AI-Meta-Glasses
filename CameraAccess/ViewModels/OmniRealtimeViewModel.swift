@@ -218,6 +218,23 @@ class OmniRealtimeViewModel: ObservableObject {
         isImageSendingEnabled = false
     }
 
+    func restoreProjectContext(_ context: ProjectContextSnapshot?) {
+        guard let context else { return }
+
+        toolCallInstructions = context.instructions
+        toolCallTools = context.tools
+        toolCallParts = context.parts
+        youtubeVideos = context.videos.map {
+            YouTubeVideoItem(
+                videoId: $0.videoId,
+                url: $0.url,
+                title: $0.title,
+                thumbnail: $0.thumbnail
+            )
+        }
+        shouldAutoOpenVideos = false
+    }
+
     private func saveConversation() {
         // Only save if there's meaningful conversation
         guard !conversationHistory.isEmpty else {
@@ -225,10 +242,25 @@ class OmniRealtimeViewModel: ObservableObject {
             return
         }
 
+        let snapshot = ProjectContextSnapshot(
+            instructions: toolCallInstructions,
+            tools: toolCallTools,
+            parts: toolCallParts,
+            videos: youtubeVideos.map {
+                SavedYouTubeVideo(
+                    videoId: $0.videoId,
+                    url: $0.url,
+                    title: $0.title,
+                    thumbnail: $0.thumbnail
+                )
+            }
+        )
+
         let record = ConversationRecord(
             messages: conversationHistory,
             aiModel: APIProviderManager.liveAIDefaultModel,
-            language: "en-US"
+            language: "en-US",
+            projectContext: snapshot.isEmpty ? nil : snapshot
         )
 
         ConversationStorage.shared.saveConversation(record)

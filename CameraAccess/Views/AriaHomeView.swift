@@ -12,6 +12,7 @@ struct AriaHomeView: View {
     @StateObject private var liveAIManager = LiveAIManager.shared
     let apiKey: String
     @Binding var autoLaunchLiveAI: Bool
+    @Binding var restoreProjectContext: ProjectContextSnapshot?
 
     @State private var showLiveAI = false
     @State private var showLiveStream = false
@@ -69,6 +70,7 @@ struct AriaHomeView: View {
                                     icon: "brain.head.profile",
                                     gradient: [AppColors.liveAI, AppColors.liveAI.opacity(0.7)]
                                 ) {
+                                    restoreProjectContext = nil
                                     showLiveAI = true
                                 }
 
@@ -131,8 +133,14 @@ struct AriaHomeView: View {
                 .opacity(0.001) // Keep layout and taps, hide visible home UI
             }
             .navigationBarHidden(true)
-            .fullScreenCover(isPresented: $showLiveAI) {
-                LiveAIView(streamViewModel: streamViewModel, apiKey: apiKey)
+            .fullScreenCover(isPresented: $showLiveAI, onDismiss: {
+                restoreProjectContext = nil
+            }) {
+                LiveAIView(
+                    streamViewModel: streamViewModel,
+                    apiKey: apiKey,
+                    restoredProjectContext: restoreProjectContext
+                )
             }
             .fullScreenCover(isPresented: $showLiveStream) {
                 SimpleLiveStreamView(streamViewModel: streamViewModel)
@@ -167,6 +175,7 @@ struct AriaHomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .liveAITriggered)) { _ in
             // Triggered from Shortcuts, automatically open Live AI view
+            restoreProjectContext = nil
             showLiveAI = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .liveChatTriggered)) { _ in
@@ -174,6 +183,7 @@ struct AriaHomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .liveChatClosedToLiveAI)) { _ in
             showLiveChat = false
+            restoreProjectContext = nil
             showLiveAI = true
         }
     }

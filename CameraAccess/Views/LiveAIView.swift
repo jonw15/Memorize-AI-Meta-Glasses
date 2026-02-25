@@ -61,12 +61,15 @@ struct LiveAIView: View {
     @State private var hasUnreadVideosContent = false
     @State private var hasUnreadShopContent = false
     @State private var hasUnreadInstructionsContent = false
+    @State private var hasAppliedRestoredProject = false
     private let feedbackSynth = AVSpeechSynthesizer()
     private static let defaultInstructionSteps: [InstructionStep] = []
     private static let defaultShopItems: [ShopItem] = []
+    private let restoredProjectContext: ProjectContextSnapshot?
 
-    init(streamViewModel: StreamSessionViewModel, apiKey: String) {
+    init(streamViewModel: StreamSessionViewModel, apiKey: String, restoredProjectContext: ProjectContextSnapshot? = nil) {
         self.streamViewModel = streamViewModel
+        self.restoredProjectContext = restoredProjectContext
         // Use the Live AI API key based on selected provider
         let liveAIApiKey = APIProviderManager.staticLiveAIAPIKey
         self._viewModel = StateObject(wrappedValue: OmniRealtimeViewModel(apiKey: liveAIApiKey.isEmpty ? apiKey : liveAIApiKey))
@@ -104,6 +107,7 @@ struct LiveAIView: View {
             if !LiveAIConfig.useNativeYouTubePlayer {
                 WKWebViewWarmer.shared.warmUp()
             }
+            applyRestoredProjectContextIfNeeded()
 
             // Only start features when device is connected
             guard streamViewModel.hasActiveDevice else {
@@ -857,6 +861,12 @@ struct LiveAIView: View {
         }
 
         shopItems = updatedItems
+    }
+
+    private func applyRestoredProjectContextIfNeeded() {
+        guard !hasAppliedRestoredProject else { return }
+        hasAppliedRestoredProject = true
+        viewModel.restoreProjectContext(restoredProjectContext)
     }
 
     private func normalizedToolCallItems(_ items: [String]) -> [String] {

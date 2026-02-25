@@ -5,25 +5,52 @@
 
 import Foundation
 
+struct SavedYouTubeVideo: Codable, Equatable {
+    let videoId: String
+    let url: String
+    let title: String
+    let thumbnail: String
+}
+
+struct ProjectContextSnapshot: Codable, Equatable {
+    let instructions: [String]
+    let tools: [String]
+    let parts: [String]
+    let videos: [SavedYouTubeVideo]
+
+    var isEmpty: Bool {
+        instructions.isEmpty && tools.isEmpty && parts.isEmpty && videos.isEmpty
+    }
+}
+
+struct PastProjectSession: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let context: ProjectContextSnapshot?
+}
+
 struct ConversationRecord: Identifiable, Codable {
     let id: UUID
     let timestamp: Date
     let messages: [ConversationMessage]
     let aiModel: String
     let language: String
+    let projectContext: ProjectContextSnapshot?
 
     init(
         id: UUID = UUID(),
         timestamp: Date = Date(),
         messages: [ConversationMessage],
         aiModel: String = "gemini-2.5-flash-native-audio-preview-12-2025",
-        language: String = "en-US"
+        language: String = "en-US",
+        projectContext: ProjectContextSnapshot? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
         self.messages = messages
         self.aiModel = aiModel
         self.language = language
+        self.projectContext = projectContext
     }
 
     // Computed properties
