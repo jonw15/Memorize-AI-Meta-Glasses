@@ -44,6 +44,13 @@ struct MemorizeCaptureView: View {
                     timelineSection
                 }
 
+                // Pop Quiz button
+                if viewModel.pages.contains(where: { $0.status == .completed }) {
+                    popQuizButton
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.bottom, AppSpacing.sm)
+                }
+
                 // Done Reading button
                 doneButton
                     .padding(.bottom, AppSpacing.lg)
@@ -62,6 +69,9 @@ struct MemorizeCaptureView: View {
                 }
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .fullScreenCover(isPresented: $viewModel.showQuiz) {
+            MemorizeQuizView(questions: $viewModel.quizQuestions)
         }
         .onAppear {
             viewModel.streamViewModel = streamViewModel
@@ -269,6 +279,42 @@ struct MemorizeCaptureView: View {
                 .foregroundColor(.red)
                 .font(.system(size: 14))
         }
+    }
+
+    // MARK: - Pop Quiz Button
+
+    private var popQuizButton: some View {
+        Button {
+            viewModel.generateQuiz()
+        } label: {
+            HStack(spacing: 8) {
+                if viewModel.isGeneratingQuiz {
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(0.8)
+                } else {
+                    Image(systemName: "brain.head.profile")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+
+                Text(viewModel.isGeneratingQuiz
+                     ? "memorize.generating_quiz".localized
+                     : "memorize.pop_quiz".localized)
+                    .font(AppTypography.headline)
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                LinearGradient(
+                    colors: [AppColors.memorizeAccent, AppColors.memorizeAccent.opacity(0.7)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(AppCornerRadius.md)
+        }
+        .disabled(viewModel.isGeneratingQuiz)
     }
 
     // MARK: - Done Button

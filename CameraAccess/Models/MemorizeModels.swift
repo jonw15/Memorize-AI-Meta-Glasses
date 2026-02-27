@@ -67,3 +67,21 @@ struct Book: Identifiable, Codable {
         return pages.filter { $0.status == .completed }.count
     }
 }
+
+// MARK: - Quiz Question
+
+struct QuizQuestion: Identifiable, Codable {
+    let id: UUID
+    let question: String
+    let options: [String]       // 4 choices
+    let correctIndex: Int       // index of correct answer
+    var selectedIndex: Int?     // user's pick (nil = unanswered)
+
+    init(id: UUID = UUID(), question: String, options: [String], correctIndex: Int, selectedIndex: Int? = nil) {
+        self.id = id
+        self.question = question
+        self.options = options
+        self.correctIndex = correctIndex
+        self.selectedIndex = selectedIndex
+    }
+}

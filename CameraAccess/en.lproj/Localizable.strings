@@ -441,3 +441,11 @@
 "memorize.view_all" = "View All";
 "memorize.done_reading" = "Done Reading";
 "memorize.connecting_camera" = "Connecting to camera...";
+"memorize.pop_quiz" = "Pop Quiz";
+"memorize.generating_quiz" = "Generating quiz...";
+"memorize.quiz_question_count" = "%d of %d";
+"memorize.quiz_next" = "Next";
+"memorize.quiz_results" = "Results";
+"memorize.quiz_score" = "You scored %d out of %d";
+"memorize.quiz_done" = "Done";
+"memorize.quiz_no_pages" = "Capture some pages first";

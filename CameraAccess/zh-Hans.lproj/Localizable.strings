@@ -442,3 +442,11 @@
 "memorize.view_all" = "查看全部";
 "memorize.done_reading" = "完成阅读";
 "memorize.connecting_camera" = "正在连接相机...";
+"memorize.pop_quiz" = "随堂测验";
+"memorize.generating_quiz" = "正在生成测验...";
+"memorize.quiz_question_count" = "%d / %d";
+"memorize.quiz_next" = "下一题";
+"memorize.quiz_results" = "测验结果";
+"memorize.quiz_score" = "你答对了 %d / %d 题";
+"memorize.quiz_done" = "完成";
+"memorize.quiz_no_pages" = "请先拍摄一些书页";

@@ -53,6 +53,75 @@ struct MemorizeService {
         return parseBookInfo(from: result)
     }
 
+    // MARK: - Generate Quiz
+
+    func generateQuiz(from pages: [PageCapture]) async throws -> [QuizQuestion] {
+        let completedPages = pages.filter { $0.status == .completed }
+        guard !completedPages.isEmpty else { return [] }
+
+        let combinedText = completedPages
+            .enumerated()
+            .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
+            .joined(separator: "\n\n")
+
+        let questionsPerPage = 2
+        let totalQuestions = completedPages.count * questionsPerPage
+
+        let prompt = """
+        Based on the following text extracted from book pages, generate exactly \(totalQuestions) multiple-choice quiz questions to test reading comprehension.
+
+        Text:
+        \(combinedText)
+
+        Requirements:
+        1. Generate exactly \(totalQuestions) questions
+        2. Each question must have exactly 4 answer options
+        3. Questions should test understanding of key concepts, facts, and details
+        4. Make wrong answers plausible but clearly incorrect
+        5. Vary question difficulty
+
+        Respond with ONLY a JSON array in this exact format, no other text:
+        [
+          {
+            "question": "What is...?",
+            "options": ["Option A", "Option B", "Option C", "Option D"],
+            "correctIndex": 0
+          }
+        ]
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return parseQuizQuestions(from: result)
+    }
+
+    private func parseQuizQuestions(from response: String) -> [QuizQuestion] {
+        // Extract JSON array from response (handle markdown code blocks)
+        var jsonString = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let startRange = jsonString.range(of: "["),
+           let endRange = jsonString.range(of: "]", options: .backwards) {
+            jsonString = String(jsonString[startRange.lowerBound...endRange.upperBound])
+        }
+
+        guard let data = jsonString.data(using: .utf8) else { return [] }
+
+        struct RawQuestion: Decodable {
+            let question: String
+            let options: [String]
+            let correctIndex: Int
+        }
+
+        do {
+            let raw = try JSONDecoder().decode([RawQuestion].self, from: data)
+            return raw.compactMap { q in
+                guard q.options.count == 4, q.correctIndex >= 0, q.correctIndex < 4 else { return nil }
+                return QuizQuestion(question: q.question, options: q.options, correctIndex: q.correctIndex)
+            }
+        } catch {
+            print("❌ [Memorize] Quiz JSON parse error: \(error)")
+            return []
+        }
+    }
+
     // MARK: - Private Helpers
 
     private func parseBookInfo(from response: String) -> (title: String, author: String) {

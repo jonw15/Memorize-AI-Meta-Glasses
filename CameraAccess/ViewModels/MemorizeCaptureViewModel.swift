@@ -17,6 +17,9 @@ class MemorizeCaptureViewModel: ObservableObject {
     @Published var currentBook: Book?
     @Published var isProcessing: Bool = false
     @Published var lastCapturedImage: UIImage?
+    @Published var quizQuestions: [QuizQuestion] = []
+    @Published var isGeneratingQuiz: Bool = false
+    @Published var showQuiz: Bool = false
 
     private let storage = MemorizeStorage.shared
     private let memorizeService = MemorizeService()
@@ -160,6 +163,28 @@ class MemorizeCaptureViewModel: ObservableObject {
             storage.updateBook(book)
         } else {
             storage.saveBook(book)
+        }
+    }
+
+    // MARK: - Quiz Generation
+
+    func generateQuiz() {
+        guard !isGeneratingQuiz else { return }
+        let completedPages = pages.filter { $0.status == .completed }
+        guard !completedPages.isEmpty else { return }
+
+        isGeneratingQuiz = true
+        Task {
+            do {
+                let questions = try await memorizeService.generateQuiz(from: pages)
+                self.quizQuestions = questions
+                if !questions.isEmpty {
+                    self.showQuiz = true
+                }
+            } catch {
+                print("❌ [Memorize] Quiz generation failed: \(error.localizedDescription)")
+            }
+            self.isGeneratingQuiz = false
         }
     }
 

@@ -99,6 +99,7 @@
 		MZ0005000500050005 /* MemorizeCaptureViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1005000500050005 /* MemorizeCaptureViewModel.swift */; };
 		MZ0006000600060006 /* MemorizeHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1006000600060006 /* MemorizeHomeView.swift */; };
 		MZ0007000700070007 /* MemorizeCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1007000700070007 /* MemorizeCaptureView.swift */; };
+		MQ0001000100010001 /* MemorizeQuizView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MQ1001000100010001 /* MemorizeQuizView.swift */; };
 
 /* End PBXBuildFile section */
 
@@ -215,6 +216,7 @@
 		MZ1005000500050005 /* MemorizeCaptureViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeCaptureViewModel.swift; sourceTree = "<group>"; };
 		MZ1006000600060006 /* MemorizeHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeHomeView.swift; sourceTree = "<group>"; };
 		MZ1007000700070007 /* MemorizeCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeCaptureView.swift; sourceTree = "<group>"; };
+		MQ1001000100010001 /* MemorizeQuizView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeQuizView.swift; sourceTree = "<group>"; };
 
 /* End PBXFileReference section */
 
@@ -413,6 +415,7 @@
 				LC1002000200020002 /* LiveChatWebView.swift */,
 				MZ1006000600060006 /* MemorizeHomeView.swift */,
 				MZ1007000700070007 /* MemorizeCaptureView.swift */,
+				MQ1001000100010001 /* MemorizeQuizView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -668,6 +671,7 @@
 				MZ0005000500050005 /* MemorizeCaptureViewModel.swift in Sources */,
 				MZ0006000600060006 /* MemorizeHomeView.swift in Sources */,
 				MZ0007000700070007 /* MemorizeCaptureView.swift in Sources */,
+				MQ0001000100010001 /* MemorizeQuizView.swift in Sources */,
 
 			);
 			runOnlyForDeploymentPostprocessing = 0;
