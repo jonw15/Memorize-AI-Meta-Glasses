@@ -8,6 +8,7 @@ import UIKit
 import AVFoundation
 import AudioToolbox
 import Combine
+import Photos
 
 @MainActor
 class MemorizeCaptureViewModel: ObservableObject {
@@ -33,7 +34,9 @@ class MemorizeCaptureViewModel: ObservableObject {
     // MARK: - Initialize with existing book
 
     func loadBook(_ book: Book?) {
-        if let book = book {
+        if var book = book {
+            // Load thumbnail files into pages
+            storage.loadThumbnails(for: &book)
             currentBook = book
             pages = book.pages
         } else {
@@ -90,6 +93,7 @@ class MemorizeCaptureViewModel: ObservableObject {
         let pageNumber = pages.count + 1
         var page = PageCapture(pageNumber: pageNumber, status: .capturing)
         pages.append(page)
+        saveProgress()
 
         // Capture photo from glasses
         streamVM.capturePhoto()
@@ -121,10 +125,17 @@ class MemorizeCaptureViewModel: ObservableObject {
             lastCapturedImage = nil
         }
 
-        // Save thumbnail
+        // Save full image to photo library
+        saveImageToPhotoLibrary(image)
+
+        // Save thumbnail to file and keep in memory
         let thumbnailData = image.jpegData(compressionQuality: 0.3)
         pages[pageIndex].thumbnailData = thumbnailData
+        if let thumbnailData {
+            storage.saveThumbnail(thumbnailData, for: pages[pageIndex].id)
+        }
         pages[pageIndex].status = .processing
+        saveProgress()
 
         do {
             // OCR - extract text
@@ -162,6 +173,12 @@ class MemorizeCaptureViewModel: ObservableObject {
         if existingBooks.contains(where: { $0.id == book.id }) {
             storage.updateBook(book)
         } else {
+            let hasTitle = !book.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let hasAuthor = !book.author.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let hasPages = !book.pages.isEmpty
+            guard hasTitle || hasAuthor || hasPages else {
+                return
+            }
             storage.saveBook(book)
         }
     }
@@ -193,6 +210,20 @@ class MemorizeCaptureViewModel: ObservableObject {
     func finishSession() {
         saveProgress()
         cancelCountdown()
+    }
+
+    // MARK: - Save to Photo Library
+
+    private func saveImageToPhotoLibrary(_ image: UIImage) {
+        PHPhotoLibrary.shared().performChanges {
+            PHAssetChangeRequest.creationRequestForAsset(from: image)
+        } completionHandler: { success, error in
+            if success {
+                print("📸 [Memorize] Image saved to photo library")
+            } else if let error {
+                print("❌ [Memorize] Failed to save image: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - Audio Feedback

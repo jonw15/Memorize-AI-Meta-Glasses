@@ -22,7 +22,12 @@ struct PageCapture: Identifiable, Codable {
     let timestamp: Date
     var extractedText: String
     var status: PageCaptureStatus
-    var thumbnailData: Data?
+    var thumbnailData: Data?  // runtime only, not persisted in JSON
+
+    // Exclude thumbnailData from Codable — stored as files instead
+    enum CodingKeys: String, CodingKey {
+        case id, pageNumber, timestamp, extractedText, status
+    }
 
     init(pageNumber: Int, extractedText: String = "", status: PageCaptureStatus = .capturing, thumbnailData: Data? = nil) {
         self.id = UUID()

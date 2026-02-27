@@ -430,6 +430,12 @@
 "memorize.currently_reading" = "正在阅读";
 "memorize.add_to_library" = "添加到书架";
 "memorize.add_new_book" = "添加新书";
+"memorize.new_session" = "新建学习会话";
+"memorize.enter_book_details" = "输入书名和作者后开始学习";
+"memorize.title_field" = "书名";
+"memorize.author_field" = "作者";
+"memorize.start_session" = "开始学习";
+"memorize.cancel" = "取消";
 "memorize.continue_session" = "继续学习";
 "memorize.pages_captured" = "页已捕获";
 "memorize.untitled" = "未命名书籍";

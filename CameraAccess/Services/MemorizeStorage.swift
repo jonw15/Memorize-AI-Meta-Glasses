@@ -12,6 +12,14 @@ class MemorizeStorage {
     private let booksKey = "memorize_books"
     private let maxBooks = 50
 
+    private let fileManager = FileManager.default
+    private lazy var thumbnailsDir: URL = {
+        let dir = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("memorize_thumbnails", isDirectory: true)
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
+
     private init() {}
 
     // MARK: - Save Book
@@ -61,12 +69,50 @@ class MemorizeStorage {
     // MARK: - Delete Book
 
     func deleteBook(_ id: UUID) {
-        var books = loadBooks()
-        books.removeAll { $0.id == id }
+        // Delete thumbnail files for this book's pages
+        let books = loadBooks()
+        if let book = books.first(where: { $0.id == id }) {
+            for page in book.pages {
+                deleteThumbnail(for: page.id)
+            }
+        }
 
-        if let encoded = try? JSONEncoder().encode(books) {
+        var updatedBooks = books.filter { $0.id != id }
+
+        if let encoded = try? JSONEncoder().encode(updatedBooks) {
             userDefaults.set(encoded, forKey: booksKey)
             print("🗑️ [MemorizeStorage] Book deleted: \(id)")
         }
+    }
+
+    // MARK: - Thumbnail File Storage
+
+    func saveThumbnail(_ data: Data, for pageId: UUID) {
+        let url = thumbnailsDir.appendingPathComponent("\(pageId.uuidString).jpg")
+        try? data.write(to: url)
+    }
+
+    func loadThumbnail(for pageId: UUID) -> Data? {
+        let url = thumbnailsDir.appendingPathComponent("\(pageId.uuidString).jpg")
+        return try? Data(contentsOf: url)
+    }
+
+    private func deleteThumbnail(for pageId: UUID) {
+        let url = thumbnailsDir.appendingPathComponent("\(pageId.uuidString).jpg")
+        try? fileManager.removeItem(at: url)
+    }
+
+    /// Load thumbnails from disk into a book's pages
+    func loadThumbnails(for book: inout Book) {
+        var validPages: [PageCapture] = []
+        for var page in book.pages {
+            if let data = loadThumbnail(for: page.id) {
+                page.thumbnailData = data
+                validPages.append(page)
+            } else {
+                print("⚠️ [MemorizeStorage] Dropped ghost page \(page.id) (No thumbnail found)")
+            }
+        }
+        book.pages = validPages
     }
 }

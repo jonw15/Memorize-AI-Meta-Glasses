@@ -10,8 +10,10 @@ struct MemorizeHomeView: View {
     @ObservedObject var wearablesViewModel: WearablesViewModel
 
     @StateObject private var viewModel = MemorizeHomeViewModel()
-    @State private var showCapture = false
+    @State private var showNewSessionForm = false
     @State private var selectedBook: Book?
+    @State private var newSessionTitle: String = ""
+    @State private var newSessionAuthor: String = ""
 
     var body: some View {
         NavigationView {
@@ -38,13 +40,18 @@ struct MemorizeHomeView: View {
         .onAppear {
             viewModel.loadBooks()
         }
-        .fullScreenCover(isPresented: $showCapture) {
+        .fullScreenCover(item: $selectedBook, onDismiss: {
             viewModel.loadBooks()
-        } content: {
+        }) { book in
             MemorizeCaptureView(
                 streamViewModel: streamViewModel,
-                book: selectedBook
+                book: book
             )
+        }
+        .sheet(isPresented: $showNewSessionForm) {
+            newSessionSheet
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -93,7 +100,6 @@ struct MemorizeHomeView: View {
 
                 Button {
                     selectedBook = book
-                    showCapture = true
                 } label: {
                     Text("memorize.continue_session".localized)
                         .font(AppTypography.headline)
@@ -129,8 +135,9 @@ struct MemorizeHomeView: View {
                 .foregroundColor(.white)
 
             Button {
-                selectedBook = nil
-                showCapture = true
+                newSessionTitle = ""
+                newSessionAuthor = ""
+                showNewSessionForm = true
             } label: {
                 VStack(spacing: AppSpacing.md) {
                     Image(systemName: "plus")
@@ -153,6 +160,82 @@ struct MemorizeHomeView: View {
                         .foregroundColor(Color.white.opacity(0.15))
                 )
             }
+        }
+    }
+
+    private var isNewSessionValid: Bool {
+        !newSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !newSessionAuthor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var newSessionSheet: some View {
+        NavigationView {
+            VStack(spacing: AppSpacing.md) {
+                Text("memorize.enter_book_details".localized)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(Color.white.opacity(0.7))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                VStack(spacing: AppSpacing.sm) {
+                    TextField("memorize.title_field".localized, text: $newSessionTitle)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.vertical, 14)
+                        .background(AppColors.memorizeCard)
+                        .foregroundColor(.white)
+                        .cornerRadius(AppCornerRadius.md)
+
+                    TextField("memorize.author_field".localized, text: $newSessionAuthor)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.vertical, 14)
+                        .background(AppColors.memorizeCard)
+                        .foregroundColor(.white)
+                        .cornerRadius(AppCornerRadius.md)
+                }
+
+                Button {
+                    selectedBook = Book(
+                        title: newSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+                        author: newSessionAuthor.trimmingCharacters(in: .whitespacesAndNewlines)
+                    )
+                    showNewSessionForm = false
+                } label: {
+                    Text("memorize.start_session".localized)
+                        .font(AppTypography.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(
+                            LinearGradient(
+                                colors: [AppColors.memorizeAccent, AppColors.memorizeAccent.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(AppCornerRadius.md)
+                }
+                .disabled(!isNewSessionValid)
+                .opacity(isNewSessionValid ? 1 : 0.5)
+
+                Spacer()
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, AppSpacing.md)
+            .background(AppColors.memorizeBackground.ignoresSafeArea())
+            .navigationTitle("memorize.new_session".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("memorize.cancel".localized) {
+                        showNewSessionForm = false
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
         }
     }
 }

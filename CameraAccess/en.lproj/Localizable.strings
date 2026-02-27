@@ -429,6 +429,12 @@
 "memorize.currently_reading" = "Currently Reading";
 "memorize.add_to_library" = "Add to Library";
 "memorize.add_new_book" = "Add New Book";
+"memorize.new_session" = "New Session";
+"memorize.enter_book_details" = "Enter book details to start a new session";
+"memorize.title_field" = "Title";
+"memorize.author_field" = "Author";
+"memorize.start_session" = "Start Session";
+"memorize.cancel" = "Cancel";
 "memorize.continue_session" = "Continue Session";
 "memorize.pages_captured" = "pages captured";
 "memorize.untitled" = "Untitled Book";
