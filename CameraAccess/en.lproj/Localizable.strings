@@ -422,3 +422,21 @@
 "livechat.entercode" = "Enter Room Code";
 "livechat.start" = "Start";
 "livechat.scanning" = "Scan to join";
+
+// MARK: - Memorize
+"tab.memorize" = "Memorize";
+"memorize.title" = "Memorize";
+"memorize.currently_reading" = "Currently Reading";
+"memorize.add_to_library" = "Add to Library";
+"memorize.add_new_book" = "Add New Book";
+"memorize.continue_session" = "Continue Session";
+"memorize.pages_captured" = "pages captured";
+"memorize.untitled" = "Untitled Book";
+"memorize.unknown_author" = "Unknown Author";
+"memorize.unknown_book" = "Unknown Book";
+"memorize.ready_to_capture" = "Ready to Capture";
+"memorize.capture_subtitle" = "Point your glasses at the book page and tap capture";
+"memorize.delay_3s" = "3S Delay";
+"memorize.session_timeline" = "Session Timeline";
+"memorize.view_all" = "View All";
+"memorize.done_reading" = "Done Reading";

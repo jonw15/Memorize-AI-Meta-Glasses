@@ -30,7 +30,7 @@ struct NonStreamView: View {
           Spacer()
           Menu {
             Button("Disconnect", role: .destructive) {
-              wearablesVM.disconnectGlasses()
+              Task { await wearablesVM.disconnectGlasses() }
             }
             .disabled(wearablesVM.registrationState != .registered)
           } label: {

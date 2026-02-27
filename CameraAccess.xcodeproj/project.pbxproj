@@ -92,8 +92,13 @@
 		LT0003000300030003 /* LiveTranslateViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1003000300030003 /* LiveTranslateViewModel.swift */; };
 		LT0004000400040004 /* LiveTranslateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1004000400040004 /* LiveTranslateView.swift */; };
 		LT0005000500050005 /* LiveTranslateSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1005000500050005 /* LiveTranslateSettingsView.swift */; };
-		YT0001000100010001 /* YouTubeStreamExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = YT1001000100010001 /* YouTubeStreamExtractor.swift */; };
-		YT0002000200020002 /* YouTubeKit in Frameworks */ = {isa = PBXBuildFile; productRef = YT2001000100010001 /* YouTubeKit */; };
+		MZ0001000100010001 /* MemorizeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1001000100010001 /* MemorizeModels.swift */; };
+		MZ0002000200020002 /* MemorizeStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1002000200020002 /* MemorizeStorage.swift */; };
+		MZ0003000300030003 /* MemorizeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1003000300030003 /* MemorizeService.swift */; };
+		MZ0004000400040004 /* MemorizeHomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1004000400040004 /* MemorizeHomeViewModel.swift */; };
+		MZ0005000500050005 /* MemorizeCaptureViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1005000500050005 /* MemorizeCaptureViewModel.swift */; };
+		MZ0006000600060006 /* MemorizeHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1006000600060006 /* MemorizeHomeView.swift */; };
+		MZ0007000700070007 /* MemorizeCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1007000700070007 /* MemorizeCaptureView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -202,8 +207,13 @@
 		LT1003000300030003 /* LiveTranslateViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateViewModel.swift; sourceTree = "<group>"; };
 		LT1004000400040004 /* LiveTranslateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateView.swift; sourceTree = "<group>"; };
 		LT1005000500050005 /* LiveTranslateSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateSettingsView.swift; sourceTree = "<group>"; };
-		YT1001000100010001 /* YouTubeStreamExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeStreamExtractor.swift; sourceTree = "<group>"; };
-		YT4001000100010001 /* YouTubeKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = YouTubeKit; path = Packages/YouTubeKit; sourceTree = SOURCE_ROOT; };
+		MZ1001000100010001 /* MemorizeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeModels.swift; sourceTree = "<group>"; };
+		MZ1002000200020002 /* MemorizeStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeStorage.swift; sourceTree = "<group>"; };
+		MZ1003000300030003 /* MemorizeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeService.swift; sourceTree = "<group>"; };
+		MZ1004000400040004 /* MemorizeHomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeHomeViewModel.swift; sourceTree = "<group>"; };
+		MZ1005000500050005 /* MemorizeCaptureViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeCaptureViewModel.swift; sourceTree = "<group>"; };
+		MZ1006000600060006 /* MemorizeHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeHomeView.swift; sourceTree = "<group>"; };
+		MZ1007000700070007 /* MemorizeCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeCaptureView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -220,7 +230,6 @@
 				8FD96B952E6F0F7D00F56AB3 /* MWDATMockDevice in Frameworks */,
 				4B69CCCA2F050E0000D1D025 /* HaishinKit in Frameworks */,
 				4B69CCCC2F050E0000D1D025 /* RTMPHaishinKit in Frameworks */,
-				YT0002000200020002 /* YouTubeKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -273,6 +282,7 @@
 				4BA57A8B2EF8227E002EC214 /* FoodNutritionModel.swift */,
 				414A2AC7E8B825BC1B4DB93F /* QuickVisionModels.swift */,
 				LT1001000100010001 /* LiveTranslateModels.swift */,
+				MZ1001000100010001 /* MemorizeModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -291,7 +301,8 @@
 				C7F490219E64EC144DAF8A8C /* QuickVisionStorage.swift */,
 				LT1002000200020002 /* LiveTranslateService.swift */,
 				LA1002000200020002 /* AIConfigService.swift */,
-				YT1001000100010001 /* YouTubeStreamExtractor.swift */,
+				MZ1002000200020002 /* MemorizeStorage.swift */,
+				MZ1003000300030003 /* MemorizeService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -336,6 +347,8 @@
 				4BA57A9F2EF8227E002EC214 /* VisionRecognitionViewModel.swift */,
 				4BA57AA02EF8227E002EC214 /* WearablesViewModel.swift */,
 				LT1003000300030003 /* LiveTranslateViewModel.swift */,
+				MZ1004000400040004 /* MemorizeHomeViewModel.swift */,
+				MZ1005000500050005 /* MemorizeCaptureViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -395,6 +408,8 @@
 				LT1005000500050005 /* LiveTranslateSettingsView.swift */,
 				LC1001000100010001 /* LiveChatView.swift */,
 				LC1002000200020002 /* LiveChatWebView.swift */,
+				MZ1006000600060006 /* MemorizeHomeView.swift */,
+				MZ1007000700070007 /* MemorizeCaptureView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -414,7 +429,6 @@
 				8F2A14F12DDBCEB900D4E5F2 /* Frameworks */,
 				7A7A7A7A7A7A7A7A7A7A7A7A /* Products */,
 				E699CC962E8150670052C240 /* CameraAccessTests */,
-				YT4001000100010001 /* YouTubeKit */,
 			);
 			sourceTree = "<group>";
 		};
@@ -533,7 +547,6 @@
 				95F7F3332DEF0D91006D1C1A /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */,
 				4B69CCC82F050E0000D1D025 /* XCRemoteSwiftPackageReference "HaishinKit" */,
 				E47E9C962F2D4CA600BCAD53 /* XCRemoteSwiftPackageReference "arcore-ios-sdk" */,
-				YT5001000100010001 /* XCLocalSwiftPackageReference "Packages/YouTubeKit" */,
 			);
 			productRefGroup = 7A7A7A7A7A7A7A7A7A7A7A7A /* Products */;
 			projectDirPath = "";
@@ -645,7 +658,13 @@
 				LC0002000200020002 /* LiveChatWebView.swift in Sources */,
 				LA0001000100010001 /* AIConfig.swift in Sources */,
 				LA0002000200020002 /* AIConfigService.swift in Sources */,
-				YT0001000100010001 /* YouTubeStreamExtractor.swift in Sources */,
+				MZ0001000100010001 /* MemorizeModels.swift in Sources */,
+				MZ0002000200020002 /* MemorizeStorage.swift in Sources */,
+				MZ0003000300030003 /* MemorizeService.swift in Sources */,
+				MZ0004000400040004 /* MemorizeHomeViewModel.swift in Sources */,
+				MZ0005000500050005 /* MemorizeCaptureViewModel.swift in Sources */,
+				MZ0006000600060006 /* MemorizeHomeView.swift in Sources */,
+				MZ0007000700070007 /* MemorizeCaptureView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -964,13 +983,6 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		YT5001000100010001 /* XCLocalSwiftPackageReference "Packages/YouTubeKit" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/YouTubeKit;
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCRemoteSwiftPackageReference section */
 		4B69CCC82F050E0000D1D025 /* XCRemoteSwiftPackageReference "HaishinKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -986,7 +998,7 @@
 			repositoryURL = "https://github.com/facebook/meta-wearables-dat-ios";
 			requirement = {
 				kind = exactVersion;
-				version = 0.4.0;
+				version = 0.3.0;
 			};
 		};
 		E47E9C962F2D4CA600BCAD53 /* XCRemoteSwiftPackageReference "arcore-ios-sdk" */ = {
@@ -1034,10 +1046,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 95F7F3332DEF0D91006D1C1A /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
 			productName = MWDATMockDevice;
-		};
-		YT2001000100010001 /* YouTubeKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = YouTubeKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

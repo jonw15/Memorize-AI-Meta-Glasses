@@ -20,6 +20,10 @@ struct AppColors {
     static let quickVision = Color(hex: "5B86E5")
     static let liveChat = Color(hex: "00C853")
 
+    static let memorizeBackground = Color(hex: "0D1117")
+    static let memorizeCard = Color(hex: "1C2333")
+    static let memorizeAccent = Color(hex: "4A7BF7")
+
     static let cardBackground = Color(.systemBackground)
     static let secondaryBackground = Color(.secondarySystemBackground)
     static let tertiaryBackground = Color(.tertiarySystemBackground)

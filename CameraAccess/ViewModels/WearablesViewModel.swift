@@ -101,24 +101,20 @@ class WearablesViewModel: ObservableObject {
     }
   }
 
-  func connectGlasses() {
+  func connectGlasses() async {
     guard registrationState != .registering else { return }
-    Task {
-      do {
-        try await wearables.startRegistration()
-      } catch {
-        showError(error.localizedDescription)
-      }
+    do {
+      try await wearables.startRegistration()
+    } catch {
+      showError(error.description)
     }
   }
 
-  func disconnectGlasses() {
-    Task {
-      do {
-        try await wearables.startUnregistration()
-      } catch {
-        showError(error.localizedDescription)
-      }
+  func disconnectGlasses() async {
+    do {
+      try await wearables.startUnregistration()
+    } catch {
+      showError(error.description)
     }
   }
 

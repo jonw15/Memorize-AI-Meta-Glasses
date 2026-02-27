@@ -423,3 +423,21 @@
 "livechat.entercode" = "输入房间号";
 "livechat.start" = "开始";
 "livechat.scanning" = "扫码加入";
+
+// MARK: - Memorize 记忆学习
+"tab.memorize" = "记忆";
+"memorize.title" = "记忆学习";
+"memorize.currently_reading" = "正在阅读";
+"memorize.add_to_library" = "添加到书架";
+"memorize.add_new_book" = "添加新书";
+"memorize.continue_session" = "继续学习";
+"memorize.pages_captured" = "页已捕获";
+"memorize.untitled" = "未命名书籍";
+"memorize.unknown_author" = "未知作者";
+"memorize.unknown_book" = "未知书名";
+"memorize.ready_to_capture" = "准备拍摄";
+"memorize.capture_subtitle" = "将眼镜对准书页，点击拍摄按钮";
+"memorize.delay_3s" = "3秒延迟";
+"memorize.session_timeline" = "学习时间线";
+"memorize.view_all" = "查看全部";
+"memorize.done_reading" = "完成阅读";

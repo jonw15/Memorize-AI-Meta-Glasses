@@ -8,8 +8,6 @@ import SwiftUI
 struct MainTabView: View {
     @ObservedObject var streamViewModel: StreamSessionViewModel
     @ObservedObject var wearablesViewModel: WearablesViewModel
-    @Binding var autoLaunchLiveAI: Bool
-    @Binding var restoreProjectContext: ProjectContextSnapshot?
 
     @State private var selectedTab = 0
 
@@ -20,17 +18,10 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // Home - Feature entry
-            AriaHomeView(
-                streamViewModel: streamViewModel,
-                wearablesViewModel: wearablesViewModel,
-                apiKey: apiKey,
-                autoLaunchLiveAI: $autoLaunchLiveAI,
-                restoreProjectContext: $restoreProjectContext
-            )
-                .toolbar(.hidden, for: .tabBar)
+            // Memorize - Book learning
+            MemorizeHomeView(streamViewModel: streamViewModel, wearablesViewModel: wearablesViewModel)
                 .tabItem {
-                    Label("tab.home".localized, systemImage: "house.fill")
+                    Label("tab.memorize".localized, systemImage: "book.fill")
                 }
                 .tag(0)
 
