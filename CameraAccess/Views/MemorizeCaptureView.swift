@@ -18,6 +18,11 @@ struct MemorizeCaptureView: View {
                 // Header
                 headerSection
 
+                // Live camera preview
+                cameraPreview
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.top, AppSpacing.md)
+
                 Spacer()
 
                 // Countdown overlay
@@ -61,7 +66,48 @@ struct MemorizeCaptureView: View {
         .onAppear {
             viewModel.streamViewModel = streamViewModel
             viewModel.loadBook(book)
+            Task {
+                await streamViewModel.handleStartStreaming()
+            }
         }
+    }
+
+    // MARK: - Camera Preview
+
+    private var cameraPreview: some View {
+        ZStack {
+            if let videoFrame = streamViewModel.currentVideoFrame {
+                Image(uiImage: videoFrame)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: 200)
+                    .clipped()
+            } else {
+                VStack(spacing: AppSpacing.sm) {
+                    ProgressView()
+                        .tint(AppColors.memorizeAccent)
+                    Text("memorize.connecting_camera".localized)
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.5))
+                }
+                .frame(height: 200)
+                .frame(maxWidth: .infinity)
+            }
+
+            // Captured photo flash overlay
+            if let captured = viewModel.lastCapturedImage {
+                Image(uiImage: captured)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: 200)
+                    .clipped()
+                    .transition(.opacity)
+            }
+        }
+        .frame(height: 200)
+        .background(Color.black.opacity(0.3))
+        .cornerRadius(AppCornerRadius.md)
+        .animation(.easeInOut(duration: 0.3), value: viewModel.lastCapturedImage != nil)
     }
 
     // MARK: - Header
@@ -171,22 +217,35 @@ struct MemorizeCaptureView: View {
     }
 
     private func pageCard(page: PageCapture) -> some View {
-        VStack(spacing: 6) {
-            // Page number
-            Text("P\(page.pageNumber)")
-                .font(AppTypography.headline)
-                .foregroundColor(.white)
+        ZStack {
+            // Thumbnail background
+            if let data = page.thumbnailData, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 70, height: 90)
+                    .clipped()
 
-            // Timestamp
-            Text(page.formattedTime)
-                .font(AppTypography.caption)
-                .foregroundColor(Color.white.opacity(0.5))
+                // Dark overlay for text readability
+                Color.black.opacity(0.4)
+            } else {
+                AppColors.memorizeCard
+            }
 
-            // Status icon
-            statusIcon(for: page.status)
+            // Labels overlay
+            VStack(spacing: 4) {
+                Spacer()
+
+                Text("P\(page.pageNumber)")
+                    .font(AppTypography.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+
+                statusIcon(for: page.status)
+            }
+            .padding(.bottom, 6)
         }
         .frame(width: 70, height: 90)
-        .background(AppColors.memorizeCard)
         .cornerRadius(AppCornerRadius.sm)
     }
 

@@ -6,6 +6,7 @@
 import Foundation
 import UIKit
 import AVFoundation
+import AudioToolbox
 import Combine
 
 @MainActor
@@ -15,6 +16,7 @@ class MemorizeCaptureViewModel: ObservableObject {
     @Published var countdownValue: Int = 3
     @Published var currentBook: Book?
     @Published var isProcessing: Bool = false
+    @Published var lastCapturedImage: UIImage?
 
     private let storage = MemorizeStorage.shared
     private let memorizeService = MemorizeService()
@@ -59,6 +61,7 @@ class MemorizeCaptureViewModel: ObservableObject {
             }
 
             isCountingDown = false
+            AudioServicesPlaySystemSound(1108)
             captureAndProcess()
         }
     }
@@ -107,6 +110,13 @@ class MemorizeCaptureViewModel: ObservableObject {
 
     private func processCapture(image: UIImage, pageIndex: Int) async {
         guard pageIndex < pages.count else { return }
+
+        // Show capture flash overlay
+        lastCapturedImage = image
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(1.5 * Double(NSEC_PER_SEC)))
+            lastCapturedImage = nil
+        }
 
         // Save thumbnail
         let thumbnailData = image.jpegData(compressionQuality: 0.3)
