@@ -217,10 +217,11 @@ struct LiveAIView: View {
                     selectedBottomTab = .videos
                 }
                 // Pre-extract stream URLs so playback is instant when user taps a video.
-                if LiveAIConfig.useNativeYouTubePlayer && LiveAIConfig.isPreDecryptVideo {
-                    let ids = videos.map { $0.videoId }
-                    Task { await YouTubeStreamExtractor.shared.preExtract(videoIds: ids) }
-                }
+                // NOTE: YouTubeKit dependency not installed — native player disabled
+                // if LiveAIConfig.useNativeYouTubePlayer && LiveAIConfig.isPreDecryptVideo {
+                //     let ids = videos.map { $0.videoId }
+                //     Task { await YouTubeStreamExtractor.shared.preExtract(videoIds: ids) }
+                // }
                 viewModel.shouldAutoOpenVideos = false
             } else {
                 hasUnreadVideosContent = false
@@ -1468,12 +1469,8 @@ private struct FullscreenYouTubePlayerView: View {
                 isLoading = false
                 return
             }
-            if let url = await YouTubeStreamExtractor.shared.streamURL(videoId: video.videoId) {
-                streamURL = url
-            } else {
-                print("⚠️ [FullscreenYT] Stream extraction failed, falling back to WKWebView")
-                useWebViewFallback = true
-            }
+            // YouTubeKit dependency not installed — always fall back to WebView
+            useWebViewFallback = true
             isLoading = false
         }
         .onChange(of: useWebViewFallback) { failed in

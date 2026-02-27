@@ -18,6 +18,8 @@ import SwiftUI
 
 struct HomeScreenView: View {
   @ObservedObject var viewModel: WearablesViewModel
+  var forceProjectIntroOnly: Bool = false
+  var onNewProject: ((ProjectContextSnapshot) -> Void)? = nil
   @State private var showConnectionSuccess = false
 
   var body: some View {
@@ -84,7 +86,11 @@ struct HomeScreenView: View {
             .padding(.horizontal, AppSpacing.lg)
 
           Button {
-            Task { await viewModel.connectGlasses() }
+            if forceProjectIntroOnly {
+              onNewProject?(ProjectContextSnapshot(instructions: [], tools: [], parts: [], videos: []))
+            } else {
+              Task { await viewModel.connectGlasses() }
+            }
           } label: {
             HStack(spacing: AppSpacing.sm) {
               if viewModel.registrationState == .registering {
