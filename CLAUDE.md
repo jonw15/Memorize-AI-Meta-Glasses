@@ -47,7 +47,7 @@ Both platforms follow **MVVM** with matching layer structures:
   - `LiveChatView` + `LiveChatWebView` — WebRTC video chat via WKWebView
   - **Views/Components/**: `CardView`, `CircleButton`, `CustomButton`, `MediaPickerView`, `StatusText`, `MessageBubble` — shared UI components
   - **Views/MockDeviceKit/**: `MockDeviceKitView`, `MockDeviceCardView`, `MockDeviceKitButton` (DEBUG only, currently commented out in `AriaApp.swift`)
-- **Services/**: Each feature has a dedicated service — `GeminiLiveService` (Gemini Live real-time voice API with tool calling), `VisionAPIService`, `VisionAPIConfig` (centralizes Vision API config from `APIProviderManager`), `LeanEatService`, `QuickVisionService`, `TTSService`, `RTMPStreamingService`, `LiveTranslateService`, `ConversationStorage`, `QuickVisionStorage`
+- **Services/**: Each feature has a dedicated service — `GeminiLiveService` (Gemini Live real-time voice API with tool calling), `VisionAPIService`, `VisionAPIConfig` (centralizes Vision API config from `APIProviderManager`), `LeanEatService`, `QuickVisionService`, `TTSService`, `RTMPStreamingService`, `LiveTranslateService`, `YouTubeStreamExtractor` (extracts direct stream URLs via YouTubeKit for native AVPlayer playback), `ConversationStorage`, `QuickVisionStorage`
 - **Managers/**: `APIProviderManager` (switch between Google AI Studio/OpenRouter, also exposes `staticLiveAIAPIKey`), `APIKeyManager` (Keychain storage), `LanguageManager` (zh-Hans/en), `LiveAIModeManager`, `QuickVisionModeManager`, `LiveAIManager`
 - **Models/**: Data models for each feature domain
 - **Intents/**: `QuickVisionIntent` (+ 6 mode variants: Health, Blind, Reading, Translate, Encyclopedia, Custom), `LiveAIIntent`, `StopLiveAIIntent`, and `QuickVisionManager` singleton (orchestrates Siri-triggered Quick Vision flow)
@@ -70,7 +70,7 @@ Both platforms follow **MVVM** with matching layer structures:
 - **Key dependencies**: `mwdat-core` + `mwdat-camera` (DAT SDK), `coil-compose` (image loading), `kotlinx-collections-immutable`, `exifinterface`, `zxing` (QR codes). Room database is declared in `libs.versions.toml` but not yet used
 
 ### Key SDK Integration
-- **Meta DAT SDK v0.3.0**: `MWDATCore` + `MWDATCamera` (iOS) / `com.meta.wearable.dat.core` + `com.meta.wearable.dat.camera` (Android) — handles device discovery, pairing, camera streaming, photo capture
+- **Meta DAT SDK v0.4.0**: `MWDATCore` + `MWDATCamera` (iOS) / `com.meta.wearable.dat.core` + `com.meta.wearable.dat.camera` (Android) — handles device discovery, pairing, camera streaming, photo capture. v0.4.0 changed registration APIs to async/await and reduced camera frame rate from 24fps to 12fps
 - Device must be in developer mode (Meta AI app → Settings → tap version 5 times)
 - `WearablesViewModel` is the central hub for device state across both platforms
 - Mock device support (DEBUG only): `MockDeviceKitViewModel` / `MockDeviceViewModel` on iOS, `mwdat-mockdevice` on Android (currently commented out)
@@ -80,9 +80,9 @@ Both platforms follow **MVVM** with matching layer structures:
 | Feature                  | Model                                              | Protocol        | Platform      |
 |--------------------------|----------------------------------------------------|-----------------|---------------|
 | Live AI                  | `gemini-2.5-flash-native-audio-preview-12-2025`    | WebSocket       | iOS + Android |
-| Vision/Image Recognition | `gemini-2.5-flash`                                 | REST            | iOS + Android |
-| Quick Vision             | `gemini-2.5-flash` (via VisionAPIService)          | REST            | iOS + Android |
-| LeanEat (Nutrition)      | `gemini-2.5-flash`                                 | REST            | iOS + Android |
+| Vision/Image Recognition | `gemini-3-flash-preview`                           | REST            | iOS + Android |
+| Quick Vision             | `gemini-3-flash-preview` (via VisionAPIService)    | REST            | iOS + Android |
+| LeanEat (Nutrition)      | `gemini-3-flash-preview`                           | REST            | iOS + Android |
 | Live Translate           | `gemini-2.5-flash-native-audio-preview-12-2025`    | WebSocket       | iOS only      |
 | System TTS               | iOS `AVSpeechSynthesizer` / Android `TextToSpeech` | Local           | iOS + Android |
 | RTMP Streaming           | HaishinKit                                         | RTMP            | iOS + Android |
@@ -105,7 +105,7 @@ All Gemini features share a single auto-fetched API key from `AIConfigService`.
   - `apiApp` / `API_APP` — server base URL (the part before `/config/get`)
   - `configIdAILive` / `CONFIG_ID_AI_LIVE` — the config ID sent as `{ "id": "..." }` in the POST body
   - `configIV` / `CONFIG_IV` — pre-shared AES IV (Base64), corresponds to `configKey.key` in the C# reference
-- **VisionAPIService**: REST calls to Google AI Studio or OpenRouter (OpenAI-compatible `/v1/chat/completions` endpoint) using `gemini-2.5-flash` or configurable models
+- **VisionAPIService**: REST calls to Google AI Studio or OpenRouter (OpenAI-compatible `/v1/chat/completions` endpoint) using `gemini-3-flash-preview` or configurable models
 - **VisionAPIConfig** (iOS): Static struct centralizing Vision API config — dynamically pulls `apiKey`, `baseURL`, `model` from `APIProviderManager`, defines provider-specific constants and `headers(with:)` helper
 
 ### API Configuration
@@ -114,14 +114,14 @@ All Gemini features share a single auto-fetched API key from `AIConfigService`.
 - The Live AI WebSocket URL and model have hardcoded fallback defaults in `APIProviderManager` (standard Gemini endpoint and model)
 - Provider selection, model settings, and API key management are all hidden from end users in Settings
 - The three configurable server constants live in `AIConfig.swift` (iOS) / `AIConfig.kt` (Android) — see `AIConfigService` above for details
-- `LiveAIConfig` (in `AIConfig.swift`) holds tunable Live AI parameters like `imageSendIntervalSeconds` (default 3.0s)
+- `LiveAIConfig` (in `AIConfig.swift`) holds tunable Live AI parameters like `imageSendIntervalSeconds` (default 3.0s), `useNativeYouTubePlayer` (default true), `isPreDecryptVideo` (pre-extract all YouTube streams on results), `isTestYouTubeWebviewFallback` (force WKWebView fallback for testing)
 
 ### Gemini Live Tool Calls (iOS)
 
 `GeminiLiveService` registers two function declarations in the WebSocket setup message:
 
-- **`multiple_step_instructions`** — For multi-step DIY tasks. Returns `problem`, `brand`, `model`, `tools`, `parts`, `instructions` arrays. The tool response uses `isSilent: true` to prevent Gemini from narrating the steps (the app reads them via UI). Callback: `onMultipleStepInstructions`
-- **`youtube`** — For YouTube search requests. Takes optional `search_string`. Makes a POST to `https://app.ariaspark.com/ai/json/youtube/search` with `{ query, maxResults: 4 }`. Returns `YouTubeVideo` objects (videoId, url, title, thumbnail). Callback: `onYouTubeResults`
+- **`multiple_step_instructions`** — For multi-step DIY tasks. Returns `problem`, `brand`, `model`, `tools`, `parts`, `instructions` arrays. The tool response uses `isSilent: true` to prevent Gemini from narrating the steps (the app reads them via UI). Callback: `onMultipleStepInstructions`. Also auto-triggers a YouTube search using the problem/brand/model fields to populate the Videos tab (with `autoOpenVideos: false` so it doesn't switch tabs)
+- **`youtube`** — For YouTube search requests. Takes optional `search_string`. Makes a POST to `https://app.ariaspark.com/ai/json/youtube/search` with `{ query, maxResults: 4 }`. Returns `YouTubeVideo` objects (videoId, url, title, thumbnail). Callback: `onYouTubeResults` (with `autoOpenVideos: true` to auto-switch to Videos tab)
 
 Tool call dispatch is in `dispatchToolCall()` which parses args from either dict or JSON string format.
 
@@ -131,16 +131,24 @@ Tool call dispatch is in `dispatchToolCall()` which parses args from either dict
 
 - **Bottom tabs**: `chatLog`, `videos`, `shop`, `instructions`, `collab` — defined as `BottomTab` enum
 - **Tab compatibility**: `chatLog`, `videos`, `shop`, `instructions` are "Live AI compatible" — switching between them preserves audio/recording state. `collab` is non-compatible — entering it suspends Live AI, leaving it resumes
-- **Camera stream**: `StreamSessionViewModel` provides glasses camera frames at 10fps via a `Timer`; `OmniRealtimeViewModel` sends them to Gemini at a configurable interval (default 3s, togglable to 1s via top-right button)
-- **YouTube overlay**: Fullscreen YouTube player via `.fullScreenCover`. On open: pauses camera stream (frees Bluetooth bandwidth for A2DP), calls `muteForOverlayPlayback()`. On close: resumes camera, calls `unmuteAfterOverlayPlayback()`, restarts recording
-- **YouTube videos panel**: Shows `YouTubeVideoItem` cards from Gemini tool calls; auto-switches to Videos tab when results arrive. Each card opens `FullscreenYouTubePlayerView`
+- **Camera stream**: `StreamSessionViewModel` provides glasses camera frames at 12fps via a `Timer`; `OmniRealtimeViewModel` sends them to Gemini at a configurable interval (default 3s, togglable to 1s via top-right button)
+- **YouTube overlay**: Fullscreen YouTube player via `.fullScreenCover`. Native AVPlayer mode (default): uses `YouTubeStreamExtractor` to get direct stream URLs, plays via `AVPlayerViewController` — camera stream and Live AI conversation continue simultaneously. WKWebView fallback: pauses camera stream (frees Bluetooth bandwidth for A2DP), calls `muteForOverlayPlayback()`. On close: resumes recording
+- **YouTube videos panel**: Shows `YouTubeVideoItem` cards from Gemini tool calls; auto-switches to Videos tab on direct YouTube search, populates silently on `multiple_step_instructions`. Each card opens `FullscreenYouTubePlayerView`
 - **Instructions panel**: Populated from `multiple_step_instructions` tool call; checkable steps
-- **Shop panel**: Auto-populated from tool call `tools`/`parts` arrays with Amazon search links
+- **Shop panel**: Auto-populated from tool call `tools`/`parts` arrays with Amazon search links. Shows "Tell me a bit more about your project" prompt when empty
 - **WKWebViewWarmer**: Singleton pre-warms WebKit sub-processes on `onAppear` so YouTube fullscreen opens instantly
 
 ### Live AI Audio Session Management (iOS)
 
-Three distinct audio states managed across `GeminiLiveService` and `LiveAIView`:
+Two playback paths with different audio behaviors:
+
+**Native AVPlayer (default, `LiveAIConfig.useNativeYouTubePlayer = true`):**
+- AVPlayer shares the `.playAndRecord` + `.voiceChat` session with `GeminiLiveService`
+- Camera stream, recording, and Gemini playback all continue while YouTube plays
+- User can talk to Live AI while watching a video
+- No audio session switching needed — both engines coexist under Voice Processing I/O
+
+**WKWebView fallback (used when native extraction fails, or forced via `isTestYouTubeWebviewFallback`):**
 
 | State | Audio Session | Engines | Use Case |
 |---|---|---|---|
@@ -157,7 +165,7 @@ Key methods on `OmniRealtimeViewModel`:
 - `muteForOverlayVideo()` / `unmuteAfterOverlayVideo()` — Wraps `GeminiLiveService` calls + stops/starts image send timer
 - `suspendAudioForEmbeddedVideo()` / `resumeAudioAfterEmbeddedVideo()` — Full pause for non-compatible tabs
 
-> **Known limitation**: YouTube audio plays through the Meta glasses via Bluetooth A2DP, but **only after stopping the glasses camera stream** to free Bluetooth bandwidth. iOS Voice Processing I/O (`.voiceChat` mode) takes exclusive control of the audio hardware route — WKWebView's WebContent process cannot negotiate audio output while VPIO holds it (FigXPC err=-16155). The current workaround is: on YouTube overlay open, stop the camera stream (`streamViewModel.stopSession()`), switch to `.playback/.default` (releases VPIO), and let WKWebView play over A2DP. On overlay close, restore `.voiceChat` mode and restart the camera stream. This means **Live AI cannot see through the glasses while YouTube is playing**. Simultaneous camera stream + YouTube audio over Bluetooth remains unsolved.
+> **Known limitation (WKWebView path only)**: YouTube audio plays through the Meta glasses via Bluetooth A2DP, but **only after stopping the glasses camera stream** to free Bluetooth bandwidth. iOS Voice Processing I/O (`.voiceChat` mode) takes exclusive control of the audio hardware route — WKWebView's WebContent process cannot negotiate audio output while VPIO holds it (FigXPC err=-16155). The native AVPlayer path solves this by sharing the `.playAndRecord` session.
 
 ### Live Chat (WebRTC Video Calls)
 - Embeds a WebView loading `https://app.ariaspark.com/webrtc/?a=<room_code>&autostart=true`
@@ -171,15 +179,21 @@ Key methods on `OmniRealtimeViewModel`:
 
 Voice-triggered YouTube search and playback during Live AI conversations:
 
-1. User says "search YouTube for..." → Gemini calls the `youtube` tool
+1. User says "search YouTube for..." → Gemini calls the `youtube` tool (or `multiple_step_instructions` auto-triggers a search)
 2. `GeminiLiveService.searchYouTube()` POSTs to `https://app.ariaspark.com/ai/json/youtube/search`
-3. Results arrive as `[YouTubeVideo]` → mapped to `OmniRealtimeViewModel.YouTubeVideoItem` → `LiveAIView` auto-switches to Videos tab
-4. Tapping a video card opens `FullscreenYouTubePlayerView` which embeds `YouTubeCardWebPreview` (WKWebView loading `https://app.ariaspark.com/yt/?v=<videoId>`)
+3. Results arrive as `[YouTubeVideo]` → mapped to `OmniRealtimeViewModel.YouTubeVideoItem` → `LiveAIView` auto-switches to Videos tab (direct search) or populates silently (from instructions)
+4. Tapping a video card opens `FullscreenYouTubePlayerView`:
+   - **Native path (default):** `YouTubeStreamExtractor` extracts a direct stream URL via YouTubeKit → plays in `NativeYouTubePlayer` (`AVPlayerViewController`). Camera stream and Live AI conversation continue simultaneously
+   - **WKWebView fallback:** If native extraction fails, falls back to `YouTubeCardWebPreview` (WKWebView loading `https://app.ariaspark.com/yt/?v=<videoId>`). Camera stream pauses to free Bluetooth bandwidth
 
 Key components in `LiveAIView.swift`:
+- `YouTubeStreamExtractor` — Actor-based service wrapping YouTubeKit. Extracts direct stream URLs, caches results, selects lowest-resolution natively-playable streams with audio+video. Supports pre-extraction of multiple videos
+- `NativeYouTubePlayer` — `UIViewControllerRepresentable` wrapping `AVPlayerViewController` with error observation and fallback signaling
 - `YouTubeCardWebPreview` — `UIViewRepresentable` wrapping WKWebView with inline playback, persistent cookies (avoids YouTube error 150/153), silent audio keepalive script, cleanup on dismantle
-- `FullscreenYouTubePlayerView` — `.fullScreenCover` with close button overlay
+- `FullscreenYouTubePlayerView` — `.fullScreenCover` with thumbnail loading state, native/webview branching, and close button overlay
 - `WKWebViewWarmer` — Singleton that pre-spawns WebKit sub-processes (GPU, WebContent, Networking) on `LiveAIView.onAppear` so the first real load is instant
+
+**Dependencies:** Forked [YouTubeKit](Packages/YouTubeKit/) package included locally in the repo for stream URL extraction
 
 ## Localization
 
@@ -201,7 +215,7 @@ Strings use key-based localization (`"key".localized` on iOS). When adding user-
 - `.gitignore` blocks `*APIKey*.swift` and `*Secret*.swift` files — API keys must not be committed
 - The debug menu (`DebugMenuView` + `MockDeviceKitView`) is currently commented out in `AriaApp.swift`
 - OpenRouter default model is `google/gemini-3-flash-preview`
-- YouTube audio requires pausing the glasses camera stream to free Bluetooth bandwidth for A2DP — see [audio session management](#live-ai-audio-session-management-ios)
+- YouTube native AVPlayer allows simultaneous Live AI conversation + video playback. WKWebView fallback still requires pausing the camera stream — see [audio session management](#live-ai-audio-session-management-ios)
 
 ## Adding/Removing Swift Files to the Xcode Project
 
