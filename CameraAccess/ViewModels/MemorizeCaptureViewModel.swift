@@ -153,7 +153,10 @@ class MemorizeCaptureViewModel: ObservableObject {
             saveProgress()
             print("✅ [Memorize] Page \(pageIndex + 1) processed successfully")
         } catch {
-            pages[pageIndex].status = .failed
+            let failedPageId = pages[pageIndex].id
+            pages.remove(at: pageIndex)
+            storage.deleteThumbnail(for: failedPageId)
+            saveProgress()
             print("❌ [Memorize] OCR failed: \(error.localizedDescription)")
         }
 
