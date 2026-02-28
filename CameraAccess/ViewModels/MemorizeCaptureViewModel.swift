@@ -26,6 +26,7 @@ class MemorizeCaptureViewModel: ObservableObject {
     private let memorizeService = MemorizeService()
     private let synthesizer = AVSpeechSynthesizer()
     private var countdownTask: Task<Void, Never>?
+    private var processingProgressTasks: [UUID: Task<Void, Never>] = [:]
     private var cancellables = Set<AnyCancellable>()
 
     // Reference to stream view model for photo capture
@@ -93,6 +94,7 @@ class MemorizeCaptureViewModel: ObservableObject {
         let pageNumber = (pages.map(\.pageNumber).max() ?? 0) + 1
         let page = PageCapture(pageNumber: pageNumber, status: .capturing)
         pages.append(page)
+        updateProgress(for: page.id, to: 0.08)
         saveProgress()
 
         // Capture photo from glasses
@@ -117,6 +119,8 @@ class MemorizeCaptureViewModel: ObservableObject {
 
     private func processCapture(image: UIImage, pageIndex: Int) async {
         guard pageIndex < pages.count else { return }
+        let pageId = pages[pageIndex].id
+        updateProgress(for: pageId, to: 0.18)
 
         // Show capture flash overlay
         lastCapturedImage = image
@@ -135,12 +139,15 @@ class MemorizeCaptureViewModel: ObservableObject {
             storage.saveThumbnail(thumbnailData, for: pages[pageIndex].id)
         }
         pages[pageIndex].status = .processing
+        updateProgress(for: pageId, to: 0.35)
+        startTimedProgress(for: pageId)
         saveProgress()
 
         do {
             // OCR - extract text
             let text = try await memorizeService.extractText(from: image)
             pages[pageIndex].extractedText = text
+            updateProgress(for: pageId, to: 0.85)
             pages[pageIndex].status = .completed
 
             // On first page, detect book info
@@ -150,9 +157,13 @@ class MemorizeCaptureViewModel: ObservableObject {
                 currentBook?.author = bookInfo.author
             }
 
+            updateProgress(for: pageId, to: 1.0)
+            pages[pageIndex].processingProgress = nil
+            stopTimedProgress(for: pageId)
             saveProgress()
             print("✅ [Memorize] Page \(pageIndex + 1) processed successfully")
         } catch {
+            stopTimedProgress(for: pageId)
             let failedPageId = pages[pageIndex].id
             pages.remove(at: pageIndex)
             storage.deleteThumbnail(for: failedPageId)
@@ -221,9 +232,40 @@ class MemorizeCaptureViewModel: ObservableObject {
         guard !isProcessing else { return }
         guard page.status != .processing && page.status != .capturing else { return }
 
+        stopTimedProgress(for: page.id)
         pages.removeAll { $0.id == page.id }
         storage.deleteThumbnail(for: page.id)
         saveProgress()
+    }
+
+    private func updateProgress(for pageId: UUID, to newValue: Double) {
+        guard let index = pages.firstIndex(where: { $0.id == pageId }) else { return }
+        let clamped = min(max(newValue, 0), 1)
+        pages[index].processingProgress = max(pages[index].processingProgress ?? 0, clamped)
+    }
+
+    private func startTimedProgress(for pageId: UUID) {
+        stopTimedProgress(for: pageId)
+        processingProgressTasks[pageId] = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let startTime = Date()
+
+            while !Task.isCancelled {
+                guard let index = pages.firstIndex(where: { $0.id == pageId }) else { break }
+                guard pages[index].status == .processing else { break }
+
+                let elapsed = Date().timeIntervalSince(startTime)
+                // Increase from 35% to 80% over roughly 60 seconds based on real elapsed processing time.
+                let timedProgress = 0.35 + min(elapsed / 60.0, 1.0) * 0.45
+                updateProgress(for: pageId, to: timedProgress)
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+        }
+    }
+
+    private func stopTimedProgress(for pageId: UUID) {
+        processingProgressTasks[pageId]?.cancel()
+        processingProgressTasks[pageId] = nil
     }
 
     // MARK: - Save to Photo Library
@@ -251,5 +293,8 @@ class MemorizeCaptureViewModel: ObservableObject {
 
     deinit {
         countdownTask?.cancel()
+        for task in processingProgressTasks.values {
+            task.cancel()
+        }
     }
 }

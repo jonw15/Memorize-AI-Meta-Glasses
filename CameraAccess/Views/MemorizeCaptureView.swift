@@ -15,6 +15,7 @@ struct MemorizeCaptureView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedThumbnail: TimelineThumbnailPreview?
     @State private var showVoiceSummary = false
+    private let processingAccent = Color(red: 0.34, green: 0.86, blue: 1.0)
 
     private struct TimelineThumbnailPreview: Identifiable {
         let id = UUID()
@@ -356,6 +357,18 @@ struct MemorizeCaptureView: View {
             }
             .padding(4)
 
+            if page.status == .processing {
+                VStack {
+                    Spacer()
+                    ProcessingBarIndicator(
+                        accent: processingAccent,
+                        progress: page.processingProgress ?? 0.35
+                    )
+                        .padding(.horizontal, 6)
+                        .padding(.bottom, 4)
+                }
+            }
+
             // Labels overlay
             VStack(spacing: 4) {
                 Spacer()
@@ -386,7 +399,7 @@ struct MemorizeCaptureView: View {
                 .font(.system(size: 14))
         case .processing:
             ProgressView()
-                .tint(AppColors.memorizeAccent)
+                .tint(processingAccent)
                 .scaleEffect(0.7)
         case .capturing:
             Image(systemName: "camera.fill")
@@ -478,6 +491,33 @@ struct MemorizeCaptureView: View {
                 .cornerRadius(AppCornerRadius.md)
         }
         .padding(.horizontal, AppSpacing.md)
+    }
+}
+
+private struct ProcessingBarIndicator: View {
+    let accent: Color
+    let progress: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.white.opacity(0.2))
+                    .frame(height: 5)
+
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [accent.opacity(0.75), accent, accent.opacity(0.75)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: geo.size.width * min(max(progress, 0), 1), height: 5)
+            }
+            .animation(.easeInOut(duration: 0.2), value: progress)
+        }
+        .frame(height: 5)
     }
 }
 

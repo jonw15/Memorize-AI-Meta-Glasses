@@ -23,19 +23,27 @@ struct PageCapture: Identifiable, Codable {
     var extractedText: String
     var status: PageCaptureStatus
     var thumbnailData: Data?  // runtime only, not persisted in JSON
+    var processingProgress: Double? // runtime only, not persisted in JSON
 
     // Exclude thumbnailData from Codable — stored as files instead
     enum CodingKeys: String, CodingKey {
         case id, pageNumber, timestamp, extractedText, status
     }
 
-    init(pageNumber: Int, extractedText: String = "", status: PageCaptureStatus = .capturing, thumbnailData: Data? = nil) {
+    init(
+        pageNumber: Int,
+        extractedText: String = "",
+        status: PageCaptureStatus = .capturing,
+        thumbnailData: Data? = nil,
+        processingProgress: Double? = nil
+    ) {
         self.id = UUID()
         self.pageNumber = pageNumber
         self.timestamp = Date()
         self.extractedText = extractedText
         self.status = status
         self.thumbnailData = thumbnailData
+        self.processingProgress = processingProgress
     }
 
     var formattedTime: String {

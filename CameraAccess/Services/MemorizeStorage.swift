@@ -77,7 +77,7 @@ class MemorizeStorage {
             }
         }
 
-        var updatedBooks = books.filter { $0.id != id }
+        let updatedBooks = books.filter { $0.id != id }
 
         if let encoded = try? JSONEncoder().encode(updatedBooks) {
             userDefaults.set(encoded, forKey: booksKey)
