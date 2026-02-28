@@ -4,6 +4,8 @@
  */
 
 import SwiftUI
+import Speech
+import AVFoundation
 
 struct MemorizeCaptureView: View {
     @ObservedObject var streamViewModel: StreamSessionViewModel
@@ -12,6 +14,7 @@ struct MemorizeCaptureView: View {
     @StateObject private var viewModel = MemorizeCaptureViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var selectedThumbnail: TimelineThumbnailPreview?
+    @State private var showVoiceSummary = false
 
     private struct TimelineThumbnailPreview: Identifiable {
         let id = UUID()
@@ -52,9 +55,13 @@ struct MemorizeCaptureView: View {
                     timelineSection
                 }
 
-                // Pop Quiz button
-                if viewModel.pages.contains(where: { $0.status == .completed }) {
+                // Learning checks
+                if hasCompletedPages {
                     popQuizButton
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.bottom, AppSpacing.sm)
+
+                    voiceSummaryButton
                         .padding(.horizontal, AppSpacing.md)
                         .padding(.bottom, AppSpacing.sm)
                 }
@@ -80,6 +87,12 @@ struct MemorizeCaptureView: View {
         }
         .fullScreenCover(isPresented: $viewModel.showQuiz) {
             MemorizeQuizView(questions: $viewModel.quizQuestions)
+        }
+        .fullScreenCover(isPresented: $showVoiceSummary) {
+            MemorizeVoiceSummaryView(
+                pages: viewModel.pages.filter { $0.status == .completed },
+                bookTitle: displayBookTitle
+            )
         }
         .fullScreenCover(item: $selectedThumbnail) { preview in
             GeometryReader { geo in
@@ -200,6 +213,10 @@ struct MemorizeCaptureView: View {
     private var displayBookTitle: String {
         let title = viewModel.currentBook?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return title.isEmpty ? "memorize.unknown_book".localized : title
+    }
+
+    private var hasCompletedPages: Bool {
+        viewModel.pages.contains(where: { $0.status == .completed })
     }
 
     // MARK: - Countdown Overlay
@@ -418,6 +435,33 @@ struct MemorizeCaptureView: View {
         .disabled(viewModel.isGeneratingQuiz)
     }
 
+    private var voiceSummaryButton: some View {
+        Button {
+            showVoiceSummary = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 16, weight: .semibold))
+
+                Text("memorize.voice_summary".localized)
+                    .font(AppTypography.headline)
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                LinearGradient(
+                    colors: [Color(red: 0.33, green: 0.56, blue: 1.0), Color(red: 0.26, green: 0.47, blue: 0.95)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(AppCornerRadius.md)
+        }
+        .disabled(viewModel.isGeneratingQuiz)
+        .opacity(viewModel.isGeneratingQuiz ? 0.5 : 1.0)
+    }
+
     // MARK: - Done Button
 
     private var doneButton: some View {
@@ -434,5 +478,335 @@ struct MemorizeCaptureView: View {
                 .cornerRadius(AppCornerRadius.md)
         }
         .padding(.horizontal, AppSpacing.md)
+    }
+}
+
+@MainActor
+private final class VoiceSummarySpeechRecognizer: NSObject, ObservableObject {
+    @Published var transcript: String = ""
+    @Published var isListening: Bool = false
+    @Published var speechPermissionDenied: Bool = false
+    @Published var micPermissionDenied: Bool = false
+
+    private let audioEngine = AVAudioEngine()
+    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: Locale.preferredLanguages.first ?? "en-US"))
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTask: SFSpeechRecognitionTask?
+
+    func requestPermissionsIfNeeded() async {
+        let speechAuthorized: Bool = await withCheckedContinuation { continuation in
+            let status = SFSpeechRecognizer.authorizationStatus()
+            if status == .authorized {
+                continuation.resume(returning: true)
+            } else {
+                SFSpeechRecognizer.requestAuthorization { newStatus in
+                    continuation.resume(returning: newStatus == .authorized)
+                }
+            }
+        }
+        speechPermissionDenied = !speechAuthorized
+
+        let micAuthorized: Bool = await withCheckedContinuation { continuation in
+            if #available(iOS 17.0, *) {
+                AVAudioApplication.requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            } else {
+                AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            }
+        }
+        micPermissionDenied = !micAuthorized
+    }
+
+    func startListening() throws {
+        guard !speechPermissionDenied, !micPermissionDenied else { return }
+        guard !isListening else { return }
+
+        transcript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+
+        let audioSession = AVAudioSession.sharedInstance()
+        try audioSession.setCategory(.record, mode: .measurement, options: [.duckOthers, .allowBluetoothHFP])
+        try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        recognitionRequest = request
+
+        guard let speechRecognizer, speechRecognizer.isAvailable else {
+            throw NSError(
+                domain: "VoiceSummarySpeechRecognizer",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Speech recognizer is unavailable"]
+            )
+        }
+
+        let inputNode = audioEngine.inputNode
+        inputNode.removeTap(onBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputNode.outputFormat(forBus: 0)) { [weak self] buffer, _ in
+            self?.recognitionRequest?.append(buffer)
+        }
+
+        audioEngine.prepare()
+        try audioEngine.start()
+        isListening = true
+
+        recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
+            guard let self else { return }
+            if let result {
+                self.transcript = result.bestTranscription.formattedString
+            }
+            if error != nil || (result?.isFinal ?? false) {
+                self.stopListening()
+            }
+        }
+    }
+
+    func stopListening() {
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
+        audioEngine.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        isListening = false
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+}
+
+private struct MemorizeVoiceSummaryView: View {
+    let pages: [PageCapture]
+    let bookTitle: String
+
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var speechRecognizer = VoiceSummarySpeechRecognizer()
+    @State private var isGrading: Bool = false
+    @State private var gradeResult: MemorizeService.VoiceSummaryEvaluation?
+    @State private var errorMessage: String?
+
+    private let memorizeService = MemorizeService()
+    private let voiceAccent = Color(red: 0.33, green: 0.56, blue: 1.0)
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: AppSpacing.md) {
+                Text("memorize.voice_summary_prompt".localized)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(Color.white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, AppSpacing.md)
+
+                transcriptCard
+                    .padding(.horizontal, AppSpacing.md)
+
+                microphoneButton
+
+                if let errorMessage, !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .font(AppTypography.caption)
+                        .foregroundColor(.red.opacity(0.9))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, AppSpacing.md)
+                }
+
+                if let gradeResult {
+                    gradeCard(gradeResult)
+                        .padding(.horizontal, AppSpacing.md)
+                }
+
+                Spacer()
+
+                doneButton
+                    .padding(.horizontal, AppSpacing.md)
+
+                Button {
+                    speechRecognizer.stopListening()
+                    dismiss()
+                } label: {
+                    Text("memorize.pause_cancel".localized)
+                        .font(AppTypography.body)
+                        .foregroundColor(Color.white.opacity(0.65))
+                }
+                .padding(.bottom, AppSpacing.lg)
+            }
+            .background(AppColors.memorizeBackground.ignoresSafeArea())
+                    .navigationTitle("memorize.voice_summary".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        speechRecognizer.stopListening()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .task {
+            await speechRecognizer.requestPermissionsIfNeeded()
+            if speechRecognizer.speechPermissionDenied || speechRecognizer.micPermissionDenied {
+                errorMessage = "memorize.voice_permission_required".localized
+            }
+        }
+        .onDisappear {
+            speechRecognizer.stopListening()
+        }
+    }
+
+    private var transcriptCard: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+            Text(bookTitle)
+                .font(AppTypography.caption)
+                .foregroundColor(Color.white.opacity(0.55))
+                .lineLimit(1)
+
+            ScrollView {
+                Text(speechRecognizer.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                     ? "memorize.voice_summary_placeholder".localized
+                     : speechRecognizer.transcript)
+                    .font(AppTypography.body)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(AppSpacing.md)
+            }
+            .frame(minHeight: 140, maxHeight: 200)
+            .background(AppColors.memorizeCard)
+            .cornerRadius(AppCornerRadius.md)
+        }
+    }
+
+    private var microphoneButton: some View {
+        Button {
+            errorMessage = nil
+            if speechRecognizer.isListening {
+                speechRecognizer.stopListening()
+            } else {
+                do {
+                    try speechRecognizer.startListening()
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(voiceAccent.opacity(0.2))
+                    .frame(width: 150, height: 150)
+
+                Circle()
+                    .fill(voiceAccent)
+                    .frame(width: 112, height: 112)
+
+                Image(systemName: speechRecognizer.isListening ? "waveform" : "mic.fill")
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+        }
+        .disabled(isGrading || speechRecognizer.speechPermissionDenied || speechRecognizer.micPermissionDenied)
+        .opacity((isGrading || speechRecognizer.speechPermissionDenied || speechRecognizer.micPermissionDenied) ? 0.5 : 1.0)
+    }
+
+    private var doneButton: some View {
+        Button {
+            Task {
+                await gradeSummary()
+            }
+        } label: {
+            HStack(spacing: 8) {
+                if isGrading {
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(0.8)
+                } else {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+
+                Text(isGrading ? "memorize.grading_summary".localized : "memorize.done".localized)
+                    .font(AppTypography.headline)
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(voiceAccent)
+            .cornerRadius(AppCornerRadius.md)
+        }
+        .disabled(isGrading || speechRecognizer.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .opacity((isGrading || speechRecognizer.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? 0.5 : 1.0)
+    }
+
+    private func gradeCard(_ result: MemorizeService.VoiceSummaryEvaluation) -> some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                Text(String(format: "memorize.summary_score".localized, result.score))
+                    .font(AppTypography.title2)
+                    .foregroundColor(.white)
+
+                if !result.strengths.isEmpty {
+                    Text("memorize.strengths".localized)
+                        .font(AppTypography.subheadline)
+                        .foregroundColor(voiceAccent)
+                    ForEach(result.strengths.prefix(8), id: \.self) { item in
+                        Text("• \(item)")
+                            .font(AppTypography.body)
+                            .foregroundColor(Color.white.opacity(0.9))
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                if !result.improvements.isEmpty {
+                    Text("memorize.improvements".localized)
+                        .font(AppTypography.subheadline)
+                        .foregroundColor(voiceAccent)
+                        .padding(.top, 4)
+                    ForEach(result.improvements.prefix(8), id: \.self) { item in
+                        Text("• \(item)")
+                            .font(AppTypography.body)
+                            .foregroundColor(Color.white.opacity(0.9))
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Text(result.feedback)
+                    .font(AppTypography.body)
+                    .foregroundColor(Color.white.opacity(0.85))
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(AppSpacing.md)
+        }
+        .frame(minHeight: 180, maxHeight: 300)
+        .background(AppColors.memorizeCard)
+        .cornerRadius(AppCornerRadius.md)
+    }
+
+    private func gradeSummary() async {
+        speechRecognizer.stopListening()
+        errorMessage = nil
+        isGrading = true
+        defer { isGrading = false }
+
+        do {
+            gradeResult = try await memorizeService.gradeVoiceSummary(
+                summary: speechRecognizer.transcript,
+                from: pages
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }

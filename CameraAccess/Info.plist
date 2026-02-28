@@ -57,6 +57,8 @@
 	<string>Needed to connect to Meta AI Glasses</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Aria Spark needs microphone access for real-time voice conversations with smart glasses.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Aria Spark uses speech recognition so you can summarize what you read and get AI feedback.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Aria Spark needs photo library access to save photos captured from smart glasses.</string>
 	<key>NSSiriUsageDescription</key>

@@ -450,6 +450,16 @@
 "memorize.done_reading" = "完成阅读";
 "memorize.connecting_camera" = "正在连接相机...";
 "memorize.pop_quiz" = "随堂测验";
+"memorize.voice_summary" = "语音总结";
+"memorize.voice_summary_prompt" = "请用你自己的话复述刚刚阅读的内容。";
+"memorize.voice_summary_placeholder" = "点击麦克风开始说话...";
+"memorize.pause_cancel" = "暂停 / 取消";
+"memorize.done" = "完成";
+"memorize.grading_summary" = "评分中...";
+"memorize.summary_score" = "得分：%d/100";
+"memorize.strengths" = "优点";
+"memorize.improvements" = "改进建议";
+"memorize.voice_permission_required" = "需要语音识别和麦克风权限。";
 "memorize.generating_quiz" = "正在生成测验...";
 "memorize.quiz_question_count" = "%d / %d";
 "memorize.quiz_next" = "下一题";

@@ -8,6 +8,13 @@ import UIKit
 import Vision
 
 struct MemorizeService {
+    struct VoiceSummaryEvaluation: Codable {
+        let score: Int
+        let strengths: [String]
+        let improvements: [String]
+        let feedback: String
+    }
+
     private let visionService: VisionAPIService
 
     init() {
@@ -115,13 +122,65 @@ struct MemorizeService {
         return parseQuizQuestions(from: result)
     }
 
+    // MARK: - Voice Summary Grading
+
+    func gradeVoiceSummary(summary: String, from pages: [PageCapture]) async throws -> VoiceSummaryEvaluation {
+        let trimmedSummary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSummary.isEmpty else {
+            throw NSError(
+                domain: "MemorizeService",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "Voice summary is empty"]
+            )
+        }
+
+        let completedPages = pages.filter { $0.status == .completed }
+        guard !completedPages.isEmpty else {
+            throw NSError(
+                domain: "MemorizeService",
+                code: 4,
+                userInfo: [NSLocalizedDescriptionKey: "No completed pages to compare against"]
+            )
+        }
+
+        let sourceText = completedPages
+            .enumerated()
+            .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
+            .joined(separator: "\n\n")
+
+        let prompt = """
+        Compare the student's spoken summary against the source reading material and grade comprehension quality.
+
+        Source material:
+        \(sourceText)
+
+        Student summary:
+        \(trimmedSummary)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "score": 0,
+          "strengths": ["..."],
+          "improvements": ["..."],
+          "feedback": "..."
+        }
+
+        Rules:
+        - score must be an integer from 0 to 100
+        - strengths: 2-4 concise bullet strings
+        - improvements: 2-4 concise bullet strings
+        - feedback: a short paragraph (2-4 sentences)
+        - no markdown, no extra keys, no extra text
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return parseVoiceSummaryEvaluation(from: result)
+    }
+
     private func parseQuizQuestions(from response: String) -> [QuizQuestion] {
         // Extract JSON array from response (handle markdown code blocks)
-        var jsonString = response.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let startRange = jsonString.range(of: "["),
-           let endRange = jsonString.range(of: "]", options: .backwards) {
-            jsonString = String(jsonString[startRange.lowerBound...endRange.upperBound])
-        }
+        let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        let jsonString = extractJSONArray(from: cleaned) ?? cleaned
 
         guard let data = jsonString.data(using: .utf8) else { return [] }
 
@@ -141,6 +200,65 @@ struct MemorizeService {
             print("❌ [Memorize] Quiz JSON parse error: \(error)")
             return []
         }
+    }
+
+    private func parseVoiceSummaryEvaluation(from response: String) -> VoiceSummaryEvaluation {
+        let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        let jsonString = extractJSONObject(from: cleaned) ?? cleaned
+
+        struct RawEvaluation: Decodable {
+            let score: Int?
+            let strengths: [String]?
+            let improvements: [String]?
+            let feedback: String?
+        }
+
+        if let data = jsonString.data(using: .utf8),
+           let raw = try? JSONDecoder().decode(RawEvaluation.self, from: data) {
+            let clampedScore = min(max(raw.score ?? 0, 0), 100)
+            let strengths = (raw.strengths ?? []).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            let improvements = (raw.improvements ?? []).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            let feedback = raw.feedback?.trimmingCharacters(in: .whitespacesAndNewlines) ?? response.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            return VoiceSummaryEvaluation(
+                score: clampedScore,
+                strengths: strengths.isEmpty ? ["Good attempt at summarizing key ideas."] : strengths,
+                improvements: improvements.isEmpty ? ["Include more concrete details from the text."] : improvements,
+                feedback: feedback.isEmpty ? "Your summary was reviewed. Try to include more of the chapter's core points." : feedback
+            )
+        }
+
+        let fallbackFeedback = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        return VoiceSummaryEvaluation(
+            score: 0,
+            strengths: ["You completed a spoken summary."],
+            improvements: ["Try to mention more specific points from the reading."],
+            feedback: fallbackFeedback.isEmpty ? "Unable to parse grading response. Please try again." : fallbackFeedback
+        )
+    }
+
+    private func extractJSONArray(from text: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: "\\[[\\s\\S]*\\]", options: []) else {
+            return nil
+        }
+        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, options: [], range: nsRange),
+              let range = Range(match.range, in: text) else {
+            return nil
+        }
+        return String(text[range])
+    }
+
+    private func extractJSONObject(from text: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: "\\{[\\s\\S]*\\}", options: []) else {
+            return nil
+        }
+        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, options: [], range: nsRange),
+              let range = Range(match.range, in: text) else {
+            return nil
+        }
+        return String(text[range])
     }
 
     // MARK: - Private Helpers

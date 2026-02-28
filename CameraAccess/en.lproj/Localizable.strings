@@ -449,6 +449,16 @@
 "memorize.done_reading" = "Done Reading";
 "memorize.connecting_camera" = "Connecting to camera...";
 "memorize.pop_quiz" = "Pop Quiz";
+"memorize.voice_summary" = "Voice Summary";
+"memorize.voice_summary_prompt" = "Explain what you just read in your own words.";
+"memorize.voice_summary_placeholder" = "Tap the microphone and start speaking...";
+"memorize.pause_cancel" = "Pause / Cancel";
+"memorize.done" = "Done";
+"memorize.grading_summary" = "Grading...";
+"memorize.summary_score" = "Score: %d/100";
+"memorize.strengths" = "Strengths";
+"memorize.improvements" = "Improvements";
+"memorize.voice_permission_required" = "Speech recognition and microphone permissions are required.";
 "memorize.generating_quiz" = "Generating quiz...";
 "memorize.quiz_question_count" = "%d of %d";
 "memorize.quiz_next" = "Next";

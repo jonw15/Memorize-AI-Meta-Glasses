@@ -91,7 +91,7 @@ class MemorizeCaptureViewModel: ObservableObject {
 
         // Create a new page entry
         let pageNumber = (pages.map(\.pageNumber).max() ?? 0) + 1
-        var page = PageCapture(pageNumber: pageNumber, status: .capturing)
+        let page = PageCapture(pageNumber: pageNumber, status: .capturing)
         pages.append(page)
         saveProgress()
 
