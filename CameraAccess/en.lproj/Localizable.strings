@@ -456,3 +456,4 @@
 "memorize.quiz_score" = "You scored %d out of %d";
 "memorize.quiz_done" = "Done";
 "memorize.quiz_no_pages" = "Capture some pages first";
+"memorize.no_ocr_text" = "No OCR text available for this page yet.";

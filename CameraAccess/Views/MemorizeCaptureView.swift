@@ -16,6 +16,8 @@ struct MemorizeCaptureView: View {
     private struct TimelineThumbnailPreview: Identifiable {
         let id = UUID()
         let image: UIImage
+        let extractedText: String
+        let pageNumber: Int
     }
 
     var body: some View {
@@ -80,24 +82,50 @@ struct MemorizeCaptureView: View {
             MemorizeQuizView(questions: $viewModel.quizQuestions)
         }
         .fullScreenCover(item: $selectedThumbnail) { preview in
-            ZStack(alignment: .topTrailing) {
-                Color.black.ignoresSafeArea()
+            GeometryReader { geo in
+                VStack(spacing: 0) {
+                    ZStack(alignment: .topTrailing) {
+                        Color.black
 
-                Image(uiImage: preview.image)
-                    .resizable()
-                    .scaledToFit()
-                    .ignoresSafeArea(edges: .bottom)
+                        Image(uiImage: preview.image)
+                            .resizable()
+                            .scaledToFit()
+                            .padding(AppSpacing.md)
 
-                Button {
-                    selectedThumbnail = nil
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 34))
-                        .foregroundColor(.white.opacity(0.9))
-                        .padding(.top, AppSpacing.lg)
-                        .padding(.trailing, AppSpacing.md)
+                        Button {
+                            selectedThumbnail = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 34))
+                                .foregroundColor(.white.opacity(0.9))
+                                .padding(.top, AppSpacing.lg)
+                                .padding(.trailing, AppSpacing.md)
+                        }
+                    }
+                    .frame(height: geo.size.height * 0.5)
+
+                    VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                        Text("P\(preview.pageNumber) • OCR")
+                            .font(AppTypography.headline)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, AppSpacing.md)
+                            .padding(.top, AppSpacing.md)
+
+                        ScrollView {
+                            Text(preview.extractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                 ? "memorize.no_ocr_text".localized
+                                 : preview.extractedText)
+                                .font(AppTypography.body)
+                                .foregroundColor(Color.white.opacity(0.9))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(AppSpacing.md)
+                        }
+                    }
+                    .frame(height: geo.size.height * 0.5)
+                    .background(AppColors.memorizeBackground)
                 }
             }
+            .ignoresSafeArea()
         }
         .onAppear {
             viewModel.streamViewModel = streamViewModel
@@ -269,7 +297,11 @@ struct MemorizeCaptureView: View {
             // Thumbnail background
             if let data = page.thumbnailData, let uiImage = UIImage(data: data) {
                 Button {
-                    selectedThumbnail = TimelineThumbnailPreview(image: uiImage)
+                    selectedThumbnail = TimelineThumbnailPreview(
+                        image: uiImage,
+                        extractedText: page.extractedText,
+                        pageNumber: page.pageNumber
+                    )
                 } label: {
                     ZStack {
                         Image(uiImage: uiImage)
