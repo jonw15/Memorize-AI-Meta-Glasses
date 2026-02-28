@@ -427,6 +427,7 @@
 "tab.memorize" = "Memorize";
 "memorize.title" = "Memorize";
 "memorize.currently_reading" = "Currently Reading";
+"memorize.existing_projects" = "Existing Projects";
 "memorize.add_to_library" = "Add to Library";
 "memorize.add_new_book" = "Add New Book";
 "memorize.new_session" = "New Session";

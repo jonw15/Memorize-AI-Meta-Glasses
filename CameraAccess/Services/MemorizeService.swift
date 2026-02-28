@@ -5,6 +5,7 @@
 
 import Foundation
 import UIKit
+import Vision
 
 struct MemorizeService {
     private let visionService: VisionAPIService
@@ -27,7 +28,27 @@ struct MemorizeService {
         5. Preserve the original language of the text
         """
 
-        return try await visionService.analyzeImage(image, prompt: prompt)
+        do {
+            let remoteText = try await visionService.analyzeImage(image, prompt: prompt)
+            let trimmedRemote = remoteText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedRemote.isEmpty {
+                return trimmedRemote
+            }
+            print("⚠️ [Memorize] Remote OCR returned empty text, falling back to local OCR")
+        } catch {
+            print("⚠️ [Memorize] Remote OCR failed (\(error.localizedDescription)), falling back to local OCR")
+        }
+
+        let localText = try await extractTextLocally(from: image)
+        let trimmedLocal = localText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedLocal.isEmpty else {
+            throw NSError(
+                domain: "MemorizeService",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Both remote and local OCR returned empty text"]
+            )
+        }
+        return trimmedLocal
     }
 
     // MARK: - Detect Book Info
@@ -147,5 +168,42 @@ struct MemorizeService {
             UIColor.white.setFill()
             context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
         }
+    }
+
+    private func extractTextLocally(from image: UIImage) async throws -> String {
+        try await Task.detached(priority: .userInitiated) {
+            guard let cgImage = image.cgImage else {
+                throw NSError(
+                    domain: "MemorizeService",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "Invalid image for local OCR"]
+                )
+            }
+
+            var recognizedLines: [String] = []
+            let request = VNRecognizeTextRequest { request, error in
+                if let error {
+                    print("❌ [Memorize] Local OCR error: \(error.localizedDescription)")
+                    return
+                }
+                guard let observations = request.results as? [VNRecognizedTextObservation] else { return }
+                for observation in observations {
+                    if let topCandidate = observation.topCandidates(1).first {
+                        let line = topCandidate.string.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !line.isEmpty {
+                            recognizedLines.append(line)
+                        }
+                    }
+                }
+            }
+
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = true
+
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            try handler.perform([request])
+
+            return recognizedLines.joined(separator: "\n")
+        }.value
     }
 }

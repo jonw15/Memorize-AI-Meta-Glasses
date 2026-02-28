@@ -60,14 +60,25 @@ struct VisionAPIService {
     }
 
     struct ChatCompletionResponse: Codable {
-        let choices: [Choice]
+        let choices: [Choice]?
+        let error: APIError?
 
         struct Choice: Codable {
-            let message: Message
+            let message: Message?
+            let delta: Delta?
 
             struct Message: Codable {
-                let content: String
+                let content: String?
             }
+
+            struct Delta: Codable {
+                let content: String?
+            }
+        }
+
+        struct APIError: Codable {
+            let message: String?
+            let code: Int?
         }
     }
 
@@ -106,18 +117,12 @@ struct VisionAPIService {
         )
 
         // Make API call
-        let response = try await makeRequest(request)
-
-        guard let firstChoice = response.choices.first else {
-            throw VisionAPIError.emptyResponse
-        }
-
-        return firstChoice.message.content
+        return try await makeRequest(request)
     }
 
     // MARK: - Private Methods
 
-    private func makeRequest(_ request: ChatCompletionRequest) async throws -> ChatCompletionResponse {
+    private func makeRequest(_ request: ChatCompletionRequest) async throws -> String {
         let url = URL(string: "\(baseURL)/chat/completions")!
 
         var urlRequest = URLRequest(url: url)
@@ -143,8 +148,66 @@ struct VisionAPIService {
             throw VisionAPIError.apiError(statusCode: httpResponse.statusCode, message: errorMessage)
         }
 
+        // Try robust JSON extraction first (provider responses may vary)
+        if let content = extractContentText(from: data), !content.isEmpty {
+            return content
+        }
+
+        // Fallback to strict decoding for legacy response shape
         let decoder = JSONDecoder()
-        return try decoder.decode(ChatCompletionResponse.self, from: data)
+        let decoded = try decoder.decode(ChatCompletionResponse.self, from: data)
+
+        if let apiError = decoded.error?.message {
+            throw VisionAPIError.apiError(statusCode: decoded.error?.code ?? -1, message: apiError)
+        }
+
+        guard let firstChoice = decoded.choices?.first else {
+            throw VisionAPIError.emptyResponse
+        }
+
+        let content = firstChoice.message?.content ?? firstChoice.delta?.content ?? ""
+        guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw VisionAPIError.emptyResponse
+        }
+        return content
+    }
+
+    private func extractContentText(from data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = json["choices"] as? [[String: Any]],
+              let firstChoice = choices.first else {
+            return nil
+        }
+
+        if let message = firstChoice["message"] as? [String: Any] {
+            if let content = message["content"] as? String {
+                let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+
+            if let contentParts = message["content"] as? [[String: Any]] {
+                let texts = contentParts.compactMap { part -> String? in
+                    if let text = part["text"] as? String {
+                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        return trimmed.isEmpty ? nil : trimmed
+                    }
+                    if let text = part["content"] as? String {
+                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        return trimmed.isEmpty ? nil : trimmed
+                    }
+                    return nil
+                }
+                if !texts.isEmpty { return texts.joined(separator: "\n") }
+            }
+        }
+
+        if let delta = firstChoice["delta"] as? [String: Any],
+           let content = delta["content"] as? String {
+            let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+
+        return nil
     }
 }
 

@@ -48,7 +48,7 @@ class MemorizeCaptureViewModel: ObservableObject {
     // MARK: - Countdown & Capture
 
     func startCountdown() {
-        guard !isCountingDown, !isProcessing else { return }
+        guard !isCountingDown, !isProcessing, !isGeneratingQuiz else { return }
 
         isCountingDown = true
         countdownValue = 3
@@ -90,7 +90,7 @@ class MemorizeCaptureViewModel: ObservableObject {
         isProcessing = true
 
         // Create a new page entry
-        let pageNumber = pages.count + 1
+        let pageNumber = (pages.map(\.pageNumber).max() ?? 0) + 1
         var page = PageCapture(pageNumber: pageNumber, status: .capturing)
         pages.append(page)
         saveProgress()
@@ -210,6 +210,17 @@ class MemorizeCaptureViewModel: ObservableObject {
     func finishSession() {
         saveProgress()
         cancelCountdown()
+    }
+
+    // MARK: - Delete Page
+
+    func deletePage(_ page: PageCapture) {
+        guard !isProcessing else { return }
+        guard page.status != .processing && page.status != .capturing else { return }
+
+        pages.removeAll { $0.id == page.id }
+        storage.deleteThumbnail(for: page.id)
+        saveProgress()
     }
 
     // MARK: - Save to Photo Library

@@ -19,9 +19,9 @@ struct MemorizeHomeView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: AppSpacing.lg) {
-                    // Currently Reading Section
-                    if let book = viewModel.currentBook {
-                        currentlyReadingSection(book: book)
+                    // Existing Projects Section
+                    if !viewModel.books.isEmpty {
+                        existingProjectsSection
                     }
 
                     // Add to Library Section
@@ -37,6 +37,7 @@ struct MemorizeHomeView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
+        .toolbar(.hidden, for: .tabBar)
         .onAppear {
             viewModel.loadBooks()
         }
@@ -55,75 +56,82 @@ struct MemorizeHomeView: View {
         }
     }
 
-    // MARK: - Currently Reading Section
+    // MARK: - Existing Projects Section
 
-    @ViewBuilder
-    private func currentlyReadingSection(book: Book) -> some View {
+    private var existingProjectsSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            Text("memorize.currently_reading".localized)
+            Text("memorize.existing_projects".localized)
                 .font(AppTypography.headline)
                 .foregroundColor(.white)
 
-            VStack(alignment: .leading, spacing: AppSpacing.md) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(book.title.isEmpty ? "memorize.untitled".localized : book.title)
-                            .font(AppTypography.title2)
-                            .foregroundColor(.white)
-                            .lineLimit(2)
-
-                        Text(book.author.isEmpty ? "memorize.unknown_author".localized : book.author)
-                            .font(AppTypography.subheadline)
-                            .foregroundColor(Color.white.opacity(0.6))
-                    }
-
-                    Spacer()
-
-                    Button {
-                        viewModel.deleteBook(book.id)
-                    } label: {
-                        Image(systemName: "trash")
-                            .font(.system(size: 16))
-                            .foregroundColor(Color.white.opacity(0.4))
-                    }
-                }
-
-                HStack(spacing: AppSpacing.sm) {
-                    Label("\(book.completedPages)", systemImage: "doc.text.fill")
-                        .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(0.5))
-
-                    Text("memorize.pages_captured".localized)
-                        .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(0.5))
-                }
-
-                Button {
-                    selectedBook = book
-                } label: {
-                    Text("memorize.continue_session".localized)
-                        .font(AppTypography.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(
-                            LinearGradient(
-                                colors: [AppColors.memorizeAccent, AppColors.memorizeAccent.opacity(0.8)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(AppCornerRadius.md)
+            VStack(spacing: AppSpacing.sm) {
+                ForEach(viewModel.books) { book in
+                    projectCard(book: book)
                 }
             }
-            .padding(AppSpacing.md)
-            .background(AppColors.memorizeCard)
-            .cornerRadius(AppCornerRadius.lg)
-            .overlay(
-                RoundedRectangle(cornerRadius: AppCornerRadius.lg)
-                    .stroke(AppColors.memorizeAccent.opacity(0.3), lineWidth: 1)
-            )
         }
+    }
+
+    private func projectCard(book: Book) -> some View {
+        VStack(alignment: .leading, spacing: AppSpacing.md) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(book.title.isEmpty ? "memorize.untitled".localized : book.title)
+                        .font(AppTypography.title2)
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+
+                    Text(book.author.isEmpty ? "memorize.unknown_author".localized : book.author)
+                        .font(AppTypography.subheadline)
+                        .foregroundColor(Color.white.opacity(0.6))
+                }
+
+                Spacer()
+
+                Button {
+                    viewModel.deleteBook(book.id)
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 16))
+                        .foregroundColor(Color.white.opacity(0.4))
+                }
+            }
+
+            HStack(spacing: AppSpacing.sm) {
+                Label("\(book.completedPages)", systemImage: "doc.text.fill")
+                    .font(AppTypography.caption)
+                    .foregroundColor(Color.white.opacity(0.5))
+
+                Text("memorize.pages_captured".localized)
+                    .font(AppTypography.caption)
+                    .foregroundColor(Color.white.opacity(0.5))
+            }
+
+            Button {
+                selectedBook = book
+            } label: {
+                Text("memorize.continue_session".localized)
+                    .font(AppTypography.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        LinearGradient(
+                            colors: [AppColors.memorizeAccent, AppColors.memorizeAccent.opacity(0.8)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(AppCornerRadius.md)
+            }
+        }
+        .padding(AppSpacing.md)
+        .background(AppColors.memorizeCard)
+        .cornerRadius(AppCornerRadius.lg)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppCornerRadius.lg)
+                .stroke(AppColors.memorizeAccent.opacity(0.3), lineWidth: 1)
+        )
     }
 
     // MARK: - Add Book Section

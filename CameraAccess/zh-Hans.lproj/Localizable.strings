@@ -428,6 +428,7 @@
 "tab.memorize" = "记忆";
 "memorize.title" = "记忆学习";
 "memorize.currently_reading" = "正在阅读";
+"memorize.existing_projects" = "已有项目";
 "memorize.add_to_library" = "添加到书架";
 "memorize.add_new_book" = "添加新书";
 "memorize.new_session" = "新建学习会话";

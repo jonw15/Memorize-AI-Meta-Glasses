@@ -97,7 +97,7 @@ class MemorizeStorage {
         return try? Data(contentsOf: url)
     }
 
-    private func deleteThumbnail(for pageId: UUID) {
+    func deleteThumbnail(for pageId: UUID) {
         let url = thumbnailsDir.appendingPathComponent("\(pageId.uuidString).jpg")
         try? fileManager.removeItem(at: url)
     }

@@ -166,6 +166,10 @@ struct MemorizeQuizView: View {
                     .font(AppTypography.body)
                     .foregroundColor(.white)
                     .multilineTextAlignment(.leading)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
 
                 Spacer()
 

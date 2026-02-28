@@ -11,6 +11,12 @@ struct MemorizeCaptureView: View {
 
     @StateObject private var viewModel = MemorizeCaptureViewModel()
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedThumbnail: TimelineThumbnailPreview?
+
+    private struct TimelineThumbnailPreview: Identifiable {
+        let id = UUID()
+        let image: UIImage
+    }
 
     var body: some View {
         NavigationView {
@@ -73,6 +79,26 @@ struct MemorizeCaptureView: View {
         .fullScreenCover(isPresented: $viewModel.showQuiz) {
             MemorizeQuizView(questions: $viewModel.quizQuestions)
         }
+        .fullScreenCover(item: $selectedThumbnail) { preview in
+            ZStack(alignment: .topTrailing) {
+                Color.black.ignoresSafeArea()
+
+                Image(uiImage: preview.image)
+                    .resizable()
+                    .scaledToFit()
+                    .ignoresSafeArea(edges: .bottom)
+
+                Button {
+                    selectedThumbnail = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 34))
+                        .foregroundColor(.white.opacity(0.9))
+                        .padding(.top, AppSpacing.lg)
+                        .padding(.trailing, AppSpacing.md)
+                }
+            }
+        }
         .onAppear {
             viewModel.streamViewModel = streamViewModel
             viewModel.loadBook(book)
@@ -128,12 +154,24 @@ struct MemorizeCaptureView: View {
                 .font(AppTypography.title)
                 .foregroundColor(.white)
 
+            Text(displayBookTitle)
+                .font(AppTypography.headline)
+                .foregroundColor(AppColors.memorizeAccent)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .padding(.horizontal, AppSpacing.md)
+
             Text("memorize.capture_subtitle".localized)
                 .font(AppTypography.subheadline)
                 .foregroundColor(Color.white.opacity(0.6))
                 .multilineTextAlignment(.center)
         }
         .padding(.top, AppSpacing.lg)
+    }
+
+    private var displayBookTitle: String {
+        let title = viewModel.currentBook?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return title.isEmpty ? "memorize.unknown_book".localized : title
     }
 
     // MARK: - Countdown Overlay
@@ -177,8 +215,8 @@ struct MemorizeCaptureView: View {
                     .foregroundColor(.white)
             }
         }
-        .disabled(viewModel.isProcessing)
-        .opacity(viewModel.isProcessing ? 0.5 : 1.0)
+        .disabled(viewModel.isProcessing || viewModel.isGeneratingQuiz)
+        .opacity((viewModel.isProcessing || viewModel.isGeneratingQuiz) ? 0.5 : 1.0)
     }
 
     // MARK: - Delay Indicator
@@ -230,17 +268,44 @@ struct MemorizeCaptureView: View {
         ZStack {
             // Thumbnail background
             if let data = page.thumbnailData, let uiImage = UIImage(data: data) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 70, height: 90)
-                    .clipped()
+                Button {
+                    selectedThumbnail = TimelineThumbnailPreview(image: uiImage)
+                } label: {
+                    ZStack {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 70, height: 90)
+                            .clipped()
 
-                // Dark overlay for text readability
-                Color.black.opacity(0.4)
+                        // Dark overlay for text readability
+                        Color.black.opacity(0.4)
+                    }
+                }
+                .buttonStyle(.plain)
             } else {
                 AppColors.memorizeCard
             }
+
+            VStack {
+                HStack {
+                    Spacer()
+
+                    Button {
+                        viewModel.deletePage(page)
+                    } label: {
+                        Image(systemName: "trash.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white.opacity(0.95))
+                            .background(Circle().fill(Color.black.opacity(0.35)))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canDelete(page))
+                    .opacity(canDelete(page) ? 1 : 0.35)
+                }
+                Spacer()
+            }
+            .padding(4)
 
             // Labels overlay
             VStack(spacing: 4) {
@@ -257,6 +322,10 @@ struct MemorizeCaptureView: View {
         }
         .frame(width: 70, height: 90)
         .cornerRadius(AppCornerRadius.sm)
+    }
+
+    private func canDelete(_ page: PageCapture) -> Bool {
+        !viewModel.isProcessing && page.status != .processing && page.status != .capturing
     }
 
     @ViewBuilder
