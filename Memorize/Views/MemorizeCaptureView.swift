@@ -441,7 +441,7 @@ private struct MemorizePostCaptureActionsView: View {
                     .lineLimit(2)
                     .padding(.horizontal, AppSpacing.md)
 
-                Text("memorize.capture_subtitle".localized)
+                Text("memorize.test_mode_prompt".localized)
                     .font(AppTypography.subheadline)
                     .foregroundColor(Color.white.opacity(0.7))
                     .multilineTextAlignment(.center)
@@ -697,6 +697,7 @@ private struct MemorizeVoiceSummaryView: View {
     @State private var isGrading: Bool = false
     @State private var gradeResult: MemorizeService.VoiceSummaryEvaluation?
     @State private var errorMessage: String?
+    @State private var pulseAnimation: Bool = false
 
     private let memorizeService = MemorizeService()
     private let voiceAccent = Color(red: 0.33, green: 0.56, blue: 1.0)
@@ -797,6 +798,9 @@ private struct MemorizeVoiceSummaryView: View {
             errorMessage = nil
             if speechRecognizer.isListening {
                 speechRecognizer.stopListening()
+                Task {
+                    await gradeSummary()
+                }
             } else {
                 do {
                     try speechRecognizer.startListening()
@@ -806,9 +810,23 @@ private struct MemorizeVoiceSummaryView: View {
             }
         } label: {
             ZStack {
-                Circle()
-                    .fill(voiceAccent.opacity(0.2))
-                    .frame(width: 150, height: 150)
+                if speechRecognizer.isListening {
+                    Circle()
+                        .stroke(voiceAccent.opacity(0.45), lineWidth: 3)
+                        .frame(width: 150, height: 150)
+                        .scaleEffect(pulseAnimation ? 1.28 : 1.0)
+                        .opacity(pulseAnimation ? 0.1 : 0.85)
+
+                    Circle()
+                        .stroke(voiceAccent.opacity(0.28), lineWidth: 2)
+                        .frame(width: 176, height: 176)
+                        .scaleEffect(pulseAnimation ? 1.18 : 0.92)
+                        .opacity(pulseAnimation ? 0.06 : 0.55)
+                } else {
+                    Circle()
+                        .fill(voiceAccent.opacity(0.2))
+                        .frame(width: 150, height: 150)
+                }
 
                 Circle()
                     .fill(voiceAccent)
@@ -821,6 +839,19 @@ private struct MemorizeVoiceSummaryView: View {
         }
         .disabled(isGrading || speechRecognizer.speechPermissionDenied || speechRecognizer.micPermissionDenied)
         .opacity((isGrading || speechRecognizer.speechPermissionDenied || speechRecognizer.micPermissionDenied) ? 0.5 : 1.0)
+        .onChange(of: speechRecognizer.isListening) { isListening in
+            if isListening {
+                pulseAnimation = true
+            } else {
+                pulseAnimation = false
+            }
+        }
+        .animation(
+            speechRecognizer.isListening
+                ? .easeOut(duration: 1.0).repeatForever(autoreverses: true)
+                : .easeOut(duration: 0.2),
+            value: pulseAnimation
+        )
     }
 
     private var doneButton: some View {
@@ -903,13 +934,18 @@ private struct MemorizeVoiceSummaryView: View {
 
     private func gradeSummary() async {
         speechRecognizer.stopListening()
+        let summary = speechRecognizer.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !summary.isEmpty else {
+            errorMessage = "memorize.voice_summary_empty_error".localized
+            return
+        }
         errorMessage = nil
         isGrading = true
         defer { isGrading = false }
 
         do {
             gradeResult = try await memorizeService.gradeVoiceSummary(
-                summary: speechRecognizer.transcript,
+                summary: summary,
                 from: pages
             )
         } catch {

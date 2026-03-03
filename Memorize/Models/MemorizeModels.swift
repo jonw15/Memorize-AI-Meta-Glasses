@@ -59,17 +59,45 @@ struct Book: Identifiable, Codable {
     let id: UUID
     var title: String
     var author: String
+    var chapter: String
     var pages: [PageCapture]
     let createdAt: Date
     var updatedAt: Date
 
-    init(title: String = "", author: String = "", pages: [PageCapture] = []) {
+    enum CodingKeys: String, CodingKey {
+        case id, title, author, chapter, pages, createdAt, updatedAt
+    }
+
+    init(title: String = "", author: String = "", chapter: String = "", pages: [PageCapture] = []) {
         self.id = UUID()
         self.title = title
         self.author = author
+        self.chapter = chapter
         self.pages = pages
         self.createdAt = Date()
         self.updatedAt = Date()
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        author = try container.decode(String.self, forKey: .author)
+        chapter = try container.decodeIfPresent(String.self, forKey: .chapter) ?? ""
+        pages = try container.decodeIfPresent([PageCapture].self, forKey: .pages) ?? []
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(author, forKey: .author)
+        try container.encode(chapter, forKey: .chapter)
+        try container.encode(pages, forKey: .pages)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
     }
 
     var currentPage: Int {

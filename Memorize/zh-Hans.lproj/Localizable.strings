@@ -432,9 +432,11 @@
 "memorize.add_to_library" = "添加到书架";
 "memorize.add_new_book" = "添加新书";
 "memorize.new_session" = "新建学习会话";
-"memorize.enter_book_details" = "输入书名和作者后开始学习";
+"memorize.enter_book_details" = "输入书籍信息后开始学习（书名必填）";
+"memorize.book_name_field" = "书名";
 "memorize.title_field" = "书名";
 "memorize.author_field" = "作者";
+"memorize.chapter_field" = "章节";
 "memorize.start_session" = "开始学习";
 "memorize.cancel" = "取消";
 "memorize.continue_session" = "继续学习";
@@ -449,10 +451,12 @@
 "memorize.view_all" = "查看全部";
 "memorize.done_reading" = "完成阅读";
 "memorize.connecting_camera" = "正在连接相机...";
+"memorize.test_mode_prompt" = "选择测试模式";
 "memorize.pop_quiz" = "随堂测验";
 "memorize.voice_summary" = "语音总结";
 "memorize.voice_summary_prompt" = "请用你自己的话复述刚刚阅读的内容。";
 "memorize.voice_summary_placeholder" = "点击麦克风开始说话...";
+"memorize.voice_summary_empty_error" = "请先录制总结后再评分。";
 "memorize.pause_cancel" = "暂停 / 取消";
 "memorize.done" = "完成";
 "memorize.grading_summary" = "评分中...";

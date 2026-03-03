@@ -14,24 +14,23 @@ struct MemorizeHomeView: View {
     @State private var selectedBook: Book?
     @State private var newSessionTitle: String = ""
     @State private var newSessionAuthor: String = ""
+    @State private var newSessionChapter: String = ""
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: AppSpacing.lg) {
-                    // Existing Projects Section
-                    if !viewModel.books.isEmpty {
-                        existingProjectsSection
-                    }
+            VStack(spacing: AppSpacing.lg) {
+                // Add to Library Section (top)
+                addBookSection
 
-                    // Add to Library Section
-                    addBookSection
-
+                // Existing Projects Section (scrollable panel)
+                if !viewModel.books.isEmpty {
+                    existingProjectsSection
+                } else {
                     Spacer(minLength: 40)
                 }
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.top, AppSpacing.md)
             }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, AppSpacing.md)
             .background(AppColors.memorizeBackground.ignoresSafeArea())
             .navigationTitle("memorize.title".localized)
             .navigationBarTitleDisplayMode(.large)
@@ -64,11 +63,14 @@ struct MemorizeHomeView: View {
                 .font(AppTypography.headline)
                 .foregroundColor(.white)
 
-            VStack(spacing: AppSpacing.sm) {
-                ForEach(viewModel.books) { book in
-                    projectCard(book: book)
+            ScrollView {
+                VStack(spacing: AppSpacing.sm) {
+                    ForEach(viewModel.books) { book in
+                        projectCard(book: book)
+                    }
                 }
             }
+            .frame(maxHeight: 420)
         }
     }
 
@@ -81,9 +83,18 @@ struct MemorizeHomeView: View {
                         .foregroundColor(.white)
                         .lineLimit(2)
 
-                    Text(book.author.isEmpty ? "memorize.unknown_author".localized : book.author)
-                        .font(AppTypography.subheadline)
-                        .foregroundColor(Color.white.opacity(0.6))
+                    if !book.author.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(book.author)
+                            .font(AppTypography.subheadline)
+                            .foregroundColor(Color.white.opacity(0.6))
+                    }
+
+                    if !book.chapter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(book.chapter)
+                            .font(AppTypography.caption)
+                            .foregroundColor(Color.white.opacity(0.5))
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer()
@@ -145,6 +156,7 @@ struct MemorizeHomeView: View {
             Button {
                 newSessionTitle = ""
                 newSessionAuthor = ""
+                newSessionChapter = ""
                 showNewSessionForm = true
             } label: {
                 VStack(spacing: AppSpacing.md) {
@@ -172,8 +184,7 @@ struct MemorizeHomeView: View {
     }
 
     private var isNewSessionValid: Bool {
-        !newSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !newSessionAuthor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !newSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var newSessionSheet: some View {
@@ -185,7 +196,7 @@ struct MemorizeHomeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 VStack(spacing: AppSpacing.sm) {
-                    TextField("memorize.title_field".localized, text: $newSessionTitle)
+                    TextField("memorize.book_name_field".localized, text: $newSessionTitle)
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
                         .padding(.horizontal, AppSpacing.md)
@@ -202,12 +213,22 @@ struct MemorizeHomeView: View {
                         .background(AppColors.memorizeCard)
                         .foregroundColor(.white)
                         .cornerRadius(AppCornerRadius.md)
+
+                    TextField("memorize.chapter_field".localized, text: $newSessionChapter)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.vertical, 14)
+                        .background(AppColors.memorizeCard)
+                        .foregroundColor(.white)
+                        .cornerRadius(AppCornerRadius.md)
                 }
 
                 Button {
                     selectedBook = Book(
                         title: newSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines),
-                        author: newSessionAuthor.trimmingCharacters(in: .whitespacesAndNewlines)
+                        author: newSessionAuthor.trimmingCharacters(in: .whitespacesAndNewlines),
+                        chapter: newSessionChapter.trimmingCharacters(in: .whitespacesAndNewlines)
                     )
                     showNewSessionForm = false
                 } label: {

@@ -431,9 +431,11 @@
 "memorize.add_to_library" = "Add to Library";
 "memorize.add_new_book" = "Add New Book";
 "memorize.new_session" = "New Session";
-"memorize.enter_book_details" = "Enter book details to start a new session";
+"memorize.enter_book_details" = "Enter book details (Book Name is required)";
+"memorize.book_name_field" = "Book Name";
 "memorize.title_field" = "Title";
 "memorize.author_field" = "Author";
+"memorize.chapter_field" = "Chapter";
 "memorize.start_session" = "Start Session";
 "memorize.cancel" = "Cancel";
 "memorize.continue_session" = "Continue Session";
@@ -448,10 +450,12 @@
 "memorize.view_all" = "View All";
 "memorize.done_reading" = "Done Reading";
 "memorize.connecting_camera" = "Connecting to camera...";
+"memorize.test_mode_prompt" = "Pick a Test Mode";
 "memorize.pop_quiz" = "Pop Quiz";
 "memorize.voice_summary" = "Voice Summary";
 "memorize.voice_summary_prompt" = "Explain what you just read in your own words.";
 "memorize.voice_summary_placeholder" = "Tap the microphone and start speaking...";
+"memorize.voice_summary_empty_error" = "Please record a summary before grading.";
 "memorize.pause_cancel" = "Pause / Cancel";
 "memorize.done" = "Done";
 "memorize.grading_summary" = "Grading...";
