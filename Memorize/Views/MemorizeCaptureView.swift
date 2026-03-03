@@ -17,8 +17,9 @@ struct MemorizeCaptureView: View {
     @State private var showPostCaptureActions = false
     private let processingAccent = Color(red: 0.34, green: 0.86, blue: 1.0)
 
-    private struct TimelineThumbnailPreview: Identifiable {
-        let id = UUID()
+    struct TimelineThumbnailPreview: Identifiable {
+        let id: UUID
+        let pageId: UUID
         let image: UIImage
         let extractedText: String
         let pageNumber: Int
@@ -76,50 +77,16 @@ struct MemorizeCaptureView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .fullScreenCover(item: $selectedThumbnail) { preview in
-            GeometryReader { geo in
-                VStack(spacing: 0) {
-                    ZStack(alignment: .topTrailing) {
-                        Color.black
-
-                        Image(uiImage: preview.image)
-                            .resizable()
-                            .scaledToFit()
-                            .padding(AppSpacing.md)
-
-                        Button {
-                            selectedThumbnail = nil
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 34))
-                                .foregroundColor(.white.opacity(0.9))
-                                .padding(.top, AppSpacing.lg)
-                                .padding(.trailing, AppSpacing.md)
-                        }
-                    }
-                    .frame(height: geo.size.height * 0.5)
-
-                    VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                        Text("P\(preview.pageNumber) • OCR")
-                            .font(AppTypography.headline)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, AppSpacing.md)
-                            .padding(.top, AppSpacing.md)
-
-                        ScrollView {
-                            Text(preview.extractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                 ? "memorize.no_ocr_text".localized
-                                 : preview.extractedText)
-                                .font(AppTypography.body)
-                                .foregroundColor(Color.white.opacity(0.9))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(AppSpacing.md)
-                        }
-                    }
-                    .frame(height: geo.size.height * 0.5)
-                    .background(AppColors.memorizeBackground)
+            TimelinePreviewEditorView(
+                preview: preview,
+                onClose: {
+                    selectedThumbnail = nil
+                },
+                onApplyCrop: { pageId, croppedImage in
+                    viewModel.startReprocessCroppedPage(pageId: pageId, image: croppedImage)
+                    selectedThumbnail = nil
                 }
-            }
-            .ignoresSafeArea()
+            )
         }
         .fullScreenCover(isPresented: $showPostCaptureActions) {
             MemorizePostCaptureActionsView(
@@ -293,6 +260,8 @@ struct MemorizeCaptureView: View {
             if let data = page.thumbnailData, let uiImage = UIImage(data: data) {
                 Button {
                     selectedThumbnail = TimelineThumbnailPreview(
+                        id: page.id,
+                        pageId: page.id,
                         image: uiImage,
                         extractedText: page.extractedText,
                         pageNumber: page.pageNumber
@@ -408,6 +377,207 @@ struct MemorizeCaptureView: View {
                 .cornerRadius(AppCornerRadius.md)
         }
         .padding(.horizontal, AppSpacing.md)
+    }
+}
+
+private struct TimelinePreviewEditorView: View {
+    let preview: MemorizeCaptureView.TimelineThumbnailPreview
+    let onClose: () -> Void
+    let onApplyCrop: (UUID, UIImage) -> Void
+
+    @State private var topInset: Double = 0
+    @State private var bottomInset: Double = 0
+    @State private var leftInset: Double = 0
+    @State private var rightInset: Double = 0
+
+    private let minSpan: Double = 0.25
+
+    var body: some View {
+        GeometryReader { geo in
+            VStack(spacing: 0) {
+                ZStack(alignment: .topTrailing) {
+                    Color.black
+
+                    GeometryReader { imageGeo in
+                        let imageRect = fittedRect(in: imageGeo.size, imageSize: preview.image.size)
+                        let cropRect = cropRect(in: imageRect)
+
+                        ZStack {
+                            Image(uiImage: preview.image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: imageGeo.size.width, height: imageGeo.size.height)
+
+                            Path { path in
+                                path.addRect(imageRect)
+                                path.addRect(cropRect)
+                            }
+                            .fill(Color.black.opacity(0.45), style: FillStyle(eoFill: true))
+
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.white, lineWidth: 2)
+                                .frame(width: cropRect.width, height: cropRect.height)
+                                .position(x: cropRect.midX, y: cropRect.midY)
+                        }
+                    }
+                    .padding(AppSpacing.md)
+
+                    Button {
+                        onClose()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 34))
+                            .foregroundColor(.white.opacity(0.9))
+                            .padding(.top, AppSpacing.lg)
+                            .padding(.trailing, AppSpacing.md)
+                    }
+                }
+                .frame(height: geo.size.height * 0.50)
+
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                        Text("P\(preview.pageNumber) • OCR")
+                            .font(AppTypography.headline)
+                            .foregroundColor(.white)
+
+                        cropSlider(label: "Top", value: $topInset, maxAllowed: maxInset(top: true))
+                        cropSlider(label: "Bottom", value: $bottomInset, maxAllowed: maxInset(bottom: true))
+                        cropSlider(label: "Left", value: $leftInset, maxAllowed: maxInset(left: true))
+                        cropSlider(label: "Right", value: $rightInset, maxAllowed: maxInset(right: true))
+
+                        HStack(spacing: AppSpacing.sm) {
+                            Button {
+                                topInset = 0
+                                bottomInset = 0
+                                leftInset = 0
+                                rightInset = 0
+                            } label: {
+                                Text("Reset")
+                                    .font(AppTypography.body)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(Color.white.opacity(0.12))
+                                    .cornerRadius(AppCornerRadius.md)
+                            }
+
+                            Button {
+                                if let cropped = cropImage(preview.image) {
+                                    onApplyCrop(preview.pageId, cropped)
+                                }
+                            } label: {
+                                Text("Apply Crop")
+                                    .font(AppTypography.body)
+                                    .foregroundColor(.white)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.9)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(AppColors.memorizeAccent)
+                                    .cornerRadius(AppCornerRadius.md)
+                            }
+                        }
+
+                        Text(preview.extractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                             ? "memorize.no_ocr_text".localized
+                             : preview.extractedText)
+                            .font(AppTypography.caption)
+                            .foregroundColor(Color.white.opacity(0.7))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, AppSpacing.xs)
+                    }
+                }
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.top, AppSpacing.md)
+                .padding(.bottom, AppSpacing.lg)
+                .frame(maxHeight: .infinity)
+                .background(AppColors.memorizeBackground)
+            }
+        }
+        .ignoresSafeArea()
+        .background(Color.black)
+    }
+
+    private func cropSlider(label: String, value: Binding<Double>, maxAllowed: Double) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(AppTypography.caption)
+                .foregroundColor(Color.white.opacity(0.7))
+            Slider(value: value, in: 0...maxAllowed)
+                .tint(AppColors.memorizeAccent)
+        }
+    }
+
+    private func maxInset(top: Bool = false, bottom: Bool = false, left: Bool = false, right: Bool = false) -> Double {
+        if top {
+            return max(0, 1.0 - bottomInset - minSpan)
+        }
+        if bottom {
+            return max(0, 1.0 - topInset - minSpan)
+        }
+        if left {
+            return max(0, 1.0 - rightInset - minSpan)
+        }
+        if right {
+            return max(0, 1.0 - leftInset - minSpan)
+        }
+        return 0.8
+    }
+
+    private func fittedRect(in container: CGSize, imageSize: CGSize) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0 else {
+            return CGRect(origin: .zero, size: container)
+        }
+        let scale = min(container.width / imageSize.width, container.height / imageSize.height)
+        let width = imageSize.width * scale
+        let height = imageSize.height * scale
+        let x = (container.width - width) / 2
+        let y = (container.height - height) / 2
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    private func cropRect(in imageRect: CGRect) -> CGRect {
+        let x = imageRect.minX + imageRect.width * leftInset
+        let y = imageRect.minY + imageRect.height * topInset
+        let width = imageRect.width * (1.0 - leftInset - rightInset)
+        let height = imageRect.height * (1.0 - topInset - bottomInset)
+        return CGRect(x: x, y: y, width: max(1, width), height: max(1, height))
+    }
+
+    private func cropImage(_ image: UIImage) -> UIImage? {
+        let source = normalizedImageForCropping(image)
+        let cropWidth = max(0.01, 1.0 - leftInset - rightInset)
+        let cropHeight = max(0.01, 1.0 - topInset - bottomInset)
+        let normalized = CGRect(
+            x: leftInset,
+            y: topInset,
+            width: cropWidth,
+            height: cropHeight
+        )
+        let cropRect = CGRect(
+            x: source.size.width * normalized.origin.x,
+            y: source.size.height * normalized.origin.y,
+            width: source.size.width * normalized.size.width,
+            height: source.size.height * normalized.size.height
+        ).integral
+
+        guard cropRect.width > 1, cropRect.height > 1 else { return nil }
+
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = source.scale
+        let renderer = UIGraphicsImageRenderer(size: cropRect.size, format: format)
+        return renderer.image { _ in
+            source.draw(at: CGPoint(x: -cropRect.origin.x, y: -cropRect.origin.y))
+        }
+    }
+
+    private func normalizedImageForCropping(_ image: UIImage) -> UIImage {
+        if image.imageOrientation == .up { return image }
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = image.scale
+        return UIGraphicsImageRenderer(size: image.size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: image.size))
+        }
     }
 }
 

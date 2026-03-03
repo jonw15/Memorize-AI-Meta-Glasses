@@ -31,6 +31,7 @@ class MemorizeCaptureViewModel: ObservableObject {
     private var queuedCaptures: [(pageId: UUID, image: UIImage)] = []
     private var isProcessingQueueActive: Bool = false
     private var currentProcessingTask: Task<Void, Never>?
+    private var cropReprocessTasks: [UUID: Task<Void, Never>] = [:]
     private var hasPhotoObserver: Bool = false
     private var cancellables = Set<AnyCancellable>()
 
@@ -280,12 +281,125 @@ class MemorizeCaptureViewModel: ObservableObject {
     func deletePage(_ page: PageCapture) {
         guard page.status != .processing && page.status != .capturing else { return }
 
+        cropReprocessTasks[page.id]?.cancel()
+        cropReprocessTasks[page.id] = nil
         pendingPhotoPageIDs.removeAll { $0 == page.id }
         queuedCaptures.removeAll { $0.pageId == page.id }
         stopTimedProgress(for: page.id)
         pages.removeAll { $0.id == page.id }
         storage.deleteThumbnail(for: page.id)
         saveProgress()
+    }
+
+    func startReprocessCroppedPage(pageId: UUID, image: UIImage) {
+        cropReprocessTasks[pageId]?.cancel()
+        cropReprocessTasks[pageId] = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.reprocessCroppedPage(pageId: pageId, image: image)
+            cropReprocessTasks[pageId] = nil
+        }
+    }
+
+    private func reprocessCroppedPage(pageId: UUID, image: UIImage) async {
+        guard let pageIndex = pages.firstIndex(where: { $0.id == pageId }) else { return }
+
+        let previousText = pages[pageIndex].extractedText
+        let thumbnailData = image.jpegData(compressionQuality: 0.3)
+        pages[pageIndex].thumbnailData = thumbnailData
+        if let thumbnailData {
+            storage.saveThumbnail(thumbnailData, for: pageId)
+        }
+
+        pages[pageIndex].status = .processing
+        pages[pageIndex].processingProgress = 0.2
+        pages[pageIndex].extractedText = ""
+        startTimedProgress(for: pageId)
+        saveProgress()
+
+        do {
+            let text = try await extractTextWithTimeout(from: image, timeoutSeconds: 45)
+            guard !Task.isCancelled else { return }
+            guard let finishedIndex = pages.firstIndex(where: { $0.id == pageId }) else { return }
+            pages[finishedIndex].extractedText = text
+            pages[finishedIndex].status = .completed
+            pages[finishedIndex].processingProgress = nil
+            stopTimedProgress(for: pageId)
+            saveProgress()
+        } catch {
+            guard !Task.isCancelled else { return }
+            // Retry with a larger, enhanced image. Small crop regions can cause OCR to return empty text.
+            do {
+                let enhanced = enhanceCroppedImageForOCR(image)
+                let retryText = try await extractTextWithTimeout(from: enhanced, timeoutSeconds: 45)
+                guard !Task.isCancelled else { return }
+                guard let retryIndex = pages.firstIndex(where: { $0.id == pageId }) else { return }
+                pages[retryIndex].extractedText = retryText
+                pages[retryIndex].status = .completed
+                pages[retryIndex].processingProgress = nil
+                stopTimedProgress(for: pageId)
+                saveProgress()
+                print("✅ [Memorize] Crop reprocess succeeded after enhancement")
+                return
+            } catch {
+                stopTimedProgress(for: pageId)
+                if let failedIndex = pages.firstIndex(where: { $0.id == pageId }) {
+                    // Preserve prior OCR so quiz flow remains usable even when cropped OCR is unreadable.
+                    pages[failedIndex].extractedText = previousText
+                    pages[failedIndex].status = .completed
+                    pages[failedIndex].processingProgress = nil
+                    saveProgress()
+                }
+                print("❌ [Memorize] Crop reprocess failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func extractTextWithTimeout(from image: UIImage, timeoutSeconds: Double) async throws -> String {
+        try await withThrowingTaskGroup(of: String.self) { group in
+            group.addTask { [memorizeService] in
+                try await memorizeService.extractText(from: image)
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+                throw NSError(
+                    domain: "MemorizeReprocess",
+                    code: 408,
+                    userInfo: [NSLocalizedDescriptionKey: "OCR timed out"]
+                )
+            }
+
+            guard let first = try await group.next() else {
+                throw NSError(
+                    domain: "MemorizeReprocess",
+                    code: 500,
+                    userInfo: [NSLocalizedDescriptionKey: "OCR did not return a result"]
+                )
+            }
+            let trimmed = first.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                throw NSError(
+                    domain: "MemorizeReprocess",
+                    code: 422,
+                    userInfo: [NSLocalizedDescriptionKey: "OCR returned empty text"]
+                )
+            }
+            group.cancelAll()
+            return trimmed
+        }
+    }
+
+    private func enhanceCroppedImageForOCR(_ image: UIImage) -> UIImage {
+        let targetWidth = max(image.size.width, 1400)
+        let scaleFactor = targetWidth / max(image.size.width, 1)
+        let targetSize = CGSize(
+            width: image.size.width * scaleFactor,
+            height: image.size.height * scaleFactor
+        )
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: targetSize, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
     }
 
     private func removeStaleInProgressPages(from book: inout Book) -> Bool {
@@ -318,6 +432,11 @@ class MemorizeCaptureViewModel: ObservableObject {
 
         pendingPhotoPageIDs.removeAll()
         queuedCaptures.removeAll()
+        for (pageID, task) in cropReprocessTasks {
+            task.cancel()
+            stopTimedProgress(for: pageID)
+        }
+        cropReprocessTasks.removeAll()
 
         for pageID in pageIDsToDiscard {
             storage.deleteThumbnail(for: pageID)
@@ -396,6 +515,9 @@ class MemorizeCaptureViewModel: ObservableObject {
     deinit {
         countdownTask?.cancel()
         currentProcessingTask?.cancel()
+        for task in cropReprocessTasks.values {
+            task.cancel()
+        }
         for task in processingProgressTasks.values {
             task.cancel()
         }
