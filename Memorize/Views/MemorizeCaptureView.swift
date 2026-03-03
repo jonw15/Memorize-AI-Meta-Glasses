@@ -244,8 +244,8 @@ struct MemorizeCaptureView: View {
                     .foregroundColor(.white)
             }
         }
-        .disabled(viewModel.isProcessing || viewModel.isGeneratingQuiz)
-        .opacity((viewModel.isProcessing || viewModel.isGeneratingQuiz) ? 0.5 : 1.0)
+        .disabled(viewModel.isGeneratingQuiz)
+        .opacity(viewModel.isGeneratingQuiz ? 0.5 : 1.0)
     }
 
     // MARK: - Delay Indicator
@@ -370,7 +370,7 @@ struct MemorizeCaptureView: View {
     }
 
     private func canDelete(_ page: PageCapture) -> Bool {
-        !viewModel.isProcessing && page.status != .processing && page.status != .capturing
+        page.status != .processing && page.status != .capturing
     }
 
     @ViewBuilder

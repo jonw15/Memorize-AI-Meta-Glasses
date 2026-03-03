@@ -27,6 +27,10 @@ class MemorizeCaptureViewModel: ObservableObject {
     private let synthesizer = AVSpeechSynthesizer()
     private var countdownTask: Task<Void, Never>?
     private var processingProgressTasks: [UUID: Task<Void, Never>] = [:]
+    private var pendingPhotoPageIDs: [UUID] = []
+    private var queuedCaptures: [(pageId: UUID, image: UIImage)] = []
+    private var isProcessingQueueActive: Bool = false
+    private var hasPhotoObserver: Bool = false
     private var cancellables = Set<AnyCancellable>()
 
     // Reference to stream view model for photo capture
@@ -49,7 +53,7 @@ class MemorizeCaptureViewModel: ObservableObject {
     // MARK: - Countdown & Capture
 
     func startCountdown() {
-        guard !isCountingDown, !isProcessing, !isGeneratingQuiz else { return }
+        guard !isCountingDown, !isGeneratingQuiz else { return }
 
         isCountingDown = true
         countdownValue = 3
@@ -69,7 +73,7 @@ class MemorizeCaptureViewModel: ObservableObject {
 
             isCountingDown = false
             AudioServicesPlaySystemSound(1108)
-            captureAndProcess()
+            captureAndQueue()
         }
     }
 
@@ -82,44 +86,71 @@ class MemorizeCaptureViewModel: ObservableObject {
 
     // MARK: - Photo Capture & OCR
 
-    private func captureAndProcess() {
+    private func captureAndQueue() {
         guard let streamVM = streamViewModel else {
             print("❌ [Memorize] No stream view model")
             return
         }
 
-        isProcessing = true
+        ensurePhotoObserver()
 
         // Create a new page entry
         let pageNumber = (pages.map(\.pageNumber).max() ?? 0) + 1
         let page = PageCapture(pageNumber: pageNumber, status: .capturing)
         pages.append(page)
+        pendingPhotoPageIDs.append(page.id)
         updateProgress(for: page.id, to: 0.08)
         saveProgress()
 
         // Capture photo from glasses
         streamVM.capturePhoto()
+    }
 
-        // Listen for the captured photo
+    private func ensurePhotoObserver() {
+        guard !hasPhotoObserver else { return }
+        guard let streamVM = streamViewModel else { return }
+
+        hasPhotoObserver = true
         streamVM.$capturedPhoto
             .compactMap { $0 }
-            .first()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] image in
                 guard let self else { return }
-                Task { @MainActor in
-                    await self.processCapture(image: image, pageIndex: self.pages.count - 1)
-                    // Clear the photo preview so it doesn't show the default preview
-                    streamVM.showPhotoPreview = false
-                    streamVM.capturedPhoto = nil
-                }
+                self.handleCapturedPhoto(image)
+                streamVM.showPhotoPreview = false
+                streamVM.capturedPhoto = nil
             }
             .store(in: &cancellables)
     }
 
-    private func processCapture(image: UIImage, pageIndex: Int) async {
-        guard pageIndex < pages.count else { return }
-        let pageId = pages[pageIndex].id
+    private func handleCapturedPhoto(_ image: UIImage) {
+        guard !pendingPhotoPageIDs.isEmpty else { return }
+        let pageId = pendingPhotoPageIDs.removeFirst()
+        guard pages.contains(where: { $0.id == pageId }) else { return }
+        queuedCaptures.append((pageId: pageId, image: image))
+        processNextQueuedCapture()
+    }
+
+    private func processNextQueuedCapture() {
+        guard !isProcessingQueueActive else { return }
+        guard !queuedCaptures.isEmpty else {
+            isProcessing = false
+            return
+        }
+
+        isProcessingQueueActive = true
+        isProcessing = true
+
+        let next = queuedCaptures.removeFirst()
+        Task { @MainActor in
+            await processCapture(image: next.image, pageId: next.pageId)
+            isProcessingQueueActive = false
+            processNextQueuedCapture()
+        }
+    }
+
+    private func processCapture(image: UIImage, pageId: UUID) async {
+        guard let pageIndex = pages.firstIndex(where: { $0.id == pageId }) else { return }
         updateProgress(for: pageId, to: 0.18)
 
         // Show capture flash overlay
@@ -150,8 +181,8 @@ class MemorizeCaptureViewModel: ObservableObject {
             updateProgress(for: pageId, to: 0.85)
             pages[pageIndex].status = .completed
 
-            // On first page, detect book info
-            if pageIndex == 0 && (currentBook?.title.isEmpty ?? true) {
+            // Auto-detect metadata if title is still empty
+            if currentBook?.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
                 let bookInfo = try await memorizeService.detectBookInfo(from: text)
                 currentBook?.title = bookInfo.title
                 currentBook?.author = bookInfo.author
@@ -164,14 +195,14 @@ class MemorizeCaptureViewModel: ObservableObject {
             print("✅ [Memorize] Page \(pageIndex + 1) processed successfully")
         } catch {
             stopTimedProgress(for: pageId)
-            let failedPageId = pages[pageIndex].id
-            pages.remove(at: pageIndex)
-            storage.deleteThumbnail(for: failedPageId)
-            saveProgress()
+            if let failedIndex = pages.firstIndex(where: { $0.id == pageId }) {
+                let failedPageId = pages[failedIndex].id
+                pages.remove(at: failedIndex)
+                storage.deleteThumbnail(for: failedPageId)
+                saveProgress()
+            }
             print("❌ [Memorize] OCR failed: \(error.localizedDescription)")
         }
-
-        isProcessing = false
     }
 
     // MARK: - Save Progress
@@ -229,9 +260,10 @@ class MemorizeCaptureViewModel: ObservableObject {
     // MARK: - Delete Page
 
     func deletePage(_ page: PageCapture) {
-        guard !isProcessing else { return }
         guard page.status != .processing && page.status != .capturing else { return }
 
+        pendingPhotoPageIDs.removeAll { $0 == page.id }
+        queuedCaptures.removeAll { $0.pageId == page.id }
         stopTimedProgress(for: page.id)
         pages.removeAll { $0.id == page.id }
         storage.deleteThumbnail(for: page.id)
@@ -296,5 +328,6 @@ class MemorizeCaptureViewModel: ObservableObject {
         for task in processingProgressTasks.values {
             task.cancel()
         }
+        cancellables.removeAll()
     }
 }
