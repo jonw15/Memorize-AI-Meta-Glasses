@@ -32,7 +32,7 @@ struct MemorizeCaptureView: View {
 
                 // Live camera preview
                 cameraPreview
-                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.horizontal, AppSpacing.xs)
                     .padding(.top, AppSpacing.md)
 
                 Spacer()
@@ -272,12 +272,6 @@ struct MemorizeCaptureView: View {
                     .foregroundColor(.white)
 
                 Spacer()
-
-                if viewModel.pages.count > 3 {
-                    Text("memorize.view_all".localized)
-                        .font(AppTypography.caption)
-                        .foregroundColor(AppColors.memorizeAccent)
-                }
             }
             .padding(.horizontal, AppSpacing.md)
 

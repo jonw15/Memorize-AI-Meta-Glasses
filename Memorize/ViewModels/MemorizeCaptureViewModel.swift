@@ -30,6 +30,7 @@ class MemorizeCaptureViewModel: ObservableObject {
     private var pendingPhotoPageIDs: [UUID] = []
     private var queuedCaptures: [(pageId: UUID, image: UIImage)] = []
     private var isProcessingQueueActive: Bool = false
+    private var currentProcessingTask: Task<Void, Never>?
     private var hasPhotoObserver: Bool = false
     private var cancellables = Set<AnyCancellable>()
 
@@ -42,8 +43,12 @@ class MemorizeCaptureViewModel: ObservableObject {
         if var book = book {
             // Load thumbnail files into pages
             storage.loadThumbnails(for: &book)
+            let didRemoveStalePages = removeStaleInProgressPages(from: &book)
             currentBook = book
             pages = book.pages
+            if didRemoveStalePages {
+                storage.updateBook(book)
+            }
         } else {
             // New book
             currentBook = Book()
@@ -59,6 +64,13 @@ class MemorizeCaptureViewModel: ObservableObject {
         countdownValue = 3
 
         countdownTask = Task { @MainActor in
+            configureCountdownSpeechAudioSession()
+            if synthesizer.isSpeaking {
+                synthesizer.stopSpeaking(at: .immediate)
+            }
+            // Give the audio route a brief moment to settle so the first number is audible.
+            try? await Task.sleep(nanoseconds: 150_000_000)
+
             for i in stride(from: 3, through: 1, by: -1) {
                 guard !Task.isCancelled else { break }
                 countdownValue = i
@@ -142,9 +154,11 @@ class MemorizeCaptureViewModel: ObservableObject {
         isProcessing = true
 
         let next = queuedCaptures.removeFirst()
-        Task { @MainActor in
+        currentProcessingTask = Task { @MainActor [weak self] in
+            guard let self else { return }
             await processCapture(image: next.image, pageId: next.pageId)
             isProcessingQueueActive = false
+            currentProcessingTask = nil
             processNextQueuedCapture()
         }
     }
@@ -177,9 +191,10 @@ class MemorizeCaptureViewModel: ObservableObject {
         do {
             // OCR - extract text
             let text = try await memorizeService.extractText(from: image)
-            pages[pageIndex].extractedText = text
+            guard let completedIndex = pages.firstIndex(where: { $0.id == pageId }) else { return }
+            pages[completedIndex].extractedText = text
             updateProgress(for: pageId, to: 0.85)
-            pages[pageIndex].status = .completed
+            pages[completedIndex].status = .completed
 
             // Auto-detect metadata if title is still empty
             if currentBook?.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
@@ -189,7 +204,9 @@ class MemorizeCaptureViewModel: ObservableObject {
             }
 
             updateProgress(for: pageId, to: 1.0)
-            pages[pageIndex].processingProgress = nil
+            if let finishedIndex = pages.firstIndex(where: { $0.id == pageId }) {
+                pages[finishedIndex].processingProgress = nil
+            }
             stopTimedProgress(for: pageId)
             saveProgress()
             print("✅ [Memorize] Page \(pageIndex + 1) processed successfully")
@@ -253,6 +270,7 @@ class MemorizeCaptureViewModel: ObservableObject {
     // MARK: - Done Reading
 
     func finishSession() {
+        cancelPendingAndInFlightProcessing()
         saveProgress()
         cancelCountdown()
     }
@@ -268,6 +286,46 @@ class MemorizeCaptureViewModel: ObservableObject {
         pages.removeAll { $0.id == page.id }
         storage.deleteThumbnail(for: page.id)
         saveProgress()
+    }
+
+    private func removeStaleInProgressPages(from book: inout Book) -> Bool {
+        let stalePages = book.pages.filter { $0.status == .capturing || $0.status == .processing }
+        guard !stalePages.isEmpty else { return false }
+
+        for page in stalePages {
+            storage.deleteThumbnail(for: page.id)
+        }
+        book.pages.removeAll { $0.status == .capturing || $0.status == .processing }
+        book.updatedAt = Date()
+        return true
+    }
+
+    private func cancelPendingAndInFlightProcessing() {
+        currentProcessingTask?.cancel()
+        currentProcessingTask = nil
+        isProcessingQueueActive = false
+
+        for task in processingProgressTasks.values {
+            task.cancel()
+        }
+        processingProgressTasks.removeAll()
+
+        let pageIDsToDiscard = Set(
+            pages
+                .filter { $0.status == .capturing || $0.status == .processing }
+                .map(\.id)
+        )
+
+        pendingPhotoPageIDs.removeAll()
+        queuedCaptures.removeAll()
+
+        for pageID in pageIDsToDiscard {
+            storage.deleteThumbnail(for: pageID)
+        }
+        pages.removeAll { pageIDsToDiscard.contains($0.id) }
+
+        isProcessing = false
+        lastCapturedImage = nil
     }
 
     private func updateProgress(for pageId: UUID, to newValue: Double) {
@@ -318,13 +376,26 @@ class MemorizeCaptureViewModel: ObservableObject {
 
     private func speakNumber(_ number: Int) {
         let utterance = AVSpeechUtterance(string: "\(number)")
-        utterance.rate = AVSpeechUtteranceMaximumSpeechRate
-        utterance.volume = 0.5
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        utterance.pitchMultiplier = 1.0
+        utterance.volume = 1.0
+        utterance.voice = AVSpeechSynthesisVoice(language: Locale.preferredLanguages.first ?? "en-US")
         synthesizer.speak(utterance)
+    }
+
+    private func configureCountdownSpeechAudioSession() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .defaultToSpeaker])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("⚠️ [Memorize] Failed to configure speech audio session: \(error.localizedDescription)")
+        }
     }
 
     deinit {
         countdownTask?.cancel()
+        currentProcessingTask?.cancel()
         for task in processingProgressTasks.values {
             task.cancel()
         }
