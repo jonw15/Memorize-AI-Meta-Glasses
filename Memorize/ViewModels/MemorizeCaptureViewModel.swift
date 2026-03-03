@@ -505,7 +505,7 @@ class MemorizeCaptureViewModel: ObservableObject {
     private func configureCountdownSpeechAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .defaultToSpeaker])
+            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             print("⚠️ [Memorize] Failed to configure speech audio session: \(error.localizedDescription)")

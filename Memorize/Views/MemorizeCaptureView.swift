@@ -12,6 +12,7 @@ struct MemorizeCaptureView: View {
     let book: Book?
 
     @StateObject private var viewModel = MemorizeCaptureViewModel()
+    @StateObject private var captureVoiceController = CaptureVoiceCommandController()
     @Environment(\.dismiss) private var dismiss
     @State private var selectedThumbnail: TimelineThumbnailPreview?
     @State private var showPostCaptureActions = false
@@ -103,6 +104,28 @@ struct MemorizeCaptureView: View {
             Task {
                 await streamViewModel.handleStartStreaming()
             }
+            Task {
+                await captureVoiceController.requestPermissionsIfNeeded()
+                captureVoiceController.startListening { command in
+                    switch command {
+                    case .takePhoto:
+                        if !viewModel.isCountingDown {
+                            captureVoiceController.suspendListening()
+                            viewModel.startCountdown()
+                        }
+                    }
+                }
+            }
+        }
+        .onChange(of: viewModel.isCountingDown) { isCountingDown in
+            if isCountingDown {
+                captureVoiceController.suspendListening()
+            } else {
+                captureVoiceController.resumeListening()
+            }
+        }
+        .onDisappear {
+            captureVoiceController.stopListening()
         }
     }
 
@@ -377,6 +400,163 @@ struct MemorizeCaptureView: View {
                 .cornerRadius(AppCornerRadius.md)
         }
         .padding(.horizontal, AppSpacing.md)
+    }
+}
+
+@MainActor
+private final class CaptureVoiceCommandController: NSObject, ObservableObject {
+    enum Command {
+        case takePhoto
+    }
+
+    private let audioEngine = AVAudioEngine()
+    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: Locale.preferredLanguages.first ?? "en-US"))
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTask: SFSpeechRecognitionTask?
+    private var onCommand: ((Command) -> Void)?
+    private var lastTriggerAt: Date = .distantPast
+    private var speechPermissionDenied = false
+    private var micPermissionDenied = false
+    private var shouldListen = false
+    private var restartTask: Task<Void, Never>?
+
+    func requestPermissionsIfNeeded() async {
+        let speechAuthorized: Bool = await withCheckedContinuation { continuation in
+            let status = SFSpeechRecognizer.authorizationStatus()
+            if status == .authorized {
+                continuation.resume(returning: true)
+            } else {
+                SFSpeechRecognizer.requestAuthorization { newStatus in
+                    continuation.resume(returning: newStatus == .authorized)
+                }
+            }
+        }
+        speechPermissionDenied = !speechAuthorized
+
+        let micAuthorized: Bool = await withCheckedContinuation { continuation in
+            if #available(iOS 17.0, *) {
+                AVAudioApplication.requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            } else {
+                AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            }
+        }
+        micPermissionDenied = !micAuthorized
+    }
+
+    func startListening(onCommand: @escaping (Command) -> Void) {
+        self.onCommand = onCommand
+        shouldListen = true
+        beginListeningIfNeeded()
+    }
+
+    func suspendListening() {
+        shouldListen = false
+        stopListeningInternal()
+    }
+
+    func resumeListening() {
+        shouldListen = true
+        beginListeningIfNeeded()
+    }
+
+    func stopListening() {
+        shouldListen = false
+        stopListeningInternal()
+    }
+
+    private func beginListeningIfNeeded() {
+        guard shouldListen else { return }
+        guard !speechPermissionDenied, !micPermissionDenied else { return }
+        guard recognitionTask == nil else { return }
+
+        restartTask?.cancel()
+        restartTask = nil
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.record, mode: .measurement, options: [.duckOthers, .allowBluetoothHFP])
+            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            return
+        }
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        recognitionRequest = request
+
+        guard let speechRecognizer, speechRecognizer.isAvailable else { return }
+
+        let inputNode = audioEngine.inputNode
+        let inputFormat = inputNode.inputFormat(forBus: 0)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            scheduleRestart()
+            return
+        }
+        inputNode.removeTap(onBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+            self?.recognitionRequest?.append(buffer)
+        }
+
+        audioEngine.prepare()
+        try? audioEngine.start()
+
+        recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let text = result?.bestTranscription.formattedString.lowercased(),
+                   let command = parseCommand(from: text) {
+                    let now = Date()
+                    if now.timeIntervalSince(lastTriggerAt) > 1.5 {
+                        lastTriggerAt = now
+                        self.onCommand?(command)
+                    }
+                }
+
+                if error != nil || (result?.isFinal ?? false) {
+                    stopListeningInternal()
+                    scheduleRestart()
+                }
+            }
+        }
+    }
+
+    private func stopListeningInternal() {
+        restartTask?.cancel()
+        restartTask = nil
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
+        audioEngine.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func scheduleRestart() {
+        guard shouldListen else { return }
+        restartTask?.cancel()
+        restartTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            self?.beginListeningIfNeeded()
+        }
+    }
+
+    private func parseCommand(from text: String) -> Command? {
+        let normalized = text.replacingOccurrences(of: "-", with: " ")
+        if normalized.contains("take photo") ||
+            normalized.contains("take a photo") ||
+            normalized.contains("capture photo") ||
+            normalized.contains("take picture") ||
+            normalized.contains("capture page") {
+            return .takePhoto
+        }
+        return nil
     }
 }
 
