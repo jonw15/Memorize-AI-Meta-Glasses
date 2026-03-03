@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "8A8A8A8A8A8A8A8A8A8A8A8A"
-               BuildableName = "CameraAccess.app"
-               BlueprintName = "CameraAccess"
-               ReferencedContainer = "container:CameraAccess.xcodeproj">
+               BuildableName = "Memorize.app"
+               BlueprintName = "Memorize"
+               ReferencedContainer = "container:Memorize.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -36,9 +36,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "E699CC942E8150670052C240"
-               BuildableName = "CameraAccessTests.xctest"
-               BlueprintName = "CameraAccessTests"
-               ReferencedContainer = "container:CameraAccess.xcodeproj">
+               BuildableName = "MemorizeTests.xctest"
+               BlueprintName = "MemorizeTests"
+               ReferencedContainer = "container:Memorize.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -58,9 +58,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "8A8A8A8A8A8A8A8A8A8A8A8A"
-            BuildableName = "CameraAccess.app"
-            BlueprintName = "CameraAccess"
-            ReferencedContainer = "container:CameraAccess.xcodeproj">
+            BuildableName = "Memorize.app"
+            BlueprintName = "Memorize"
+            ReferencedContainer = "container:Memorize.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -75,9 +75,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "8A8A8A8A8A8A8A8A8A8A8A8A"
-            BuildableName = "CameraAccess.app"
-            BlueprintName = "CameraAccess"
-            ReferencedContainer = "container:CameraAccess.xcodeproj">
+            BuildableName = "Memorize.app"
+            BlueprintName = "Memorize"
+            ReferencedContainer = "container:Memorize.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

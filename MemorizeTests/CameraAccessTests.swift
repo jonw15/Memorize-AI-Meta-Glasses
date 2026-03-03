@@ -12,7 +12,7 @@ import MWDATMockDevice
 import SwiftUI
 import XCTest
 
-@testable import CameraAccess
+@testable import Memorize
 
 @MainActor
 class ViewModelIntegrationTests: XCTestCase {

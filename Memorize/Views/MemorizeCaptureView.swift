@@ -14,7 +14,7 @@ struct MemorizeCaptureView: View {
     @StateObject private var viewModel = MemorizeCaptureViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var selectedThumbnail: TimelineThumbnailPreview?
-    @State private var showVoiceSummary = false
+    @State private var showPostCaptureActions = false
     private let processingAccent = Color(red: 0.34, green: 0.86, blue: 1.0)
 
     private struct TimelineThumbnailPreview: Identifiable {
@@ -56,17 +56,6 @@ struct MemorizeCaptureView: View {
                     timelineSection
                 }
 
-                // Learning checks
-                if hasCompletedPages {
-                    popQuizButton
-                        .padding(.horizontal, AppSpacing.md)
-                        .padding(.bottom, AppSpacing.sm)
-
-                    voiceSummaryButton
-                        .padding(.horizontal, AppSpacing.md)
-                        .padding(.bottom, AppSpacing.sm)
-                }
-
                 // Done Reading button
                 doneButton
                     .padding(.bottom, AppSpacing.lg)
@@ -85,15 +74,6 @@ struct MemorizeCaptureView: View {
                 }
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
-        }
-        .fullScreenCover(isPresented: $viewModel.showQuiz) {
-            MemorizeQuizView(questions: $viewModel.quizQuestions)
-        }
-        .fullScreenCover(isPresented: $showVoiceSummary) {
-            MemorizeVoiceSummaryView(
-                pages: viewModel.pages.filter { $0.status == .completed },
-                bookTitle: displayBookTitle
-            )
         }
         .fullScreenCover(item: $selectedThumbnail) { preview in
             GeometryReader { geo in
@@ -141,6 +121,15 @@ struct MemorizeCaptureView: View {
             }
             .ignoresSafeArea()
         }
+        .fullScreenCover(isPresented: $showPostCaptureActions) {
+            MemorizePostCaptureActionsView(
+                viewModel: viewModel,
+                bookTitle: displayBookTitle
+            ) {
+                showPostCaptureActions = false
+                dismiss()
+            }
+        }
         .onAppear {
             viewModel.streamViewModel = streamViewModel
             viewModel.loadBook(book)
@@ -157,9 +146,8 @@ struct MemorizeCaptureView: View {
             if let videoFrame = streamViewModel.currentVideoFrame {
                 Image(uiImage: videoFrame)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(height: 200)
-                    .clipped()
+                    .aspectRatio(videoFrame.size, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
             } else {
                 VStack(spacing: AppSpacing.sm) {
                     ProgressView()
@@ -168,7 +156,7 @@ struct MemorizeCaptureView: View {
                         .font(AppTypography.caption)
                         .foregroundColor(Color.white.opacity(0.5))
                 }
-                .frame(height: 200)
+                .frame(minHeight: 200)
                 .frame(maxWidth: .infinity)
             }
 
@@ -176,13 +164,12 @@ struct MemorizeCaptureView: View {
             if let captured = viewModel.lastCapturedImage {
                 Image(uiImage: captured)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(height: 200)
-                    .clipped()
+                    .aspectRatio(captured.size, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
                     .transition(.opacity)
             }
         }
-        .frame(height: 200)
+        .frame(maxWidth: .infinity)
         .background(Color.black.opacity(0.3))
         .cornerRadius(AppCornerRadius.md)
         .animation(.easeInOut(duration: 0.3), value: viewModel.lastCapturedImage != nil)
@@ -214,10 +201,6 @@ struct MemorizeCaptureView: View {
     private var displayBookTitle: String {
         let title = viewModel.currentBook?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return title.isEmpty ? "memorize.unknown_book".localized : title
-    }
-
-    private var hasCompletedPages: Bool {
-        viewModel.pages.contains(where: { $0.status == .completed })
     }
 
     // MARK: - Countdown Overlay
@@ -412,7 +395,108 @@ struct MemorizeCaptureView: View {
         }
     }
 
-    // MARK: - Pop Quiz Button
+    // MARK: - Done Button
+
+    private var doneButton: some View {
+        Button {
+            viewModel.finishSession()
+            Task {
+                await streamViewModel.stopSession()
+            }
+            showPostCaptureActions = true
+        } label: {
+            Text("memorize.done_reading".localized)
+                .font(AppTypography.headline)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(AppCornerRadius.md)
+        }
+        .padding(.horizontal, AppSpacing.md)
+    }
+}
+
+private struct MemorizePostCaptureActionsView: View {
+    @ObservedObject var viewModel: MemorizeCaptureViewModel
+    let bookTitle: String
+    let onClose: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var showVoiceSummary = false
+
+    private var completedPages: [PageCapture] {
+        viewModel.pages.filter { $0.status == .completed }
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: AppSpacing.md) {
+                Spacer()
+
+                Text(bookTitle)
+                    .font(AppTypography.title2)
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .padding(.horizontal, AppSpacing.md)
+
+                Text("memorize.capture_subtitle".localized)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(Color.white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, AppSpacing.md)
+
+                popQuizButton
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.top, AppSpacing.md)
+
+                voiceSummaryButton
+                    .padding(.horizontal, AppSpacing.md)
+
+                Spacer()
+
+                Button {
+                    dismiss()
+                    onClose()
+                } label: {
+                    Text("memorize.done".localized)
+                        .font(AppTypography.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(AppCornerRadius.md)
+                }
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.bottom, AppSpacing.lg)
+            }
+            .background(AppColors.memorizeBackground.ignoresSafeArea())
+            .navigationTitle("memorize.done_reading".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        dismiss()
+                        onClose()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .fullScreenCover(isPresented: $viewModel.showQuiz) {
+            MemorizeQuizView(questions: $viewModel.quizQuestions)
+        }
+        .fullScreenCover(isPresented: $showVoiceSummary) {
+            MemorizeVoiceSummaryView(
+                pages: completedPages,
+                bookTitle: bookTitle
+            )
+        }
+    }
 
     private var popQuizButton: some View {
         Button {
@@ -445,7 +529,8 @@ struct MemorizeCaptureView: View {
             )
             .cornerRadius(AppCornerRadius.md)
         }
-        .disabled(viewModel.isGeneratingQuiz)
+        .disabled(viewModel.isGeneratingQuiz || completedPages.isEmpty)
+        .opacity((viewModel.isGeneratingQuiz || completedPages.isEmpty) ? 0.5 : 1.0)
     }
 
     private var voiceSummaryButton: some View {
@@ -471,26 +556,8 @@ struct MemorizeCaptureView: View {
             )
             .cornerRadius(AppCornerRadius.md)
         }
-        .disabled(viewModel.isGeneratingQuiz)
-        .opacity(viewModel.isGeneratingQuiz ? 0.5 : 1.0)
-    }
-
-    // MARK: - Done Button
-
-    private var doneButton: some View {
-        Button {
-            viewModel.finishSession()
-            dismiss()
-        } label: {
-            Text("memorize.done_reading".localized)
-                .font(AppTypography.headline)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(AppCornerRadius.md)
-        }
-        .padding(.horizontal, AppSpacing.md)
+        .disabled(viewModel.isGeneratingQuiz || completedPages.isEmpty)
+        .opacity((viewModel.isGeneratingQuiz || completedPages.isEmpty) ? 0.5 : 1.0)
     }
 }
 

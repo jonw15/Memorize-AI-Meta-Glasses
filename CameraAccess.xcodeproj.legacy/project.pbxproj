@@ -92,6 +92,7 @@
 		LT0003000300030003 /* LiveTranslateViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1003000300030003 /* LiveTranslateViewModel.swift */; };
 		LT0004000400040004 /* LiveTranslateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1004000400040004 /* LiveTranslateView.swift */; };
 		LT0005000500050005 /* LiveTranslateSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1005000500050005 /* LiveTranslateSettingsView.swift */; };
+		MQ0001000100010001 /* MemorizeQuizView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MQ1001000100010001 /* MemorizeQuizView.swift */; };
 		MZ0001000100010001 /* MemorizeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1001000100010001 /* MemorizeModels.swift */; };
 		MZ0002000200020002 /* MemorizeStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1002000200020002 /* MemorizeStorage.swift */; };
 		MZ0003000300030003 /* MemorizeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1003000300030003 /* MemorizeService.swift */; };
@@ -99,8 +100,6 @@
 		MZ0005000500050005 /* MemorizeCaptureViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1005000500050005 /* MemorizeCaptureViewModel.swift */; };
 		MZ0006000600060006 /* MemorizeHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1006000600060006 /* MemorizeHomeView.swift */; };
 		MZ0007000700070007 /* MemorizeCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1007000700070007 /* MemorizeCaptureView.swift */; };
-		MQ0001000100010001 /* MemorizeQuizView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MQ1001000100010001 /* MemorizeQuizView.swift */; };
-
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -109,7 +108,7 @@
 			containerPortal = CCCCCCCCCCCCCCCCCCCCCC /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 8A8A8A8A8A8A8A8A8A8A8A8A;
-			remoteInfo = CameraAccess;
+			remoteInfo = Memorize;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -131,7 +130,7 @@
 		069172850B30A2766C8BD4B5 /* TTSService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TTSService.swift; sourceTree = "<group>"; };
 		1111827A1CF7A278A6DC6934 /* APIProviderManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = APIProviderManager.swift; path = Managers/APIProviderManager.swift; sourceTree = "<group>"; };
 		330AF93394A09D97C504F568 /* QuickVisionSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickVisionSettingsView.swift; sourceTree = "<group>"; };
-		3A3A3A3A3A3A3A3A3A3A3A3A /* CameraAccess.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CameraAccess.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3A3A3A3A3A3A3A3A3A3A3A3A /* Memorize.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Memorize.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		414A2AC7E8B825BC1B4DB93F /* QuickVisionModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickVisionModels.swift; sourceTree = "<group>"; };
 		4B69CCC22F050D4300D1D025 /* RTMPStreamingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RTMPStreamingView.swift; sourceTree = "<group>"; };
 		4B69CCC42F050D5200D1D025 /* RTMPStreamingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RTMPStreamingViewModel.swift; sourceTree = "<group>"; };
@@ -199,7 +198,7 @@
 		C7F490219E64EC144DAF8A8C /* QuickVisionStorage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickVisionStorage.swift; sourceTree = "<group>"; };
 		CA3E36CE337855A7F17F2AC8 /* QuickVisionService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickVisionService.swift; sourceTree = "<group>"; };
 		DC72379319F7F8AAF8019018 /* LiveAIManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LiveAIManager.swift; path = Managers/LiveAIManager.swift; sourceTree = "<group>"; };
-		E699CC952E8150670052C240 /* CameraAccessTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CameraAccessTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E699CC952E8150670052C240 /* MemorizeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemorizeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		LA1001000100010001 /* AIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfig.swift; sourceTree = "<group>"; };
 		LA1002000200020002 /* AIConfigService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfigService.swift; sourceTree = "<group>"; };
 		LC1001000100010001 /* LiveChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatView.swift; sourceTree = "<group>"; };
@@ -209,6 +208,7 @@
 		LT1003000300030003 /* LiveTranslateViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateViewModel.swift; sourceTree = "<group>"; };
 		LT1004000400040004 /* LiveTranslateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateView.swift; sourceTree = "<group>"; };
 		LT1005000500050005 /* LiveTranslateSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateSettingsView.swift; sourceTree = "<group>"; };
+		MQ1001000100010001 /* MemorizeQuizView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeQuizView.swift; sourceTree = "<group>"; };
 		MZ1001000100010001 /* MemorizeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeModels.swift; sourceTree = "<group>"; };
 		MZ1002000200020002 /* MemorizeStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeStorage.swift; sourceTree = "<group>"; };
 		MZ1003000300030003 /* MemorizeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeService.swift; sourceTree = "<group>"; };
@@ -216,8 +216,6 @@
 		MZ1005000500050005 /* MemorizeCaptureViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeCaptureViewModel.swift; sourceTree = "<group>"; };
 		MZ1006000600060006 /* MemorizeHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeHomeView.swift; sourceTree = "<group>"; };
 		MZ1007000700070007 /* MemorizeCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeCaptureView.swift; sourceTree = "<group>"; };
-		MQ1001000100010001 /* MemorizeQuizView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeQuizView.swift; sourceTree = "<group>"; };
-
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -307,7 +305,6 @@
 				LA1002000200020002 /* AIConfigService.swift */,
 				MZ1002000200020002 /* MemorizeStorage.swift */,
 				MZ1003000300030003 /* MemorizeService.swift */,
-
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -441,8 +438,8 @@
 		7A7A7A7A7A7A7A7A7A7A7A7A /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				3A3A3A3A3A3A3A3A3A3A3A3A /* CameraAccess.app */,
-				E699CC952E8150670052C240 /* CameraAccessTests.xctest */,
+				3A3A3A3A3A3A3A3A3A3A3A3A /* Memorize.app */,
+				E699CC952E8150670052C240 /* MemorizeTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -478,9 +475,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		8A8A8A8A8A8A8A8A8A8A8A8A /* CameraAccess */ = {
+		8A8A8A8A8A8A8A8A8A8A8A8A /* Memorize */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 9A9A9A9A9A9A9A9A9A9A9A9A /* Build configuration list for PBXNativeTarget "CameraAccess" */;
+			buildConfigurationList = 9A9A9A9A9A9A9A9A9A9A9A9A /* Build configuration list for PBXNativeTarget "Memorize" */;
 			buildPhases = (
 				AAAAAAAAAAAAAAAAAAAAAA /* Sources */,
 				4A4A4A4A4A4A4A4A4A4A4A4A /* Frameworks */,
@@ -491,14 +488,14 @@
 			);
 			dependencies = (
 			);
-			name = CameraAccess;
-			productName = CameraAccess;
-			productReference = 3A3A3A3A3A3A3A3A3A3A3A3A /* CameraAccess.app */;
+			name = Memorize;
+			productName = Memorize;
+			productReference = 3A3A3A3A3A3A3A3A3A3A3A3A /* Memorize.app */;
 			productType = "com.apple.product-type.application";
 		};
-		E699CC942E8150670052C240 /* CameraAccessTests */ = {
+		E699CC942E8150670052C240 /* MemorizeTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E699CC9D2E8150670052C240 /* Build configuration list for PBXNativeTarget "CameraAccessTests" */;
+			buildConfigurationList = E699CC9D2E8150670052C240 /* Build configuration list for PBXNativeTarget "MemorizeTests" */;
 			buildPhases = (
 				E699CC912E8150670052C240 /* Sources */,
 				E699CCA32E8150670052C240 /* Frameworks */,
@@ -512,13 +509,13 @@
 			fileSystemSynchronizedGroups = (
 				E699CC962E8150670052C240 /* CameraAccessTests */,
 			);
-			name = CameraAccessTests;
+			name = MemorizeTests;
 			packageProductDependencies = (
 				E699CCA42E8150670052C240 /* MWDATCore */,
 				E699CCA52E8150670052C240 /* MWDATMockDevice */,
 			);
-			productName = CameraAccessTests;
-			productReference = E699CC952E8150670052C240 /* CameraAccessTests.xctest */;
+			productName = MemorizeTests;
+			productReference = E699CC952E8150670052C240 /* MemorizeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -558,8 +555,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				8A8A8A8A8A8A8A8A8A8A8A8A /* CameraAccess */,
-				E699CC942E8150670052C240 /* CameraAccessTests */,
+				8A8A8A8A8A8A8A8A8A8A8A8A /* Memorize */,
+				E699CC942E8150670052C240 /* MemorizeTests */,
 			);
 		};
 /* End PBXProject section */
@@ -672,7 +669,6 @@
 				MZ0006000600060006 /* MemorizeHomeView.swift in Sources */,
 				MZ0007000700070007 /* MemorizeCaptureView.swift in Sources */,
 				MQ0001000100010001 /* MemorizeQuizView.swift in Sources */,
-
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -688,7 +684,7 @@
 /* Begin PBXTargetDependency section */
 		E699CC9A2E8150670052C240 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 8A8A8A8A8A8A8A8A8A8A8A8A /* CameraAccess */;
+			target = 8A8A8A8A8A8A8A8A8A8A8A8A /* Memorize */;
 			targetProxy = E699CC992E8150670052C240 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -728,7 +724,7 @@
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
 				INFOPLIST_FILE = CameraAccess/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Aria Spark";
+				INFOPLIST_KEY_CFBundleDisplayName = Memorize;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -736,8 +732,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.meta.wearables.external.CameraAccess;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.ariaspark.memorize;
+				PRODUCT_NAME = Memorize;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -762,7 +758,7 @@
 				DEVELOPMENT_TEAM = XGVZVJM2A6;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = CameraAccess/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Aria Spark";
+				INFOPLIST_KEY_CFBundleDisplayName = Memorize;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -770,8 +766,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.meta.wearables.external.CameraAccess;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.ariaspark.memorize;
+				PRODUCT_NAME = Memorize;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -796,8 +792,8 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.meta.wearables.external.CameraAccessTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.ariaspark.memorizeTests;
+				PRODUCT_NAME = MemorizeTests;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -809,7 +805,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CameraAccess.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CameraAccess";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Memorize.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Memorize";
 			};
 			name = Debug;
 		};
@@ -827,8 +823,8 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.meta.wearables.external.CameraAccessTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.ariaspark.memorizeTests;
+				PRODUCT_NAME = MemorizeTests;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -839,7 +835,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CameraAccess.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CameraAccess";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Memorize.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Memorize";
 			};
 			name = Release;
 		};
@@ -962,7 +958,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		9A9A9A9A9A9A9A9A9A9A9A9A /* Build configuration list for PBXNativeTarget "CameraAccess" */ = {
+		9A9A9A9A9A9A9A9A9A9A9A9A /* Build configuration list for PBXNativeTarget "Memorize" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				0B0B0B0B0B0B0B0B0B0B0B0B /* Debug */,
@@ -980,7 +976,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E699CC9D2E8150670052C240 /* Build configuration list for PBXNativeTarget "CameraAccessTests" */ = {
+		E699CC9D2E8150670052C240 /* Build configuration list for PBXNativeTarget "MemorizeTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E699CC9B2E8150670052C240 /* Debug */,

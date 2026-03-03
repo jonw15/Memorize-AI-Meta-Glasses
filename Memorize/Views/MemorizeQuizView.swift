@@ -76,24 +76,32 @@ struct MemorizeQuizView: View {
             .frame(height: 4)
             .padding(.horizontal, AppSpacing.md)
 
-            // Question card
-            Text(question.question)
-                .font(AppTypography.title)
-                .foregroundColor(.white)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(AppSpacing.md)
-                .background(AppColors.memorizeCard)
-                .cornerRadius(AppCornerRadius.md)
-                .padding(.horizontal, AppSpacing.md)
-
-            // Answer options
-            VStack(spacing: AppSpacing.sm) {
-                ForEach(0..<question.options.count, id: \.self) { index in
-                    optionRow(index: index, question: question)
-                }
+            // Question card (scrolls for long prompts)
+            ScrollView(.vertical, showsIndicators: true) {
+                Text(question.question)
+                    .font(AppTypography.title)
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(AppSpacing.md)
+                    .background(AppColors.memorizeCard)
+                    .cornerRadius(AppCornerRadius.md)
+                    .padding(.horizontal, AppSpacing.md)
             }
-            .padding(.horizontal, AppSpacing.md)
+            .frame(minHeight: 120, maxHeight: 220)
+
+            // Answer options (scrolls when options are long)
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(spacing: AppSpacing.sm) {
+                    ForEach(0..<question.options.count, id: \.self) { index in
+                        optionRow(index: index, question: question)
+                    }
+                }
+                .padding(.horizontal, AppSpacing.md)
+            }
+            .frame(maxHeight: 320)
 
             Spacer()
 
@@ -170,8 +178,6 @@ struct MemorizeQuizView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .layoutPriority(1)
-
-                Spacer()
 
                 // Result icon
                 if isAnswered {
