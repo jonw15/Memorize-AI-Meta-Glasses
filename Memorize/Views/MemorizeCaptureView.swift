@@ -18,6 +18,7 @@ struct MemorizeCaptureView: View {
     @State private var selectedThumbnail: TimelineThumbnailPreview?
     @State private var showPostCaptureActions = false
     @State private var didPlayIntroInstruction = false
+    @State private var introSequenceTask: Task<Void, Never>?
     private let processingAccent = Color(red: 0.34, green: 0.86, blue: 1.0)
 
     struct TimelineThumbnailPreview: Identifiable {
@@ -110,17 +111,24 @@ struct MemorizeCaptureView: View {
         .onAppear {
             viewModel.streamViewModel = streamViewModel
             viewModel.loadBook(book)
-            Task {
+            introSequenceTask?.cancel()
+            introSequenceTask = Task {
                 await streamViewModel.handleStartStreaming()
-            }
-            if !didPlayIntroInstruction {
-                didPlayIntroInstruction = true
-                captureVoiceController.suspendListening()
-                introAnnouncer.speak("Click done reading when you are done reading the material") {
+
+                if !didPlayIntroInstruction {
+                    didPlayIntroInstruction = true
+                    captureVoiceController.suspendListening()
+
+                    // Let startup/system announcement finish before intro guidance.
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    guard !Task.isCancelled else { return }
+
+                    introAnnouncer.speak("Click done reading when you are done reading the material") {
+                        startCaptureVoiceCommands()
+                    }
+                } else {
                     startCaptureVoiceCommands()
                 }
-            } else {
-                startCaptureVoiceCommands()
             }
         }
         .onChange(of: viewModel.isCountingDown) { isCountingDown in
@@ -147,6 +155,8 @@ struct MemorizeCaptureView: View {
             }
         }
         .onDisappear {
+            introSequenceTask?.cancel()
+            introSequenceTask = nil
             introAnnouncer.stop()
             captureVoiceController.stopListening()
         }
@@ -421,6 +431,22 @@ struct MemorizeCaptureView: View {
 
     // MARK: - Done Button
 
+    private var isDoneReadingEnabled: Bool {
+        guard !viewModel.pages.isEmpty else { return true }
+        guard !viewModel.isProcessing else { return false }
+
+        return viewModel.pages.allSatisfy { page in
+            switch page.status {
+            case .completed:
+                return page.thumbnailData != nil
+            case .capturing, .processing:
+                return false
+            case .failed:
+                return true
+            }
+        }
+    }
+
     private var doneButton: some View {
         Button {
             viewModel.finishSession()
@@ -438,6 +464,8 @@ struct MemorizeCaptureView: View {
                 .cornerRadius(AppCornerRadius.md)
         }
         .padding(.horizontal, AppSpacing.md)
+        .disabled(!isDoneReadingEnabled)
+        .opacity(isDoneReadingEnabled ? 1 : 0.5)
     }
 }
 
