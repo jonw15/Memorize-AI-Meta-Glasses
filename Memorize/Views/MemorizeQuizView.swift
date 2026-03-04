@@ -52,8 +52,13 @@ struct MemorizeQuizView: View {
         }
         .task {
             await voiceAssistant.requestPermissionsIfNeeded()
-            voiceAssistant.enableVoiceAnswering { answerIndex in
-                selectAnswer(answerIndex, spoken: true)
+            voiceAssistant.enableVoiceAnswering { action in
+                switch action {
+                case .answer(let answerIndex):
+                    selectAnswer(answerIndex)
+                case .next:
+                    goToNextQuestion()
+                }
             }
             speakCurrentQuestionIfNeeded()
         }
@@ -64,8 +69,13 @@ struct MemorizeQuizView: View {
             if isShowingResults {
                 voiceAssistant.disableVoiceAnswering()
             } else {
-                voiceAssistant.enableVoiceAnswering { answerIndex in
-                    selectAnswer(answerIndex, spoken: true)
+                voiceAssistant.enableVoiceAnswering { action in
+                    switch action {
+                    case .answer(let answerIndex):
+                        selectAnswer(answerIndex)
+                    case .next:
+                        goToNextQuestion()
+                    }
                 }
                 speakCurrentQuestionIfNeeded()
             }
@@ -134,15 +144,7 @@ struct MemorizeQuizView: View {
             // Next / See Results button
             if question.selectedIndex != nil {
                 Button {
-                    if currentIndex < questions.count - 1 {
-                        withAnimation {
-                            currentIndex += 1
-                        }
-                    } else {
-                        withAnimation {
-                            showResults = true
-                        }
-                    }
+                    goToNextQuestion()
                 } label: {
                     Text(currentIndex < questions.count - 1
                          ? "memorize.quiz_next".localized
@@ -182,7 +184,7 @@ struct MemorizeQuizView: View {
         }()
 
         return Button {
-            selectAnswer(index, spoken: false)
+            selectAnswer(index)
         } label: {
             HStack(spacing: 12) {
                 // Option letter
@@ -299,32 +301,52 @@ struct MemorizeQuizView: View {
         voiceAssistant.speakQuestion(question: question, index: currentIndex + 1, total: questions.count)
     }
 
-    private func selectAnswer(_ index: Int, spoken: Bool) {
+    private func selectAnswer(_ index: Int) {
         guard !showResults, currentIndex < questions.count else { return }
         guard questions[currentIndex].selectedIndex == nil else { return }
         guard index >= 0, index < questions[currentIndex].options.count else { return }
 
         questions[currentIndex].selectedIndex = index
-        guard spoken else { return }
 
         let isCorrect = index == questions[currentIndex].correctIndex
         if isCorrect {
             voiceAssistant.speakFeedback("Correct.")
         } else {
-            let correctLetter = ["A", "B", "C", "D"][questions[currentIndex].correctIndex]
-            voiceAssistant.speakFeedback("Wrong. Correct answer is \(correctLetter).")
+            let correctIndex = questions[currentIndex].correctIndex
+            let correctLetter = ["A", "B", "C", "D"][correctIndex]
+            let correctText = questions[currentIndex].options[correctIndex]
+            voiceAssistant.speakFeedback("Wrong. The correct answer is \(correctLetter): \(correctText).")
+        }
+    }
+
+    private func goToNextQuestion() {
+        guard !showResults, currentIndex < questions.count else { return }
+        guard questions[currentIndex].selectedIndex != nil else { return }
+        if currentIndex < questions.count - 1 {
+            withAnimation {
+                currentIndex += 1
+            }
+        } else {
+            withAnimation {
+                showResults = true
+            }
         }
     }
 }
 
 @MainActor
 private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+    enum VoiceAction {
+        case answer(Int)
+        case next
+    }
+
     private let audioEngine = AVAudioEngine()
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: Locale.preferredLanguages.first ?? "en-US"))
     private let synthesizer = AVSpeechSynthesizer()
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private var onAnswer: ((Int) -> Void)?
+    private var onAction: ((VoiceAction) -> Void)?
     private var speechPermissionDenied = false
     private var micPermissionDenied = false
     private var isSpeaking = false
@@ -374,14 +396,14 @@ private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynt
         speak(text)
     }
 
-    func enableVoiceAnswering(onAnswer: @escaping (Int) -> Void) {
-        self.onAnswer = onAnswer
+    func enableVoiceAnswering(onAction: @escaping (VoiceAction) -> Void) {
+        self.onAction = onAction
         shouldListen = true
     }
 
     func disableVoiceAnswering() {
         shouldListen = false
-        stopListeningInternal()
+        stopListeningInternal(deactivateSession: true)
     }
 
     private func beginListeningIfNeeded() {
@@ -425,24 +447,24 @@ private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynt
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let transcript = result?.bestTranscription.formattedString.lowercased(),
-                   let answer = parseAnswer(from: transcript),
+                   let action = parseAction(from: transcript),
                    !isSpeaking {
                     let now = Date()
                     if now.timeIntervalSince(lastHeardAt) > 1.2 {
                         lastHeardAt = now
-                        self.onAnswer?(answer)
+                        self.onAction?(action)
                     }
                 }
 
                 if error != nil || (result?.isFinal ?? false) {
-                    stopListeningInternal()
+                    stopListeningInternal(deactivateSession: false)
                     scheduleRestart()
                 }
             }
         }
     }
 
-    private func stopListeningInternal() {
+    private func stopListeningInternal(deactivateSession: Bool = false) {
         restartTask?.cancel()
         restartTask = nil
         if audioEngine.isRunning {
@@ -453,11 +475,14 @@ private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynt
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if deactivateSession {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 
     private func speak(_ text: String) {
-        stopListeningInternal()
+        // Keep audio session active for faster TTS -> mic handoff after speaking.
+        stopListeningInternal(deactivateSession: false)
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
@@ -470,33 +495,138 @@ private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynt
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         utterance.pitchMultiplier = 1.0
         utterance.volume = 1.0
-        utterance.voice = AVSpeechSynthesisVoice(language: Locale.preferredLanguages.first ?? "en-US")
+        utterance.voice = preferredNaturalVoice() ?? AVSpeechSynthesisVoice(language: Locale.preferredLanguages.first ?? "en-US")
         synthesizer.speak(utterance)
     }
 
     private func parseAnswer(from text: String) -> Int? {
-        let normalized = text.replacingOccurrences(of: "-", with: " ")
-        let tokens = normalized.split(whereSeparator: { !$0.isLetter }).map { String($0) }
-        if tokens.contains("a") || normalized.contains("option a") || normalized.contains("answer a") {
-            return 0
+        let normalized = text
+            .lowercased()
+            .replacingOccurrences(of: "-", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if normalized.isEmpty { return nil }
+
+        let rawTokens = normalized.split(whereSeparator: { !$0.isLetter }).map(String.init)
+        let tokens = rawTokens.map { canonicalToken($0) }
+
+        // Natural speech pattern: "A, Macbook" / "B Macbook" / "C the answer is ..."
+        if let first = tokens.first {
+            switch first {
+            case "a": return 0
+            case "b": return 1
+            case "c": return 2
+            case "d": return 3
+            default: break
+            }
         }
-        if tokens.contains("b") || normalized.contains("option b") || normalized.contains("answer b") {
-            return 1
+
+        if let explicit = extractExplicitChoice(from: normalized, tokens: tokens) {
+            return explicit
         }
-        if tokens.contains("c") || normalized.contains("option c") || normalized.contains("answer c") {
-            return 2
+
+        // Fallback: single utterance like "a", "bee", "dee", etc.
+        if let last = tokens.last {
+            switch last {
+            case "a": return 0
+            case "b": return 1
+            case "c": return 2
+            case "d": return 3
+            default: return nil
+            }
         }
-        if tokens.contains("d") || normalized.contains("option d") || normalized.contains("answer d") {
-            return 3
+
+        return nil
+    }
+
+    private func parseAction(from text: String) -> VoiceAction? {
+        let normalized = text
+            .lowercased()
+            .replacingOccurrences(of: "-", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if normalized.contains("next question") ||
+            normalized == "next" ||
+            normalized.contains("go next") ||
+            normalized.contains("continue") {
+            return .next
+        }
+
+        if let answer = parseAnswer(from: normalized) {
+            return .answer(answer)
         }
         return nil
+    }
+
+    private func extractExplicitChoice(from normalized: String, tokens: [String]) -> Int? {
+        let phrasePrefixes = [
+            "option ",
+            "answer ",
+            "choose ",
+            "i choose ",
+            "pick ",
+            "i pick ",
+            "my answer is ",
+            "the answer is ",
+            "i select ",
+            "select "
+        ]
+
+        for prefix in phrasePrefixes {
+            if let range = normalized.range(of: prefix) {
+                let remainder = normalized[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+                let token = canonicalToken(String(remainder.split(whereSeparator: { !$0.isLetter }).first ?? ""))
+                switch token {
+                case "a": return 0
+                case "b": return 1
+                case "c": return 2
+                case "d": return 3
+                default: break
+                }
+            }
+        }
+
+        // Direct token fallback anywhere in transcript.
+        if tokens.contains("a") { return 0 }
+        if tokens.contains("b") { return 1 }
+        if tokens.contains("c") { return 2 }
+        if tokens.contains("d") { return 3 }
+        return nil
+    }
+
+    private func canonicalToken(_ token: String) -> String {
+        switch token {
+        case "a", "ay", "eh", "hey":
+            return "a"
+        case "b", "bee", "be":
+            return "b"
+        case "c", "see", "cee", "sea":
+            return "c"
+        case "d", "dee", "de":
+            return "d"
+        default:
+            return token
+        }
+    }
+
+    private func preferredNaturalVoice() -> AVSpeechSynthesisVoice? {
+        let preferredLanguage = Locale.preferredLanguages.first ?? "en-US"
+        let languagePrefix = String(preferredLanguage.prefix(2))
+        let candidates = AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language.lowercased().hasPrefix(languagePrefix.lowercased()) }
+            .filter { !$0.identifier.lowercased().contains("siri") }
+
+        if let premiumLike = candidates.first(where: { $0.identifier.lowercased().contains("premium") || $0.identifier.lowercased().contains("enhanced") }) {
+            return premiumLike
+        }
+        return candidates.first
     }
 
     private func scheduleRestart() {
         guard shouldListen else { return }
         restartTask?.cancel()
         restartTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 450_000_000)
+            try? await Task.sleep(nanoseconds: 120_000_000)
             self?.beginListeningIfNeeded()
         }
     }

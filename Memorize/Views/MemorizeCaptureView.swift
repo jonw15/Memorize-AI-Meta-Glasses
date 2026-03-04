@@ -121,6 +121,22 @@ struct MemorizeCaptureView: View {
             if isCountingDown {
                 captureVoiceController.suspendListening()
             } else {
+                if !showPostCaptureActions && selectedThumbnail == nil {
+                    captureVoiceController.resumeListening()
+                }
+            }
+        }
+        .onChange(of: showPostCaptureActions) { isPresented in
+            if isPresented {
+                captureVoiceController.suspendListening()
+            } else if !viewModel.isCountingDown && selectedThumbnail == nil {
+                captureVoiceController.resumeListening()
+            }
+        }
+        .onChange(of: selectedThumbnail?.id) { selectedID in
+            if selectedID != nil {
+                captureVoiceController.suspendListening()
+            } else if !viewModel.isCountingDown && !showPostCaptureActions {
                 captureVoiceController.resumeListening()
             }
         }
@@ -998,8 +1014,16 @@ private final class VoiceSummarySpeechRecognizer: NSObject, ObservableObject {
         }
 
         let inputNode = audioEngine.inputNode
+        let inputFormat = inputNode.inputFormat(forBus: 0)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            throw NSError(
+                domain: "VoiceSummarySpeechRecognizer",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Microphone input format is unavailable"]
+            )
+        }
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputNode.outputFormat(forBus: 0)) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
         }
 
