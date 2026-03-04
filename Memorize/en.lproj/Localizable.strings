@@ -445,6 +445,9 @@
 "memorize.cover_capture_cancel_countdown" = "Cancel Countdown";
 "memorize.cover_capture_processing" = "Analyzing cover...";
 "memorize.start_session" = "Add Book";
+"memorize.delete_session_title" = "Delete Session?";
+"memorize.delete_session_message" = "Are you sure you want to delete \"%@\"? This cannot be undone.";
+"memorize.delete_session_confirm" = "Delete";
 "memorize.cancel" = "Cancel";
 "memorize.continue_session" = "Continue Session";
 "memorize.pages_captured" = "pages captured";

@@ -361,10 +361,17 @@ struct MemorizeCaptureView: View {
                     Button {
                         viewModel.deletePage(page)
                     } label: {
-                        Image(systemName: "trash.circle.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(.white.opacity(0.95))
-                            .background(Circle().fill(Color.black.opacity(0.35)))
+                        ZStack {
+                            Circle()
+                                .fill(Color.black.opacity(0.45))
+                                .frame(width: 28, height: 28)
+
+                            Image(systemName: "trash.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.95))
+                        }
+                        .frame(width: 40, height: 40) // Larger hit target
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .disabled(!canDelete(page))
@@ -730,7 +737,7 @@ private struct TimelinePreviewEditorView: View {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 34))
                             .foregroundColor(.white.opacity(0.9))
-                            .padding(.top, AppSpacing.lg)
+                            .padding(.top, AppSpacing.sm)
                             .padding(.trailing, AppSpacing.md)
                     }
                 }
@@ -796,7 +803,7 @@ private struct TimelinePreviewEditorView: View {
                 .background(AppColors.memorizeBackground)
             }
         }
-        .ignoresSafeArea()
+        .ignoresSafeArea(edges: .bottom)
         .background(Color.black)
     }
 

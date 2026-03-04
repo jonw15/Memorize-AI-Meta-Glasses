@@ -16,6 +16,7 @@ struct MemorizeHomeView: View {
     @State private var showNewSessionForm = false
     @State private var newSessionDetent: PresentationDetent = .medium
     @State private var selectedBook: Book?
+    @State private var pendingDeleteBook: Book?
     @State private var newSessionTitle: String = ""
     @State private var newSessionAuthor: String = ""
     @State private var newSessionChapter: String = ""
@@ -66,6 +67,16 @@ struct MemorizeHomeView: View {
             newSessionSheet
                 .presentationDetents([.medium, .large], selection: $newSessionDetent)
                 .presentationDragIndicator(.visible)
+        }
+        .alert(item: $pendingDeleteBook) { book in
+            Alert(
+                title: Text("memorize.delete_session_title".localized),
+                message: Text(String(format: "memorize.delete_session_message".localized, book.title.isEmpty ? "memorize.untitled".localized : book.title)),
+                primaryButton: .destructive(Text("memorize.delete_session_confirm".localized)) {
+                    viewModel.deleteBook(book.id)
+                },
+                secondaryButton: .cancel(Text("memorize.cancel".localized))
+            )
         }
         .onReceive(streamViewModel.$capturedPhoto.compactMap { $0 }) { image in
             guard isWaitingForCoverSnapshot else { return }
@@ -131,7 +142,7 @@ struct MemorizeHomeView: View {
                 Spacer()
 
                 Button {
-                    viewModel.deleteBook(book.id)
+                    pendingDeleteBook = book
                 } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 16))
