@@ -13,9 +13,11 @@ struct MemorizeCaptureView: View {
 
     @StateObject private var viewModel = MemorizeCaptureViewModel()
     @StateObject private var captureVoiceController = CaptureVoiceCommandController()
+    @StateObject private var introAnnouncer = CaptureIntroAnnouncer()
     @Environment(\.dismiss) private var dismiss
     @State private var selectedThumbnail: TimelineThumbnailPreview?
     @State private var showPostCaptureActions = false
+    @State private var didPlayIntroInstruction = false
     private let processingAccent = Color(red: 0.34, green: 0.86, blue: 1.0)
 
     struct TimelineThumbnailPreview: Identifiable {
@@ -50,6 +52,13 @@ struct MemorizeCaptureView: View {
                 // 3S Delay indicator
                 delayIndicator
                     .padding(.top, AppSpacing.md)
+
+                Text("Say \"take a photo\" to take a photo")
+                    .font(AppTypography.caption)
+                    .foregroundColor(Color.white.opacity(0.55))
+                    .multilineTextAlignment(.center)
+                    .padding(.top, AppSpacing.sm)
+                    .padding(.horizontal, AppSpacing.md)
 
                 Spacer()
 
@@ -104,17 +113,14 @@ struct MemorizeCaptureView: View {
             Task {
                 await streamViewModel.handleStartStreaming()
             }
-            Task {
-                await captureVoiceController.requestPermissionsIfNeeded()
-                captureVoiceController.startListening { command in
-                    switch command {
-                    case .takePhoto:
-                        if !viewModel.isCountingDown {
-                            captureVoiceController.suspendListening()
-                            viewModel.startCountdown()
-                        }
-                    }
+            if !didPlayIntroInstruction {
+                didPlayIntroInstruction = true
+                captureVoiceController.suspendListening()
+                introAnnouncer.speak("Click done reading when you are done reading the material") {
+                    startCaptureVoiceCommands()
                 }
+            } else {
+                startCaptureVoiceCommands()
             }
         }
         .onChange(of: viewModel.isCountingDown) { isCountingDown in
@@ -141,7 +147,23 @@ struct MemorizeCaptureView: View {
             }
         }
         .onDisappear {
+            introAnnouncer.stop()
             captureVoiceController.stopListening()
+        }
+    }
+
+    private func startCaptureVoiceCommands() {
+        Task {
+            await captureVoiceController.requestPermissionsIfNeeded()
+            captureVoiceController.startListening { command in
+                switch command {
+                case .takePhoto:
+                    if !viewModel.isCountingDown {
+                        captureVoiceController.suspendListening()
+                        viewModel.startCountdown()
+                    }
+                }
+            }
         }
     }
 
@@ -573,6 +595,62 @@ private final class CaptureVoiceCommandController: NSObject, ObservableObject {
             return .takePhoto
         }
         return nil
+    }
+}
+
+@MainActor
+private final class CaptureIntroAnnouncer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+    private let synthesizer = AVSpeechSynthesizer()
+    private var onFinish: (() -> Void)?
+
+    override init() {
+        super.init()
+        synthesizer.delegate = self
+    }
+
+    func speak(_ text: String, onFinish: @escaping () -> Void) {
+        self.onFinish = onFinish
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {}
+
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        utterance.pitchMultiplier = 1.0
+        utterance.volume = 1.0
+        utterance.voice = AVSpeechSynthesisVoice(language: Locale.preferredLanguages.first ?? "en-US")
+        synthesizer.speak(utterance)
+    }
+
+    func stop() {
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+        onFinish = nil
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let callback = onFinish
+            onFinish = nil
+            callback?()
+        }
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let callback = onFinish
+            onFinish = nil
+            callback?()
+        }
     }
 }
 
