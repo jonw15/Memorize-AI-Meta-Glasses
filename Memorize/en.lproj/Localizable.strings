@@ -436,7 +436,15 @@
 "memorize.title_field" = "Title";
 "memorize.author_field" = "Author";
 "memorize.chapter_field" = "Chapter";
-"memorize.start_session" = "Start Session";
+"memorize.autofill_cover" = "Scan Book Cover";
+"memorize.autofill_cover_failed" = "Couldn't detect title/author from the snapshot. Try again with a clearer cover image.";
+"memorize.cover_capture_title" = "Scan Book Cover";
+"memorize.cover_capture_subtitle" = "Preview your glasses camera before capture";
+"memorize.cover_capture_align_hint" = "Center the title and author inside the frame. Photo takes in 3 seconds.";
+"memorize.cover_capture_take_photo" = "Start 3s Countdown";
+"memorize.cover_capture_cancel_countdown" = "Cancel Countdown";
+"memorize.cover_capture_processing" = "Analyzing cover...";
+"memorize.start_session" = "Add Book";
 "memorize.cancel" = "Cancel";
 "memorize.continue_session" = "Continue Session";
 "memorize.pages_captured" = "pages captured";

@@ -60,6 +60,26 @@ struct MemorizeService {
 
     // MARK: - Detect Book Info
 
+    func detectBookInfo(from image: UIImage) async throws -> (title: String, author: String) {
+        let prompt = """
+        You are identifying a physical book cover photo.
+        Detect the most likely book title and author from the image.
+
+        Respond in EXACTLY this format (nothing else):
+        TITLE: <book title>
+        AUTHOR: <author name>
+
+        Rules:
+        - Use the main title text on the cover.
+        - Use the primary author name shown on the cover.
+        - If the title is not readable, use "Unknown Book".
+        - If the author is not readable, use "Unknown Author".
+        """
+
+        let result = try await visionService.analyzeImage(image, prompt: prompt)
+        return parseBookInfo(from: result)
+    }
+
     func detectBookInfo(from text: String) async throws -> (title: String, author: String) {
         let prompt = """
         Based on this text extracted from a book page, detect the book title and author.

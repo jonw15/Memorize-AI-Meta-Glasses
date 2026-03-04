@@ -437,6 +437,14 @@
 "memorize.title_field" = "书名";
 "memorize.author_field" = "作者";
 "memorize.chapter_field" = "章节";
+"memorize.autofill_cover" = "封面快照自动填写";
+"memorize.autofill_cover_failed" = "未能从快照识别书名/作者，请使用更清晰的封面重试。";
+"memorize.cover_capture_title" = "扫描书籍封面";
+"memorize.cover_capture_subtitle" = "拍照前先预览眼镜相机画面";
+"memorize.cover_capture_align_hint" = "将书名和作者置于取景框内，3 秒后自动拍照。";
+"memorize.cover_capture_take_photo" = "开始 3 秒倒计时";
+"memorize.cover_capture_cancel_countdown" = "取消倒计时";
+"memorize.cover_capture_processing" = "正在识别封面...";
 "memorize.start_session" = "开始学习";
 "memorize.cancel" = "取消";
 "memorize.continue_session" = "继续学习";
