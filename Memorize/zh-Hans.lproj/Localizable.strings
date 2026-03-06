@@ -446,6 +446,7 @@
 "memorize.cover_capture_cancel_countdown" = "取消倒计时";
 "memorize.cover_capture_processing" = "正在识别封面...";
 "memorize.start_session" = "开始学习";
+"memorize.disconnect_glasses" = "断开连接";
 "memorize.delete_session_title" = "删除学习会话？";
 "memorize.delete_session_message" = "确定要删除“%@”吗？此操作无法撤销。";
 "memorize.delete_session_confirm" = "删除";

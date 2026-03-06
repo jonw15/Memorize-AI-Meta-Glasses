@@ -191,9 +191,17 @@ struct MemorizeHomeView: View {
 
     private var addBookSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            Text("memorize.add_to_library".localized)
-                .font(AppTypography.headline)
-                .foregroundColor(.white)
+            HStack {
+                Text("memorize.add_to_library".localized)
+                    .font(AppTypography.headline)
+                    .foregroundColor(.white)
+
+                Spacer()
+
+                if wearablesViewModel.registrationState == .registered {
+                    disconnectGlassesButton
+                }
+            }
 
             Button {
                 newSessionTitle = ""
@@ -248,7 +256,7 @@ struct MemorizeHomeView: View {
             .background(AppColors.memorizeBackground.ignoresSafeArea())
             .navigationTitle(showCoverCapturePanel ? "memorize.cover_capture_title".localized : "memorize.new_session".localized)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
+                .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("memorize.cancel".localized) {
                         if showCoverCapturePanel {
@@ -266,114 +274,151 @@ struct MemorizeHomeView: View {
                         }
                     }
                     .foregroundColor(.white)
+                    }
                 }
-            }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+                .toolbarColorScheme(.dark, for: .navigationBar)
         }
     }
 
-    private var coverCapturePanel: some View {
-        VStack(spacing: AppSpacing.md) {
-            ZStack {
-                Group {
-                    if let frame = streamViewModel.currentVideoFrame {
-                        Image(uiImage: frame)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        Rectangle()
-                            .fill(AppColors.memorizeCard)
-                            .overlay(
-                                VStack(spacing: AppSpacing.sm) {
-                                    ProgressView()
-                                        .tint(AppColors.memorizeAccent)
-                                    Text("memorize.connecting_camera".localized)
-                                        .font(AppTypography.caption)
-                                        .foregroundColor(.white.opacity(0.7))
-                                }
-                            )
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-
-                RoundedRectangle(cornerRadius: AppCornerRadius.lg)
-                    .stroke(Color.white.opacity(0.8), lineWidth: 2)
-                    .padding(.horizontal, AppSpacing.lg)
-                    .padding(.vertical, AppSpacing.xl)
-
-                if let coverCountdownValue {
-                    ZStack {
-                        Circle()
-                            .fill(Color.black.opacity(0.55))
-                            .frame(width: 110, height: 110)
-                        Text("\(coverCountdownValue)")
-                            .font(.system(size: 54, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                }
-
-                if isWaitingForCoverSnapshot {
-                    VStack(spacing: AppSpacing.sm) {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        Text("memorize.cover_capture_processing".localized)
-                            .font(AppTypography.subheadline)
-                            .foregroundColor(.white)
-                    }
-                    .padding(AppSpacing.md)
-                    .background(Color.black.opacity(0.6))
-                    .cornerRadius(AppCornerRadius.md)
-                }
-            }
-            .frame(height: 420)
-            .cornerRadius(AppCornerRadius.lg)
-            .overlay(
-                RoundedRectangle(cornerRadius: AppCornerRadius.lg)
-                    .stroke(AppColors.memorizeAccent.opacity(0.35), lineWidth: 1)
-            )
-
-            VStack(spacing: AppSpacing.xs) {
-                Text("memorize.cover_capture_subtitle".localized)
-                    .font(AppTypography.subheadline)
-                    .foregroundColor(.white.opacity(0.9))
-                Text("memorize.cover_capture_align_hint".localized)
-                    .font(AppTypography.caption)
-                    .foregroundColor(.white.opacity(0.65))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Button {
-                if coverCountdownValue != nil {
-                    cancelCoverCaptureCountdown()
-                } else {
-                    startCoverCaptureCountdown()
-                }
-            } label: {
-                Text(coverCountdownValue != nil
-                     ? "memorize.cover_capture_cancel_countdown".localized
-                     : "memorize.cover_capture_take_photo".localized)
-                    .font(AppTypography.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(
-                        LinearGradient(
-                            colors: [AppColors.memorizeAccent, AppColors.memorizeAccent.opacity(0.8)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .cornerRadius(AppCornerRadius.md)
-            }
-            .disabled(isWaitingForCoverSnapshot)
-            .opacity(isWaitingForCoverSnapshot ? 0.5 : 1)
-
-            Spacer()
-        }
-        .onAppear {
+    private var disconnectGlassesButton: some View {
+        Button {
             Task {
-                await prepareCoverCaptureStream()
+                await disconnectGlassesForAddSession()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "link.badge.minus")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("memorize.disconnect_glasses".localized)
+                    .font(AppTypography.caption)
+            }
+            .foregroundColor(.red)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.red.opacity(0.12))
+            .clipShape(Capsule())
+        }
+    }
+
+    private func disconnectGlassesForAddSession() async {
+        await wearablesViewModel.disconnectGlasses()
+        isWaitingForCoverSnapshot = false
+        coverSnapshotTimeoutTask?.cancel()
+        coverSnapshotTimeoutTask = nil
+        coverCountdownTask?.cancel()
+        coverCountdownTask = nil
+        coverCountdownValue = nil
+        stopCoverCountdownSpeech()
+        showCoverCapturePanel = false
+        showNewSessionForm = false
+    }
+
+    private var coverCapturePanel: some View {
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: AppSpacing.md) {
+                ZStack {
+                    Group {
+                        if let frame = streamViewModel.currentVideoFrame {
+                            Image(uiImage: frame)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            Rectangle()
+                                .fill(AppColors.memorizeCard)
+                                .overlay(
+                                    VStack(spacing: AppSpacing.sm) {
+                                        ProgressView()
+                                            .tint(AppColors.memorizeAccent)
+                                        Text("memorize.connecting_camera".localized)
+                                            .font(AppTypography.caption)
+                                            .foregroundColor(.white.opacity(0.7))
+                                    }
+                                )
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+
+                    RoundedRectangle(cornerRadius: AppCornerRadius.lg)
+                        .stroke(Color.white.opacity(0.8), lineWidth: 2)
+                        .padding(.horizontal, AppSpacing.lg)
+                        .padding(.vertical, AppSpacing.xl)
+
+                    if let coverCountdownValue {
+                        ZStack {
+                            Circle()
+                                .fill(Color.black.opacity(0.55))
+                                .frame(width: 110, height: 110)
+                            Text("\(coverCountdownValue)")
+                                .font(.system(size: 54, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+
+                    if isWaitingForCoverSnapshot {
+                        VStack(spacing: AppSpacing.sm) {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            Text("memorize.cover_capture_processing".localized)
+                                .font(AppTypography.subheadline)
+                                .foregroundColor(.white)
+                        }
+                        .padding(AppSpacing.md)
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(AppCornerRadius.md)
+                    }
+                }
+                .frame(height: 420)
+                .cornerRadius(AppCornerRadius.lg)
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppCornerRadius.lg)
+                        .stroke(AppColors.memorizeAccent.opacity(0.35), lineWidth: 1)
+                )
+
+                VStack(spacing: AppSpacing.xs) {
+                    Text("memorize.cover_capture_subtitle".localized)
+                        .font(AppTypography.subheadline)
+                        .foregroundColor(.white.opacity(0.9))
+                    Text("memorize.cover_capture_align_hint".localized)
+                        .font(AppTypography.caption)
+                        .foregroundColor(.white.opacity(0.65))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button {
+                    if coverCountdownValue != nil {
+                        cancelCoverCaptureCountdown()
+                    } else {
+                        startCoverCaptureCountdown()
+                    }
+                } label: {
+                    Text(coverCountdownValue != nil
+                         ? "memorize.cover_capture_cancel_countdown".localized
+                         : "memorize.cover_capture_take_photo".localized)
+                        .font(AppTypography.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(
+                            LinearGradient(
+                                colors: [AppColors.memorizeAccent, AppColors.memorizeAccent.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(AppCornerRadius.md)
+                }
+                .disabled(isWaitingForCoverSnapshot)
+                .opacity(isWaitingForCoverSnapshot ? 0.5 : 1)
+
+                Spacer()
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, AppSpacing.md)
+            .onAppear {
+                Task {
+                    await prepareCoverCaptureStream()
+                }
             }
         }
     }
