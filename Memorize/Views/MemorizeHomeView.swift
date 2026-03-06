@@ -34,6 +34,8 @@ struct MemorizeHomeView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: AppSpacing.lg) {
+                homeHeaderSection
+
                 // Add to Library Section (top)
                 addBookSection
 
@@ -47,8 +49,6 @@ struct MemorizeHomeView: View {
             .padding(.horizontal, AppSpacing.md)
             .padding(.top, AppSpacing.md)
             .background(AppColors.memorizeBackground.ignoresSafeArea())
-            .navigationTitle("memorize.title".localized)
-            .navigationBarTitleDisplayMode(.large)
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .toolbar(.hidden, for: .tabBar)
@@ -113,6 +113,28 @@ struct MemorizeHomeView: View {
                 }
             }
             .frame(maxHeight: 420)
+        }
+    }
+
+    // MARK: - Home Header
+
+    private var homeHeaderSection: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("memorize.title".localized)
+                    .font(AppTypography.largeTitle)
+                    .foregroundColor(.white)
+
+                Text("memorize.add_to_library".localized)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(.white.opacity(0.7))
+            }
+
+            Spacer()
+
+            if wearablesViewModel.registrationState == .registered {
+                disconnectGlassesButton
+            }
         }
     }
 
@@ -191,18 +213,6 @@ struct MemorizeHomeView: View {
 
     private var addBookSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            HStack {
-                Text("memorize.add_to_library".localized)
-                    .font(AppTypography.headline)
-                    .foregroundColor(.white)
-
-                Spacer()
-
-                if wearablesViewModel.registrationState == .registered {
-                    disconnectGlassesButton
-                }
-            }
-
             Button {
                 newSessionTitle = ""
                 newSessionAuthor = ""
