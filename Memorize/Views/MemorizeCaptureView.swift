@@ -896,6 +896,7 @@ private struct MemorizePostCaptureActionsView: View {
     let onClose: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var showExplainPersonaSelector = false
     @State private var showVoiceSummary = false
 
     private var completedPages: [PageCapture] {
@@ -913,6 +914,10 @@ private struct MemorizePostCaptureActionsView: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .padding(.horizontal, AppSpacing.md)
+
+                explainButton
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.top, AppSpacing.md)
 
                 Text("memorize.test_mode_prompt".localized)
                     .font(AppTypography.subheadline)
@@ -969,6 +974,50 @@ private struct MemorizePostCaptureActionsView: View {
                 bookTitle: bookTitle
             )
         }
+        .fullScreenCover(isPresented: $viewModel.showExplain) {
+            MemorizeExplainView(
+                viewModel: viewModel,
+                bookTitle: bookTitle,
+                onClose: {
+                    viewModel.showExplain = false
+                }
+            )
+        }
+        .confirmationDialog("memorize.explain.select_persona".localized, isPresented: $showExplainPersonaSelector, titleVisibility: .visible) {
+            ForEach(MemorizeExplainPersona.allCases) { persona in
+                Button(persona.displayKey.localized) {
+                    viewModel.generateExplanation(as: persona)
+                }
+            }
+            Button("memorize.cancel".localized, role: .cancel) { }
+        }
+    }
+
+    private var explainButton: some View {
+        Button {
+            showExplainPersonaSelector = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 16, weight: .semibold))
+
+                Text("memorize.explain".localized)
+                    .font(AppTypography.headline)
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                LinearGradient(
+                    colors: [Color(red: 0.94, green: 0.55, blue: 0.24), Color(red: 0.87, green: 0.43, blue: 0.14)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(AppCornerRadius.md)
+        }
+        .disabled(viewModel.isGeneratingQuiz || completedPages.isEmpty || viewModel.isGeneratingExplanation)
+        .opacity((viewModel.isGeneratingQuiz || completedPages.isEmpty || viewModel.isGeneratingExplanation) ? 0.5 : 1.0)
     }
 
     private var popQuizButton: some View {
@@ -1431,6 +1480,254 @@ private struct MemorizeVoiceSummaryView: View {
             )
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct MemorizeExplainView: View {
+    @ObservedObject var viewModel: MemorizeCaptureViewModel
+    let bookTitle: String
+    let onClose: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var explainSpeech = MemorizeExplainSpeechAssistant()
+    @State private var hasAutoSpoken = false
+    @State private var loadingPulse = false
+    private let explainAccent = Color(red: 0.94, green: 0.55, blue: 0.24)
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: AppSpacing.md) {
+                Text("memorize.explain_header".localized)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(Color.white.opacity(0.75))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, AppSpacing.md)
+
+                Text(viewModel.explanationPersona.displayKey.localized)
+                    .font(AppTypography.title2)
+                    .foregroundColor(explainAccent)
+                    .multilineTextAlignment(.center)
+
+                explanationCard
+                    .padding(.horizontal, AppSpacing.md)
+
+                Spacer()
+
+                if let errorMessage = viewModel.explanationErrorMessage, !errorMessage.isEmpty {
+                    VStack(spacing: AppSpacing.sm) {
+                        Text(errorMessage)
+                            .font(AppTypography.caption)
+                            .foregroundColor(.red.opacity(0.9))
+                            .multilineTextAlignment(.center)
+                        Button {
+                            viewModel.generateExplanation(as: viewModel.explanationPersona)
+                        } label: {
+                            Text("memorize.retry".localized)
+                                .font(AppTypography.body)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(Color.white.opacity(0.18))
+                                .cornerRadius(AppCornerRadius.sm)
+                        }
+                    }
+                    .padding(.horizontal, AppSpacing.md)
+                }
+
+                Button {
+                    dismiss()
+                    onClose()
+                } label: {
+                    Text("memorize.done".localized)
+                        .font(AppTypography.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(explainAccent)
+                        .cornerRadius(AppCornerRadius.md)
+                }
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.bottom, AppSpacing.lg)
+            }
+            .background(AppColors.memorizeBackground.ignoresSafeArea())
+            .navigationTitle("memorize.explain".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        dismiss()
+                        onClose()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .onAppear {
+            loadingPulse = false
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                loadingPulse = true
+            }
+            speakLatestExplanationIfNeeded()
+        }
+        .onChange(of: viewModel.explanationText) { value in
+            if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                hasAutoSpoken = false
+                return
+            }
+            speakLatestExplanationIfNeeded()
+        }
+        .onDisappear {
+            viewModel.explanationErrorMessage = nil
+            explainSpeech.stop()
+            hasAutoSpoken = false
+            loadingPulse = false
+        }
+    }
+
+    private var explanationCard: some View {
+        ScrollView {
+            Text(bookTitle)
+                .font(AppTypography.caption)
+                .foregroundColor(Color.white.opacity(0.55))
+                .lineLimit(1)
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.top, AppSpacing.sm)
+
+            if viewModel.isGeneratingExplanation && viewModel.explanationText.isEmpty {
+                VStack(alignment: .leading, spacing: AppSpacing.md) {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(0.9)
+                        Text("memorize.explain_generating".localized)
+                            .font(AppTypography.body)
+                            .foregroundColor(.white.opacity(0.85))
+                    }
+                    .padding(.horizontal, AppSpacing.md)
+
+                    ForEach(0..<4, id: \.self) { idx in
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.white.opacity(0.2))
+                            .frame(height: 14)
+                            .overlay(
+                                GeometryReader { geo in
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [Color.white.opacity(0), Color.white.opacity(0.45), Color.white.opacity(0)],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                        .frame(width: loadingPulse ? geo.size.width : 0)
+                                }
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                            )
+                            .padding(.horizontal, AppSpacing.md)
+                            .frame(maxWidth: .infinity)
+                            .opacity(idx == 3 ? 0.7 : 1.0)
+                            .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: loadingPulse)
+                    }
+                }
+                .padding(.top, AppSpacing.sm)
+                .padding(.bottom, AppSpacing.md)
+            } else {
+                Text(viewModel.explanationText.isEmpty ? "memorize.explain_result_placeholder".localized : viewModel.explanationText)
+                    .font(AppTypography.body)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(AppSpacing.md)
+            }
+        }
+        .frame(minHeight: 240, maxHeight: 320)
+        .background(AppColors.memorizeCard)
+        .cornerRadius(AppCornerRadius.md)
+    }
+
+    private func speakLatestExplanationIfNeeded() {
+        let explanation = viewModel.explanationText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !explanation.isEmpty, !hasAutoSpoken else { return }
+        hasAutoSpoken = true
+        explainSpeech.speak(explanation)
+    }
+}
+
+private final class MemorizeExplainSpeechAssistant: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+    private let synthesizer = AVSpeechSynthesizer()
+    @Published var isSpeaking: Bool = false
+
+    override init() {
+        super.init()
+        synthesizer.delegate = self
+    }
+
+    func speak(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        stop()
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {}
+
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+
+        let utterance = AVSpeechUtterance(string: trimmed)
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        utterance.pitchMultiplier = 1.0
+        utterance.volume = 1.0
+        utterance.voice = preferredNaturalVoice() ?? AVSpeechSynthesisVoice(language: Locale.preferredLanguages.first ?? "en-US")
+        synthesizer.speak(utterance)
+    }
+
+    func stop() {
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+        isSpeaking = false
+    }
+
+    private func preferredNaturalVoice() -> AVSpeechSynthesisVoice? {
+        let preferredLanguage = Locale.preferredLanguages.first ?? "en-US"
+        let languagePrefix = String(preferredLanguage.prefix(2))
+        let candidates = AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language.lowercased().hasPrefix(languagePrefix.lowercased()) }
+            .filter { !$0.identifier.lowercased().contains("siri") }
+
+        if let premiumLike = candidates.first(where: { $0.identifier.lowercased().contains("premium") || $0.identifier.lowercased().contains("enhanced") }) {
+            return premiumLike
+        }
+        return candidates.first
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.isSpeaking = true
+        }
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.isSpeaking = false
+        }
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.isSpeaking = false
         }
     }
 }

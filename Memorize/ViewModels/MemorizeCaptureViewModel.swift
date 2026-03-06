@@ -21,6 +21,11 @@ class MemorizeCaptureViewModel: ObservableObject {
     @Published var quizQuestions: [QuizQuestion] = []
     @Published var isGeneratingQuiz: Bool = false
     @Published var showQuiz: Bool = false
+    @Published var isGeneratingExplanation: Bool = false
+    @Published var showExplain: Bool = false
+    @Published var explanationPersona: MemorizeExplainPersona = .highSchoolStudent
+    @Published var explanationText: String = ""
+    @Published var explanationErrorMessage: String?
 
     private let storage = MemorizeStorage.shared
     private let memorizeService = MemorizeService()
@@ -265,6 +270,34 @@ class MemorizeCaptureViewModel: ObservableObject {
                 print("❌ [Memorize] Quiz generation failed: \(error.localizedDescription)")
             }
             self.isGeneratingQuiz = false
+        }
+    }
+
+    func generateExplanation(as persona: MemorizeExplainPersona) {
+        guard !isGeneratingExplanation else { return }
+        let completedPages = pages.filter { $0.status == .completed }
+        guard !completedPages.isEmpty else {
+            explanationErrorMessage = "memorize.explain_no_pages_error".localized
+            return
+        }
+
+        explanationPersona = persona
+        explanationText = ""
+        explanationErrorMessage = nil
+        isGeneratingExplanation = true
+        showExplain = true
+
+        Task {
+            do {
+                let explanation = try await memorizeService.explainSection(from: pages, as: persona)
+                self.explanationText = explanation
+                if explanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    self.explanationErrorMessage = "memorize.explain_empty_error".localized
+                }
+            } catch {
+                self.explanationErrorMessage = error.localizedDescription
+            }
+            self.isGeneratingExplanation = false
         }
     }
 

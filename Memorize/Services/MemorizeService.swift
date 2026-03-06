@@ -7,6 +7,32 @@ import Foundation
 import UIKit
 import Vision
 
+enum MemorizeExplainPersona: String, CaseIterable, Codable, Identifiable {
+    case highSchoolStudent = "high_school_student"
+    case collegeStudent = "college_student"
+    case researcher = "researcher"
+    case artist = "artist"
+
+    var id: String { rawValue }
+
+    var displayKey: String {
+        "memorize.explain.persona.\(rawValue)"
+    }
+
+    var promptInstruction: String {
+        switch self {
+        case .highSchoolStudent:
+            return "a high school student. Use simple language, short sentences, plain words, and clear examples."
+        case .collegeStudent:
+            return "a college student. Use structured logic, practical synthesis, and clear connections between ideas."
+        case .researcher:
+            return "a researcher. Use precise terminology, causal reasoning, and nuanced interpretation of claims."
+        case .artist:
+            return "a visual artist. Use vivid analogies, sensory language, and a creative, story-like tone while staying accurate."
+        }
+    }
+}
+
 struct MemorizeService {
     struct VoiceSummaryEvaluation: Codable {
         let score: Int
@@ -195,6 +221,42 @@ struct MemorizeService {
 
         let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
         return parseVoiceSummaryEvaluation(from: result)
+    }
+
+    // MARK: - Explain Section
+
+    func explainSection(from pages: [PageCapture], as persona: MemorizeExplainPersona) async throws -> String {
+        let completedPages = pages.filter { $0.status == .completed }
+        guard !completedPages.isEmpty else {
+            throw NSError(
+                domain: "MemorizeService",
+                code: 5,
+                userInfo: [NSLocalizedDescriptionKey: "No completed pages available to explain"]
+            )
+        }
+
+        let sourceText = completedPages
+            .enumerated()
+            .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
+            .joined(separator: "\n\n")
+
+        let prompt = """
+        You are a reading coach. Explain the section from the source material for \(persona.promptInstruction)
+
+        Source material:
+        \(sourceText)
+
+        Provide a concise but useful explanation that helps the learner understand the key ideas.
+        Format:
+        1. A short 1-2 sentence overview.
+        2. 3-5 clear bullet points (each no longer than 24 words) describing important ideas.
+        3. End with 1 sentence that connects the ideas to learning outcomes.
+
+        Use plain text only. Do not include markdown code fences.
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func parseQuizQuestions(from response: String) -> [QuizQuestion] {
