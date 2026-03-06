@@ -983,13 +983,17 @@ private struct MemorizePostCaptureActionsView: View {
                 }
             )
         }
-        .confirmationDialog("memorize.explain.select_persona".localized, isPresented: $showExplainPersonaSelector, titleVisibility: .visible) {
-            ForEach(MemorizeExplainPersona.allCases) { persona in
-                Button(persona.displayKey.localized) {
+        .actionSheet(isPresented: $showExplainPersonaSelector) {
+            var buttons: [ActionSheet.Button] = MemorizeExplainPersona.allCases.map { persona in
+                .default(Text("\(persona.iconSystemImage) \(persona.displayKey.localized)")) {
                     viewModel.generateExplanation(as: persona)
                 }
             }
-            Button("memorize.cancel".localized, role: .cancel) { }
+            buttons.append(.cancel(Text("memorize.cancel".localized)))
+            return ActionSheet(
+                title: Text("memorize.explain.select_persona".localized),
+                buttons: buttons
+            )
         }
     }
 
@@ -1504,10 +1508,14 @@ private struct MemorizeExplainView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, AppSpacing.md)
 
-                Text(viewModel.explanationPersona.displayKey.localized)
-                    .font(AppTypography.title2)
-                    .foregroundColor(explainAccent)
-                    .multilineTextAlignment(.center)
+                Label {
+                    Text(viewModel.explanationPersona.displayKey.localized)
+                } icon: {
+                    Text(viewModel.explanationPersona.iconSystemImage)
+                }
+                .font(AppTypography.title2)
+                .foregroundColor(explainAccent)
+                .multilineTextAlignment(.center)
 
                 explanationCard
                     .padding(.horizontal, AppSpacing.md)

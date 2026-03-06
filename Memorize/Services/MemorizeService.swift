@@ -8,15 +8,31 @@ import UIKit
 import Vision
 
 enum MemorizeExplainPersona: String, CaseIterable, Codable, Identifiable {
+    case likeIAm5 = "like_i_am_5"
     case highSchoolStudent = "high_school_student"
     case collegeStudent = "college_student"
-    case researcher = "researcher"
     case artist = "artist"
+    case researcher = "researcher"
 
     var id: String { rawValue }
 
     var displayKey: String {
         "memorize.explain.persona.\(rawValue)"
+    }
+
+    var iconSystemImage: String {
+        switch self {
+        case .likeIAm5:
+            return "🧒"
+        case .highSchoolStudent:
+            return "📘"
+        case .collegeStudent:
+            return "🎓"
+        case .artist:
+            return "🎨"
+        case .researcher:
+            return "🔬"
+        }
     }
 
     var promptInstruction: String {
@@ -29,6 +45,8 @@ enum MemorizeExplainPersona: String, CaseIterable, Codable, Identifiable {
             return "a researcher. Use precise terminology, causal reasoning, and nuanced interpretation of claims."
         case .artist:
             return "a visual artist. Use vivid analogies, sensory language, and a creative, story-like tone while staying accurate."
+        case .likeIAm5:
+            return "a 5-year-old child. Use very simple words, one idea at a time, concrete examples, and a calm encouraging tone."
         }
     }
 }

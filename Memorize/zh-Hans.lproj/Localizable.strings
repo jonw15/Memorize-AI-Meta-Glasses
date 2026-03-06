@@ -470,6 +470,7 @@
 "memorize.explain.persona.college_student" = "大学生";
 "memorize.explain.persona.researcher" = "研究者";
 "memorize.explain.persona.artist" = "艺术家";
+"memorize.explain.persona.like_i_am_5" = "像5岁小孩那样讲解";
 "memorize.explain_header" = "角色讲解";
 "memorize.explain_generating" = "正在生成讲解...";
 "memorize.explain_result_placeholder" = "你选择的角色讲解将在此显示。";

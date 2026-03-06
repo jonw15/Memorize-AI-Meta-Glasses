@@ -469,6 +469,7 @@
 "memorize.explain.persona.college_student" = "College Student";
 "memorize.explain.persona.researcher" = "Researcher";
 "memorize.explain.persona.artist" = "Artist";
+"memorize.explain.persona.like_i_am_5" = "Like I'm 5";
 "memorize.explain_header" = "Character-based summary";
 "memorize.explain_generating" = "Generating explanation...";
 "memorize.explain_result_placeholder" = "Your selected character summary will appear here.";
