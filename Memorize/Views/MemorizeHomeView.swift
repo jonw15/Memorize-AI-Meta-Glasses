@@ -512,7 +512,7 @@ struct MemorizeHomeView: View {
             return
         }
         didStartStreamForCoverCapture = true
-        await streamViewModel.startSession()
+        await streamViewModel.handleStartStreaming()
     }
 
     private func startCoverCaptureCountdown() {
