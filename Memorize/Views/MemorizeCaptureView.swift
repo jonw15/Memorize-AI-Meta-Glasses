@@ -2004,6 +2004,24 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
     }
 }
 
+private struct ThinkingDotsView: View {
+    @State private var dotCount = 0
+    private let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(Color.white.opacity(index < dotCount ? 0.8 : 0.25))
+                    .frame(width: 8, height: 8)
+            }
+        }
+        .onReceive(timer) { _ in
+            dotCount = (dotCount % 3) + 1
+        }
+    }
+}
+
 private struct MemorizeInteractView: View {
     let pages: [PageCapture]
     let bookTitle: String
@@ -2014,6 +2032,8 @@ private struct MemorizeInteractView: View {
     @State private var isRecording = false
     @State private var messages: [MemorizeInteractMessage] = []
     @State private var currentAIText = ""
+    @State private var currentUserText = ""
+    @State private var isAIThinking = false
     @State private var errorMessage: String?
     @State private var pulseAnimation = false
 
@@ -2146,14 +2166,11 @@ private struct MemorizeInteractView: View {
 
         service.onUserTranscript = { (userText: String) in
             Task { @MainActor in
-                let trimmed = userText.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { return }
-                // Avoid duplicate user messages — update the last user message if it exists
-                if let lastIndex = messages.indices.last, messages[lastIndex].isUser {
-                    messages[lastIndex] = MemorizeInteractMessage(isUser: true, text: trimmed)
-                } else {
-                    messages.append(MemorizeInteractMessage(isUser: true, text: trimmed))
-                }
+                guard !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                // Gemini sends fragments with their own spacing (e.g. " what" " 's") — concatenate raw
+                currentUserText += userText
+                // Show thinking indicator since user has spoken
+                isAIThinking = true
             }
         }
 
@@ -2161,13 +2178,27 @@ private struct MemorizeInteractView: View {
             Task { @MainActor in
                 let cleaned = delta.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !cleaned.isEmpty else { return }
-                if currentAIText.isEmpty {
+                // Finalize the user message when the AI starts responding
+                if !currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    let finalUserText = currentUserText
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                    messages.append(MemorizeInteractMessage(isUser: true, text: finalUserText))
+                    currentUserText = ""
+                }
+                isAIThinking = false
+                // Gemini sends cumulative or incremental deltas — handle both
+                if cleaned.hasPrefix(currentAIText) && cleaned.count > currentAIText.count {
+                    // Cumulative: the delta contains everything so far
                     currentAIText = cleaned
-                } else if cleaned.hasPrefix(currentAIText) {
-                    currentAIText = cleaned
-                } else {
-                    let needsSpace = !currentAIText.hasSuffix(" ") && !cleaned.hasPrefix(" ")
-                    currentAIText += (needsSpace ? " " : "") + cleaned
+                } else if currentAIText.isEmpty || !cleaned.hasPrefix(currentAIText) {
+                    // Incremental: append the new fragment
+                    if currentAIText.isEmpty {
+                        currentAIText = cleaned
+                    } else {
+                        let needsSpace = !currentAIText.hasSuffix(" ") && !cleaned.hasPrefix(" ")
+                        currentAIText += (needsSpace ? " " : "") + cleaned
+                    }
                 }
             }
         }
@@ -2180,6 +2211,7 @@ private struct MemorizeInteractView: View {
                     messages.append(MemorizeInteractMessage(isUser: false, text: trimmed))
                 }
                 currentAIText = ""
+                isAIThinking = false
             }
         }
 
@@ -2223,6 +2255,36 @@ private struct MemorizeInteractView: View {
                             .id(message.id)
                         }
 
+                        // Show streaming user text
+                        if !currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            HStack {
+                                Spacer()
+                                Text(currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression))
+                                    .font(AppTypography.body)
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .padding(AppSpacing.sm)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: AppCornerRadius.sm)
+                                            .fill(interactAccent.opacity(0.2))
+                                    )
+                            }
+                            .id("userStreaming")
+                        }
+
+                        // Show thinking indicator
+                        if isAIThinking && currentAIText.isEmpty {
+                            HStack {
+                                ThinkingDotsView()
+                                    .padding(AppSpacing.sm)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: AppCornerRadius.sm)
+                                            .fill(AppColors.memorizeCard.opacity(0.7))
+                                    )
+                                Spacer()
+                            }
+                            .id("thinking")
+                        }
+
                         // Show streaming AI text
                         if !currentAIText.isEmpty {
                             HStack {
@@ -2246,6 +2308,12 @@ private struct MemorizeInteractView: View {
                 if let last = messages.last {
                     withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
+            }
+            .onChange(of: currentUserText) { _ in
+                withAnimation { proxy.scrollTo("userStreaming", anchor: .bottom) }
+            }
+            .onChange(of: isAIThinking) { _ in
+                withAnimation { proxy.scrollTo("thinking", anchor: .bottom) }
             }
             .onChange(of: currentAIText) { _ in
                 withAnimation { proxy.scrollTo("streaming", anchor: .bottom) }
