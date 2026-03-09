@@ -500,4 +500,4 @@
 "memorize.interact" = "互动对话";
 "memorize.interact_prompt" = "用语音讨论你刚刚阅读的内容";
 "memorize.interact_connecting" = "连接中...";
-"memorize.interact_placeholder" = "点击麦克风，开始讨论阅读内容";
+"memorize.interact_placeholder" = "问我任何关于你拍摄文本的问题。";

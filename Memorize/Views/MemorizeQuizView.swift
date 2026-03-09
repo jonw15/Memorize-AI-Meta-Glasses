@@ -416,7 +416,7 @@ private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynt
         restartTask = nil
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker, .allowBluetoothHFP])
+            try session.setCategory(.record, mode: .default, options: [.duckOthers])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             return
@@ -626,7 +626,7 @@ private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynt
         guard shouldListen else { return }
         restartTask?.cancel()
         restartTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 120_000_000)
+            try? await Task.sleep(nanoseconds: 400_000_000)
             self?.beginListeningIfNeeded()
         }
     }
@@ -639,6 +639,8 @@ private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynt
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor in
+            // Brief delay so the last word fully renders through Bluetooth audio
+            try? await Task.sleep(nanoseconds: 600_000_000)
             self.isSpeaking = false
             self.scheduleRestart()
         }

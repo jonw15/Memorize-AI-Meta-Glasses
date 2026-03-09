@@ -499,4 +499,4 @@
 "memorize.interact" = "Conversation";
 "memorize.interact_prompt" = "Have a voice conversation about what you've read";
 "memorize.interact_connecting" = "Connecting...";
-"memorize.interact_placeholder" = "Tap the mic and start talking about the reading";
+"memorize.interact_placeholder" = "Ask me anything about the text you captured.";

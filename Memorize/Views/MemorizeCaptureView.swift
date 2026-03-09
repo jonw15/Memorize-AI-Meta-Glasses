@@ -1868,6 +1868,8 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
     private var recognitionTask: SFSpeechRecognitionTask?
     private var onCommand: ((MenuCommand) -> Void)?
     private var hasTriggered = false
+    private var shouldListen = false
+    private var restartTask: Task<Void, Never>?
 
     override init() {
         super.init()
@@ -1877,6 +1879,7 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
     func askAndListen(onCommand: @escaping (MenuCommand) -> Void) {
         self.onCommand = onCommand
         hasTriggered = false
+        shouldListen = true
 
         do {
             let session = AVAudioSession.sharedInstance()
@@ -1891,10 +1894,13 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
     }
 
     func stop() {
+        shouldListen = false
+        restartTask?.cancel()
+        restartTask = nil
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
         }
-        stopListening()
+        stopListeningInternal()
     }
 
     // AVSpeechSynthesizerDelegate — start listening after speech finishes
@@ -1902,12 +1908,16 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         Task { @MainActor in
             // Brief delay so the last word fully renders through the audio output
             try? await Task.sleep(nanoseconds: 600_000_000)
-            startListening()
+            beginListeningIfNeeded()
         }
     }
 
-    private func startListening() {
+    private func beginListeningIfNeeded() {
+        guard shouldListen, !hasTriggered else { return }
         guard recognitionTask == nil else { return }
+
+        restartTask?.cancel()
+        restartTask = nil
 
         do {
             let session = AVAudioSession.sharedInstance()
@@ -1923,7 +1933,10 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
 
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.inputFormat(forBus: 0)
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { return }
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            scheduleRestart()
+            return
+        }
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
@@ -1939,17 +1952,20 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
                 if let text = result?.bestTranscription.formattedString.lowercased(),
                    let command = parseMenuCommand(from: text) {
                     hasTriggered = true
-                    stopListening()
+                    stopListeningInternal()
                     onCommand?(command)
                 }
                 if error != nil || (result?.isFinal ?? false) {
-                    stopListening()
+                    stopListeningInternal()
+                    scheduleRestart()
                 }
             }
         }
     }
 
-    private func stopListening() {
+    private func stopListeningInternal() {
+        restartTask?.cancel()
+        restartTask = nil
         if audioEngine.isRunning {
             audioEngine.stop()
         }
@@ -1959,6 +1975,15 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         recognitionTask = nil
         recognitionRequest = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func scheduleRestart() {
+        guard shouldListen, !hasTriggered else { return }
+        restartTask?.cancel()
+        restartTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            self?.beginListeningIfNeeded()
+        }
     }
 
     private func parseMenuCommand(from text: String) -> MenuCommand? {
