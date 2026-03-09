@@ -51,6 +51,8 @@ struct MemorizeQuizView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .task {
+            // Let the audio session from the previous screen fully release
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
             await voiceAssistant.requestPermissionsIfNeeded()
             voiceAssistant.enableVoiceAnswering { action in
                 switch action {

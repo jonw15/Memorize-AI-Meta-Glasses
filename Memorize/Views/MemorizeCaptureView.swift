@@ -1055,16 +1055,16 @@ private struct MemorizePostCaptureActionsView: View {
             startVoiceMenu()
         }
         .onChange(of: showInteract) { showing in
-            if !showing { restartVoiceMenuAfterDelay() }
+            if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
         }
         .onChange(of: showVoiceSummary) { showing in
-            if !showing { restartVoiceMenuAfterDelay() }
+            if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
         }
         .onChange(of: viewModel.showExplain) { showing in
-            if !showing { restartVoiceMenuAfterDelay() }
+            if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
         }
         .onChange(of: viewModel.showQuiz) { showing in
-            if !showing { restartVoiceMenuAfterDelay() }
+            if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
         }
         .onDisappear {
             voiceMenu.stop()
