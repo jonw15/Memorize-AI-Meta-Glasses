@@ -54,7 +54,7 @@ struct MemorizeCaptureView: View {
                 delayIndicator
                     .padding(.top, AppSpacing.md)
 
-                Text("Say \"take a photo\" to take a photo")
+                Text("Say \"take a photo\" or \"done reading\"")
                     .font(AppTypography.caption)
                     .foregroundColor(Color.white.opacity(0.55))
                     .multilineTextAlignment(.center)
@@ -123,7 +123,7 @@ struct MemorizeCaptureView: View {
                     try? await Task.sleep(nanoseconds: 1_500_000_000)
                     guard !Task.isCancelled else { return }
 
-                    introAnnouncer.speak("Click done reading when you are done reading the material") {
+                    introAnnouncer.speak("Say take a photo to capture a page, or say done reading when you are finished") {
                         startCaptureVoiceCommands()
                     }
                 } else {
@@ -172,6 +172,13 @@ struct MemorizeCaptureView: View {
                         captureVoiceController.suspendListening()
                         viewModel.startCountdown()
                     }
+                case .doneReading:
+                    captureVoiceController.stopListening()
+                    viewModel.finishSession()
+                    Task {
+                        await streamViewModel.stopSession()
+                    }
+                    showPostCaptureActions = true
                 }
             }
         }
@@ -480,6 +487,7 @@ struct MemorizeCaptureView: View {
 private final class CaptureVoiceCommandController: NSObject, ObservableObject {
     enum Command {
         case takePhoto
+        case doneReading
     }
 
     private let audioEngine = AVAudioEngine()
@@ -629,6 +637,12 @@ private final class CaptureVoiceCommandController: NSObject, ObservableObject {
             normalized.contains("capture page") {
             return .takePhoto
         }
+        if normalized.contains("done reading") ||
+            normalized.contains("finish reading") ||
+            normalized.contains("i'm done") ||
+            normalized.contains("im done") {
+            return .doneReading
+        }
         return nil
     }
 }
@@ -673,6 +687,8 @@ private final class CaptureIntroAnnouncer: NSObject, ObservableObject, AVSpeechS
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor [weak self] in
             guard let self else { return }
+            // Brief delay so the last word fully renders through the audio output
+            try? await Task.sleep(nanoseconds: 600_000_000)
             let callback = onFinish
             onFinish = nil
             callback?()
@@ -899,9 +915,36 @@ private struct MemorizePostCaptureActionsView: View {
     @State private var showExplainPersonaSelector = false
     @State private var showVoiceSummary = false
     @State private var showInteract = false
+    @State private var voiceMenuRestartTask: Task<Void, Never>?
+    @StateObject private var voiceMenu = PostCaptureVoiceMenuController()
 
     private var completedPages: [PageCapture] {
         viewModel.pages.filter { $0.status == .completed }
+    }
+
+    private func startVoiceMenu() {
+        guard !completedPages.isEmpty else { return }
+        voiceMenu.askAndListen { command in
+            switch command {
+            case .interact:
+                showInteract = true
+            case .explain:
+                showExplainPersonaSelector = true
+            case .popQuiz:
+                viewModel.generateQuiz()
+            case .voiceSummary:
+                showVoiceSummary = true
+            }
+        }
+    }
+
+    private func restartVoiceMenuAfterDelay() {
+        voiceMenuRestartTask?.cancel()
+        voiceMenuRestartTask = Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            startVoiceMenu()
+        }
     }
 
     var body: some View {
@@ -1005,6 +1048,27 @@ private struct MemorizePostCaptureActionsView: View {
                 title: Text("memorize.explain.select_persona".localized),
                 buttons: buttons
             )
+        }
+        .task {
+            guard !completedPages.isEmpty else { return }
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            startVoiceMenu()
+        }
+        .onChange(of: showInteract) { showing in
+            if !showing { restartVoiceMenuAfterDelay() }
+        }
+        .onChange(of: showVoiceSummary) { showing in
+            if !showing { restartVoiceMenuAfterDelay() }
+        }
+        .onChange(of: viewModel.showExplain) { showing in
+            if !showing { restartVoiceMenuAfterDelay() }
+        }
+        .onChange(of: viewModel.showQuiz) { showing in
+            if !showing { restartVoiceMenuAfterDelay() }
+        }
+        .onDisappear {
+            voiceMenu.stop()
+            voiceMenuRestartTask?.cancel()
         }
     }
 
@@ -1784,6 +1848,135 @@ private struct MemorizeInteractMessage: Identifiable {
     let id = UUID()
     let isUser: Bool
     let text: String
+}
+
+// MARK: - Post-Capture Voice Menu Controller
+
+@MainActor
+private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+    enum MenuCommand {
+        case interact
+        case explain
+        case popQuiz
+        case voiceSummary
+    }
+
+    private let synthesizer = AVSpeechSynthesizer()
+    private let audioEngine = AVAudioEngine()
+    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: Locale.preferredLanguages.first ?? "en-US"))
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTask: SFSpeechRecognitionTask?
+    private var onCommand: ((MenuCommand) -> Void)?
+    private var hasTriggered = false
+
+    override init() {
+        super.init()
+        synthesizer.delegate = self
+    }
+
+    func askAndListen(onCommand: @escaping (MenuCommand) -> Void) {
+        self.onCommand = onCommand
+        hasTriggered = false
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {}
+
+        let utterance = AVSpeechUtterance(string: "Would you like an interactive conversation, explain, pop quiz, or voice summary?")
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        utterance.voice = AVSpeechSynthesisVoice(language: Locale.preferredLanguages.first ?? "en-US")
+        synthesizer.speak(utterance)
+    }
+
+    func stop() {
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+        stopListening()
+    }
+
+    // AVSpeechSynthesizerDelegate — start listening after speech finishes
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            // Brief delay so the last word fully renders through the audio output
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            startListening()
+        }
+    }
+
+    private func startListening() {
+        guard recognitionTask == nil else { return }
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.record, mode: .default, options: [.duckOthers])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch { return }
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        recognitionRequest = request
+
+        guard let speechRecognizer, speechRecognizer.isAvailable else { return }
+
+        let inputNode = audioEngine.inputNode
+        let inputFormat = inputNode.inputFormat(forBus: 0)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { return }
+        inputNode.removeTap(onBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+            self?.recognitionRequest?.append(buffer)
+        }
+
+        audioEngine.prepare()
+        try? audioEngine.start()
+
+        recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self, !hasTriggered else { return }
+                if let text = result?.bestTranscription.formattedString.lowercased(),
+                   let command = parseMenuCommand(from: text) {
+                    hasTriggered = true
+                    stopListening()
+                    onCommand?(command)
+                }
+                if error != nil || (result?.isFinal ?? false) {
+                    stopListening()
+                }
+            }
+        }
+    }
+
+    private func stopListening() {
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
+        audioEngine.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func parseMenuCommand(from text: String) -> MenuCommand? {
+        let normalized = text.replacingOccurrences(of: "-", with: " ")
+        if normalized.contains("interact") || normalized.contains("conversation") || normalized.contains("chat") {
+            return .interact
+        }
+        if normalized.contains("quiz") {
+            return .popQuiz
+        }
+        if normalized.contains("voice summary") || (normalized.contains("voice") && !normalized.contains("quiz")) {
+            return .voiceSummary
+        }
+        if normalized.contains("explain") || (normalized.contains("summary") && !normalized.contains("voice")) {
+            return .explain
+        }
+        return nil
+    }
 }
 
 private struct MemorizeInteractView: View {
