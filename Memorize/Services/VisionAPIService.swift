@@ -86,8 +86,23 @@ struct VisionAPIService {
 
     /// Analyze image and get description
     func analyzeImage(_ image: UIImage, prompt: String = "What is depicted in this image?") async throws -> String {
+        // Downscale large images to speed up upload and API processing
+        let maxDimension: CGFloat = 1600
+        let processedImage: UIImage
+        if max(image.size.width, image.size.height) > maxDimension {
+            let scale = maxDimension / max(image.size.width, image.size.height)
+            let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = 1
+            processedImage = UIGraphicsImageRenderer(size: newSize, format: format).image { _ in
+                image.draw(in: CGRect(origin: .zero, size: newSize))
+            }
+        } else {
+            processedImage = image
+        }
+
         // Convert image to base64
-        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+        guard let imageData = processedImage.jpegData(compressionQuality: 0.7) else {
             throw VisionAPIError.invalidImage
         }
 

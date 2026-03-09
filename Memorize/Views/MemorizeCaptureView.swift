@@ -550,7 +550,7 @@ private final class CaptureVoiceCommandController: NSObject, ObservableObject {
         restartTask = nil
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.record, mode: .measurement, options: [.duckOthers, .allowBluetoothHFP])
+            try audioSession.setCategory(.record, mode: .default, options: [.duckOthers])
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             return
@@ -1841,7 +1841,7 @@ private struct MemorizeInteractView: View {
                 }
 
                 Button {
-                    dismiss()
+                    disconnectAndDismiss()
                 } label: {
                     Text("memorize.pause_cancel".localized)
                         .font(AppTypography.body)
@@ -1855,7 +1855,7 @@ private struct MemorizeInteractView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
-                        dismiss()
+                        disconnectAndDismiss()
                     } label: {
                         Image(systemName: "chevron.left")
                             .foregroundColor(.white)
@@ -1864,13 +1864,16 @@ private struct MemorizeInteractView: View {
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
-        .onAppear {
+        .task {
+            guard geminiService == nil else { return }
             setupAndConnect()
         }
-        .onDisappear {
-            geminiService?.disconnect()
-            geminiService = nil
-        }
+    }
+
+    private func disconnectAndDismiss() {
+        geminiService?.disconnect()
+        geminiService = nil
+        dismiss()
     }
 
     // MARK: - Setup
