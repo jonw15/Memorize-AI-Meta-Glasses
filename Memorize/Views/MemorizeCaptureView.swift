@@ -2041,13 +2041,8 @@ private struct MemorizeInteractView: View {
     private var microphoneButton: some View {
         Button {
             guard isConnected else { return }
-            if isRecording {
-                geminiService?.stopRecording()
-                isRecording = false
-            } else {
-                geminiService?.startRecording()
-                isRecording = true
-            }
+            // Interrupt AI speech so the user can talk
+            geminiService?.interruptPlayback()
         } label: {
             ZStack {
                 if isRecording {
@@ -2062,7 +2057,7 @@ private struct MemorizeInteractView: View {
                     .fill(isRecording ? interactAccent : interactAccent.opacity(0.22))
                     .frame(width: 84, height: 84)
 
-                Image(systemName: isRecording ? "waveform" : "mic.fill")
+                Image(systemName: "waveform")
                     .font(.system(size: 30, weight: .semibold))
                     .foregroundColor(.white)
             }

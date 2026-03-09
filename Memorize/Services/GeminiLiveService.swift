@@ -397,6 +397,21 @@ Do not apologize.
         deactivateAudioSessionIfIdle()
     }
 
+    /// Interrupt AI speech by clearing the playback buffer and resetting the player node.
+    /// Recording continues so the user can speak immediately.
+    func interruptPlayback() {
+        guard isPlaybackEngineRunning else { return }
+        print("🤚 [Gemini] Interrupting AI playback")
+        playerNode?.stop()
+        playerNode?.reset()
+        audioBuffer = Data()
+        isCollectingAudio = false
+        audioChunkCount = 0
+        hasStartedPlaying = false
+        // Re-prime the player node so new audio can be scheduled immediately
+        playerNode?.play()
+    }
+
     func suspendAudioForExternalPlayback() {
         print("🔇 [Gemini] Suspending audio I/O for external playback")
         if isRecording {
