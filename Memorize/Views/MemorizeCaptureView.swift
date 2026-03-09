@@ -898,6 +898,7 @@ private struct MemorizePostCaptureActionsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showExplainPersonaSelector = false
     @State private var showVoiceSummary = false
+    @State private var showInteract = false
 
     private var completedPages: [PageCapture] {
         viewModel.pages.filter { $0.status == .completed }
@@ -914,6 +915,10 @@ private struct MemorizePostCaptureActionsView: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .padding(.horizontal, AppSpacing.md)
+
+                interactButton
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.top, AppSpacing.md)
 
                 explainButton
                     .padding(.horizontal, AppSpacing.md)
@@ -974,6 +979,12 @@ private struct MemorizePostCaptureActionsView: View {
                 bookTitle: bookTitle
             )
         }
+        .fullScreenCover(isPresented: $showInteract) {
+            MemorizeInteractView(
+                pages: completedPages,
+                bookTitle: bookTitle
+            )
+        }
         .fullScreenCover(isPresented: $viewModel.showExplain) {
             MemorizeExplainView(
                 viewModel: viewModel,
@@ -995,6 +1006,33 @@ private struct MemorizePostCaptureActionsView: View {
                 buttons: buttons
             )
         }
+    }
+
+    private var interactButton: some View {
+        Button {
+            showInteract = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "bubble.left.and.bubble.right.fill")
+                    .font(.system(size: 16, weight: .semibold))
+
+                Text("memorize.interact".localized)
+                    .font(AppTypography.headline)
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                LinearGradient(
+                    colors: [Color(red: 0.15, green: 0.72, blue: 0.52), Color(red: 0.10, green: 0.60, blue: 0.44)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(AppCornerRadius.md)
+        }
+        .disabled(viewModel.isGeneratingQuiz || completedPages.isEmpty)
+        .opacity((viewModel.isGeneratingQuiz || completedPages.isEmpty) ? 0.5 : 1.0)
     }
 
     private var explainButton: some View {
@@ -1737,5 +1775,305 @@ private final class MemorizeExplainSpeechAssistant: NSObject, ObservableObject, 
         Task { @MainActor in
             self.isSpeaking = false
         }
+    }
+}
+
+// MARK: - Memorize Interact View (Gemini Live Voice)
+
+private struct MemorizeInteractMessage: Identifiable {
+    let id = UUID()
+    let isUser: Bool
+    let text: String
+}
+
+private struct MemorizeInteractView: View {
+    let pages: [PageCapture]
+    let bookTitle: String
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var geminiService: GeminiLiveService?
+    @State private var isConnected = false
+    @State private var isRecording = false
+    @State private var messages: [MemorizeInteractMessage] = []
+    @State private var currentAIText = ""
+    @State private var errorMessage: String?
+    @State private var pulseAnimation = false
+
+    private let interactAccent = Color(red: 0.15, green: 0.72, blue: 0.52)
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: AppSpacing.md) {
+                Text("memorize.interact_prompt".localized)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(Color.white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, AppSpacing.md)
+
+                Text(bookTitle)
+                    .font(AppTypography.caption)
+                    .foregroundColor(Color.white.opacity(0.55))
+                    .lineLimit(1)
+                    .padding(.horizontal, AppSpacing.md)
+
+                conversationCard
+                    .padding(.horizontal, AppSpacing.md)
+
+                if !isConnected {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(0.8)
+                        Text("memorize.interact_connecting".localized)
+                            .font(AppTypography.caption)
+                            .foregroundColor(Color.white.opacity(0.6))
+                    }
+                }
+
+                microphoneButton
+
+                if let errorMessage, !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .font(AppTypography.caption)
+                        .foregroundColor(.red.opacity(0.9))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, AppSpacing.md)
+                }
+
+                Button {
+                    dismiss()
+                } label: {
+                    Text("memorize.pause_cancel".localized)
+                        .font(AppTypography.body)
+                        .foregroundColor(Color.white.opacity(0.65))
+                        .padding(.bottom, AppSpacing.lg)
+                }
+            }
+            .background(AppColors.memorizeBackground.ignoresSafeArea())
+            .navigationTitle("memorize.interact".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .onAppear {
+            setupAndConnect()
+        }
+        .onDisappear {
+            geminiService?.disconnect()
+            geminiService = nil
+        }
+    }
+
+    // MARK: - Setup
+
+    private func setupAndConnect() {
+        let completedPages = pages.filter { $0.status == .completed }
+        let combinedText = completedPages
+            .enumerated()
+            .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
+            .joined(separator: "\n\n")
+
+        // Truncate if too long (keep under ~15k chars for system prompt)
+        let maxChars = 15000
+        let truncatedText = combinedText.count > maxChars
+            ? String(combinedText.prefix(maxChars)) + "\n[... text truncated ...]"
+            : combinedText
+
+        let systemPrompt = """
+        You are a friendly, knowledgeable reading tutor. The student has just read the following text from "\(bookTitle)":
+
+        ---
+        \(truncatedText)
+        ---
+
+        Help the student understand what they read. You can:
+        - Answer questions about the text
+        - Explain difficult concepts or vocabulary
+        - Ask comprehension questions to test understanding
+        - Summarize key points when asked
+        - Connect ideas in the text to broader knowledge
+
+        Keep your responses concise and conversational. Speak clearly and at a pace suitable for learning.
+        Do not apologize. Do not mention that you are an AI unless asked.
+        Start by briefly greeting the student and asking what they'd like to discuss about the reading.
+        """
+
+        let apiKey = APIProviderManager.staticLiveAIAPIKey
+        let service = GeminiLiveService(
+            apiKey: apiKey,
+            systemPrompt: systemPrompt,
+            includeTools: false
+        )
+
+        service.onConnected = { [service] in
+            Task { @MainActor in
+                isConnected = true
+                // Auto-start recording once connected
+                service.startRecording()
+                isRecording = true
+            }
+        }
+
+        service.onUserTranscript = { (userText: String) in
+            Task { @MainActor in
+                let trimmed = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                // Avoid duplicate user messages — update the last user message if it exists
+                if let lastIndex = messages.indices.last, messages[lastIndex].isUser {
+                    messages[lastIndex] = MemorizeInteractMessage(isUser: true, text: trimmed)
+                } else {
+                    messages.append(MemorizeInteractMessage(isUser: true, text: trimmed))
+                }
+            }
+        }
+
+        service.onTranscriptDelta = { (delta: String) in
+            Task { @MainActor in
+                let cleaned = delta.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !cleaned.isEmpty else { return }
+                if currentAIText.isEmpty {
+                    currentAIText = cleaned
+                } else if cleaned.hasPrefix(currentAIText) {
+                    currentAIText = cleaned
+                } else {
+                    let needsSpace = !currentAIText.hasSuffix(" ") && !cleaned.hasPrefix(" ")
+                    currentAIText += (needsSpace ? " " : "") + cleaned
+                }
+            }
+        }
+
+        service.onTranscriptDone = { (fullText: String) in
+            Task { @MainActor in
+                let trimmed = (fullText.isEmpty ? currentAIText : fullText)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    messages.append(MemorizeInteractMessage(isUser: false, text: trimmed))
+                }
+                currentAIText = ""
+            }
+        }
+
+        service.onError = { (errorText: String) in
+            Task { @MainActor in
+                errorMessage = errorText
+            }
+        }
+
+        geminiService = service
+        service.connect()
+    }
+
+    // MARK: - UI Components
+
+    private var conversationCard: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                if messages.isEmpty && currentAIText.isEmpty {
+                    Text("memorize.interact_placeholder".localized)
+                        .font(AppTypography.body)
+                        .foregroundColor(Color.white.opacity(0.5))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(AppSpacing.md)
+                } else {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(messages) { message in
+                            HStack {
+                                if message.isUser { Spacer() }
+                                Text(message.text)
+                                    .font(AppTypography.body)
+                                    .foregroundColor(.white)
+                                    .multilineTextAlignment(message.isUser ? .trailing : .leading)
+                                    .padding(AppSpacing.sm)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: AppCornerRadius.sm)
+                                            .fill(message.isUser ? interactAccent.opacity(0.3) : AppColors.memorizeCard)
+                                    )
+                                if !message.isUser { Spacer() }
+                            }
+                            .id(message.id)
+                        }
+
+                        // Show streaming AI text
+                        if !currentAIText.isEmpty {
+                            HStack {
+                                Text(currentAIText)
+                                    .font(AppTypography.body)
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .padding(AppSpacing.sm)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: AppCornerRadius.sm)
+                                            .fill(AppColors.memorizeCard.opacity(0.7))
+                                    )
+                                Spacer()
+                            }
+                            .id("streaming")
+                        }
+                    }
+                    .padding(AppSpacing.sm)
+                }
+            }
+            .onChange(of: messages.count) { _ in
+                if let last = messages.last {
+                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
+            }
+            .onChange(of: currentAIText) { _ in
+                withAnimation { proxy.scrollTo("streaming", anchor: .bottom) }
+            }
+        }
+        .frame(minHeight: 260, maxHeight: 400)
+        .background(AppColors.memorizeCard)
+        .cornerRadius(AppCornerRadius.md)
+    }
+
+    private var microphoneButton: some View {
+        Button {
+            guard isConnected else { return }
+            if isRecording {
+                geminiService?.stopRecording()
+                isRecording = false
+            } else {
+                geminiService?.startRecording()
+                isRecording = true
+            }
+        } label: {
+            ZStack {
+                if isRecording {
+                    Circle()
+                        .stroke(interactAccent.opacity(0.4), lineWidth: 3)
+                        .frame(width: 120, height: 120)
+                        .scaleEffect(pulseAnimation ? 1.25 : 1.0)
+                        .opacity(pulseAnimation ? 0.1 : 0.85)
+                }
+
+                Circle()
+                    .fill(isRecording ? interactAccent : interactAccent.opacity(0.22))
+                    .frame(width: 84, height: 84)
+
+                Image(systemName: isRecording ? "waveform" : "mic.fill")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+        }
+        .disabled(!isConnected)
+        .opacity(!isConnected ? 0.5 : 1.0)
+        .onChange(of: isRecording) { recording in
+            pulseAnimation = recording
+        }
+        .animation(
+            isRecording
+                ? .easeOut(duration: 1.0).repeatForever(autoreverses: true)
+                : .easeOut(duration: 0.2),
+            value: pulseAnimation
+        )
     }
 }

@@ -34,6 +34,8 @@ class GeminiLiveService: NSObject {
     // Configuration
     private let apiKey: String
     private let model: String
+    private let customSystemPrompt: String?
+    private let includeTools: Bool
 
     // Audio Engine (for recording)
     private var audioEngine: AVAudioEngine?
@@ -75,9 +77,11 @@ class GeminiLiveService: NSObject {
     private var isPlaybackEnabled = true
     private var connectWaitTask: Task<Void, Never>?
 
-    init(apiKey: String, model: String? = nil) {
+    init(apiKey: String, model: String? = nil, systemPrompt: String? = nil, includeTools: Bool = true) {
         self.apiKey = apiKey
         self.model = model ?? APIProviderManager.staticLiveAIDefaultModel
+        self.customSystemPrompt = systemPrompt
+        self.includeTools = includeTools
         super.init()
         setupAudioEngine()
     }
@@ -253,15 +257,19 @@ class GeminiLiveService: NSObject {
     private func configureSession() {
         guard !isSessionConfigured else { return }
 
-        // Get system prompt based on current Live AI mode
-        let instructions = LiveAIModeManager.staticSystemPrompt + """
+        let instructions: String
+        if let customSystemPrompt {
+            instructions = customSystemPrompt
+        } else {
+            // Default Live AI system prompt
+            instructions = LiveAIModeManager.staticSystemPrompt + """
 
-        
+
 <system_instructions>
 <role>
 You are Aria — a concise, friendly DIY voice assistant on the Meta Quest.
 Speak clearly, focus on one step at a time, and keep answers brief unless the user asks for more detail.
-Always refer to what you see in the image to understand the user's context.
+Always refer to what you see in the image to understand the user’s context.
 Your primary role is to interpret the user’s request and format it into the correct tool call.
 </role>
 
@@ -270,39 +278,43 @@ Do not apologize.
 </guardrails>
 </system_instructions>
 """
+        }
 
         // Gemini Live API setup message
-        let setupMessage: [String: Any] = [
-            "setup": [
-                "model": model.hasPrefix("models/") ? model : "models/\(model)",
-                "generation_config": [
-                    "response_modalities": ["AUDIO"],
-                    "speech_config": [
-                        "voice_config": [
-                            "prebuilt_voice_config": [
-                                "voice_name": "Aoede"  // Gemini voice options: Aoede, Charon, Fenrir, Kore, Puck
-                            ]
-                        ]
-                    ]
-                ],
-                "system_instruction": [
-                    "parts": [
-                        ["text": instructions]
-                    ]
-                ],
-                // Request both user and assistant speech transcripts from Gemini Live.
-                "input_audio_transcription": [:],
-                "output_audio_transcription": [:],
-                "tools": [
-                    [
-                        "functionDeclarations": [
-                            multipleStepsInstructionDeclaration,
-                            youtubeDeclaration
+        var setupConfig: [String: Any] = [
+            "model": model.hasPrefix("models/") ? model : "models/\(model)",
+            "generation_config": [
+                "response_modalities": ["AUDIO"],
+                "speech_config": [
+                    "voice_config": [
+                        "prebuilt_voice_config": [
+                            "voice_name": "Aoede"  // Gemini voice options: Aoede, Charon, Fenrir, Kore, Puck
                         ]
                     ]
                 ]
-            ]
+            ],
+            "system_instruction": [
+                "parts": [
+                    ["text": instructions]
+                ]
+            ],
+            // Request both user and assistant speech transcripts from Gemini Live.
+            "input_audio_transcription": [:],
+            "output_audio_transcription": [:]
         ]
+
+        if includeTools {
+            setupConfig["tools"] = [
+                [
+                    "functionDeclarations": [
+                        multipleStepsInstructionDeclaration,
+                        youtubeDeclaration
+                    ]
+                ]
+            ]
+        }
+
+        let setupMessage: [String: Any] = ["setup": setupConfig]
 
         sendJSON(setupMessage)
         print("⚙️ [Gemini] Sending session configuration")

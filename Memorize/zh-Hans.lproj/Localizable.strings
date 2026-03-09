@@ -497,3 +497,7 @@
 "memorize.quiz_done" = "完成";
 "memorize.quiz_no_pages" = "请先拍摄一些书页";
 "memorize.no_ocr_text" = "该页面暂时没有可用的 OCR 文本。";
+"memorize.interact" = "互动对话";
+"memorize.interact_prompt" = "用语音讨论你刚刚阅读的内容";
+"memorize.interact_connecting" = "连接中...";
+"memorize.interact_placeholder" = "点击麦克风，开始讨论阅读内容";
