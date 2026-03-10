@@ -366,6 +366,9 @@ private final class QuizVoiceAssistant: ObservableObject {
     private var fallbackTask: Task<Void, Never>?
     // Accumulate transcript fragments from Gemini
     private var accumulatedTranscript = ""
+    // True while we've stopped mic but are still collecting buffered fragments
+    private var isProcessingTranscript = false
+    private var transcriptDebounceTask: Task<Void, Never>?
     // Only start listening after OUR text finishes playing, not unsolicited Gemini responses
     private var awaitingOurSpeechDone = false
 
@@ -378,9 +381,11 @@ private final class QuizVoiceAssistant: ObservableObject {
         Read ONLY the text inside those tags aloud, word for word.
         After reading the text, STOP IMMEDIATELY. Do not continue speaking.
         NEVER add your own words, commentary, or follow-up.
-        NEVER respond to audio from the microphone.
+        NEVER respond to audio from the microphone. Ignore all microphone input completely.
         NEVER say things like "Sure", "Of course", "Here we go", or any filler.
-        Each message is independent — do NOT reference previous messages.
+        NEVER generate quiz questions, answers, or any content on your own.
+        Each message is independent — do NOT reference previous messages or anticipate future ones.
+        You have NO memory of previous questions. Wait for the next [READ] tag.
         """
 
         let service = GeminiLiveService(
@@ -398,40 +403,27 @@ private final class QuizVoiceAssistant: ObservableObject {
 
         service.onUserTranscript = { [weak self] (text: String) in
             Task { @MainActor [weak self] in
-                guard let self, self.shouldListen, self.isListeningForAnswer else { return }
-                // Accumulate fragments (Gemini sends "Ne" then "xt question." as separate callbacks)
-                self.accumulatedTranscript += text
-                let normalized = self.accumulatedTranscript.lowercased()
-                    .replacingOccurrences(of: "-", with: " ")
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .replacingOccurrences(of: "[^a-z0-9 ]", with: "", options: .regularExpression)
-                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-                    .trimmingCharacters(in: .whitespaces)
-                guard !normalized.isEmpty else { return }
-                print("🎤 [QuizVoice] Heard: \(normalized) (mode: \(self.listenMode))")
+                guard let self, self.shouldListen else { return }
+                // Accept fragments even after mic is stopped (buffered audio still arrives)
+                guard self.isListeningForAnswer || self.isProcessingTranscript else { return }
 
-                let action: VoiceAction?
-                switch self.listenMode {
-                case .waitingForAnswer:
-                    if let answer = self.parseAnswer(from: normalized) {
-                        action = .answer(answer)
-                    } else {
-                        action = nil
-                    }
-                case .waitingForNext:
-                    if self.parseNext(from: normalized) {
-                        action = .next
-                    } else {
-                        action = nil
-                    }
+                // IMMEDIATELY stop recording on first fragment to prevent Gemini
+                // from hearing the full utterance and responding on its own
+                if self.isListeningForAnswer {
+                    self.geminiService?.stopRecording()
+                    self.isListeningForAnswer = false
+                    self.isProcessingTranscript = true
                 }
 
-                guard let action else { return }
-                let now = Date()
-                if now.timeIntervalSince(self.lastHeardAt) > 1.2 {
-                    self.lastHeardAt = now
-                    self.stopListeningForAnswer()
-                    self.onAction?(action)
+                // Accumulate fragments (Gemini sends "Ne" then "xt question." as separate callbacks)
+                self.accumulatedTranscript += text
+
+                // Debounce: wait for fragments to stop arriving before processing
+                self.transcriptDebounceTask?.cancel()
+                self.transcriptDebounceTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                    guard !Task.isCancelled, let self else { return }
+                    self.processAccumulatedTranscript()
                 }
             }
         }
@@ -463,10 +455,13 @@ private final class QuizVoiceAssistant: ObservableObject {
         speechTask = nil
         fallbackTask?.cancel()
         fallbackTask = nil
+        transcriptDebounceTask?.cancel()
+        transcriptDebounceTask = nil
         geminiService?.disconnect()
         geminiService = nil
         isConnected = false
         isListeningForAnswer = false
+        isProcessingTranscript = false
         awaitingOurSpeechDone = false
     }
 
@@ -498,30 +493,16 @@ private final class QuizVoiceAssistant: ObservableObject {
         speechTask?.cancel()
         listenMode = .waitingForNext
 
-        if immediate {
-            // Tap: interrupt immediately and send feedback without delay
-            geminiService?.interruptPlayback()
-            speechTask = Task { @MainActor [weak self] in
-                guard let self else { return }
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                guard !Task.isCancelled else { return }
-                self.markSpeechSentAndStartFallback()
-                self.geminiService?.sendTextInput("[READ] \(text) [/READ]")
-                print("🔊 [QuizVoice] Sent feedback (immediate)")
-            }
-        } else {
-            // Voice: wait for Gemini to finish processing the user's audio
-            speechTask = Task { @MainActor [weak self] in
-                guard let self else { return }
-                try? await Task.sleep(nanoseconds: 800_000_000)
-                guard !Task.isCancelled else { return }
-                self.geminiService?.interruptPlayback()
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                guard !Task.isCancelled else { return }
-                self.markSpeechSentAndStartFallback()
-                self.geminiService?.sendTextInput("[READ] \(text) [/READ]")
-                print("🔊 [QuizVoice] Sent feedback")
-            }
+        // Always interrupt first — mic is already off from transcript processing
+        geminiService?.interruptPlayback()
+        speechTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            // Brief settle time (shorter for taps, slightly longer for voice)
+            try? await Task.sleep(nanoseconds: immediate ? 200_000_000 : 300_000_000)
+            guard !Task.isCancelled else { return }
+            self.markSpeechSentAndStartFallback()
+            self.geminiService?.sendTextInput("[READ] \(text) [/READ]")
+            print("🔊 [QuizVoice] Sent feedback\(immediate ? " (immediate)" : "")")
         }
     }
 
@@ -571,10 +552,80 @@ private final class QuizVoiceAssistant: ObservableObject {
     private func stopListeningForAnswer() {
         listenTask?.cancel()
         listenTask = nil
+        transcriptDebounceTask?.cancel()
+        transcriptDebounceTask = nil
+        isProcessingTranscript = false
         if isListeningForAnswer {
             isListeningForAnswer = false
             geminiService?.stopRecording()
             print("🔇 [QuizVoice] Stopped listening")
+        }
+    }
+
+    /// Process accumulated transcript fragments after debounce timer fires
+    private func processAccumulatedTranscript() {
+        isProcessingTranscript = false
+        let normalized = accumulatedTranscript.lowercased()
+            .replacingOccurrences(of: "-", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "[^a-z0-9 ]", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        guard !normalized.isEmpty else {
+            resumeListening()
+            return
+        }
+        print("🎤 [QuizVoice] Heard: \(normalized) (mode: \(listenMode))")
+
+        let action: VoiceAction?
+        switch listenMode {
+        case .waitingForAnswer:
+            if let answer = parseAnswer(from: normalized) {
+                action = .answer(answer)
+            } else if parseNext(from: normalized) {
+                print("⚠️ [QuizVoice] Ignoring 'next' in waitingForAnswer mode")
+                accumulatedTranscript = ""
+                resumeListeningAfterDelay()
+                return
+            } else {
+                action = nil
+            }
+        case .waitingForNext:
+            if parseNext(from: normalized) {
+                action = .next
+            } else {
+                action = nil
+            }
+        }
+
+        if let action {
+            let now = Date()
+            if now.timeIntervalSince(lastHeardAt) > 1.2 {
+                lastHeardAt = now
+                // Interrupt any unsolicited Gemini speech before sending our response
+                geminiService?.interruptPlayback()
+                onAction?(action)
+                return
+            }
+        }
+
+        // No valid action — resume listening
+        resumeListening()
+    }
+
+    private func resumeListening() {
+        guard shouldListen, !isListeningForAnswer else { return }
+        accumulatedTranscript = ""
+        isListeningForAnswer = true
+        geminiService?.startRecording()
+        print("🎤 [QuizVoice] Resumed listening for \(listenMode)...")
+    }
+
+    private func resumeListeningAfterDelay() {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard let self, self.shouldListen else { return }
+            self.resumeListening()
         }
     }
 

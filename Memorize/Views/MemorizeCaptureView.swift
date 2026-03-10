@@ -77,6 +77,8 @@ struct MemorizeCaptureView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
+                        introAnnouncer.stop()
+                        captureVoiceController.stopListening()
                         viewModel.finishSession()
                         dismiss()
                     } label: {
@@ -177,6 +179,11 @@ struct MemorizeCaptureView: View {
                         viewModel.startCountdown()
                     }
                 case .doneReading:
+                    guard isDoneReadingEnabled else {
+                        // Pages still processing — ignore the voice command
+                        return
+                    }
+                    introAnnouncer.stop()
                     captureVoiceController.stopListening()
                     viewModel.finishSession()
                     Task {
@@ -467,6 +474,8 @@ struct MemorizeCaptureView: View {
 
     private var doneButton: some View {
         Button {
+            introAnnouncer.stop()
+            captureVoiceController.stopListening()
             viewModel.finishSession()
             Task {
                 await streamViewModel.stopSession()
@@ -945,7 +954,13 @@ private struct MemorizePostCaptureActionsView: View {
     private func restartVoiceMenuAfterDelay() {
         voiceMenuRestartTask?.cancel()
         voiceMenuRestartTask = Task {
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            // Wait for Gemini audio session to fully release
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            // Force-reset audio session so SFSpeechRecognizer can claim it
+            let session = AVAudioSession.sharedInstance()
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled else { return }
             startVoiceMenu()
         }
