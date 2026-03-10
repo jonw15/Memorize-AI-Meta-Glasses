@@ -7,6 +7,7 @@ import SwiftUI
 import Combine
 import UIKit
 import AVFoundation
+import Speech
 
 struct MemorizeHomeView: View {
     @ObservedObject var streamViewModel: StreamSessionViewModel
@@ -29,6 +30,8 @@ struct MemorizeHomeView: View {
     @State private var coverCountdownTask: Task<Void, Never>?
     @State private var didStartStreamForCoverCapture = false
     @State private var coverCountdownSynthesizer = AVSpeechSynthesizer()
+    @StateObject private var addBookVoice = AddBookVoiceController()
+    @StateObject private var homeVoice = HomeVoiceController()
     private let memorizeService = MemorizeService()
 
     var body: some View {
@@ -55,6 +58,51 @@ struct MemorizeHomeView: View {
         .onAppear {
             viewModel.loadBooks()
         }
+        .task {
+            await homeVoice.requestPermissionsIfNeeded()
+            homeVoice.startListening { command in
+                newSessionTitle = ""
+                newSessionAuthor = ""
+                newSessionChapter = ""
+                autoFillErrorMessage = nil
+                isWaitingForCoverSnapshot = false
+                coverSnapshotTimeoutTask?.cancel()
+                coverSnapshotTimeoutTask = nil
+                newSessionDetent = .medium
+                showNewSessionForm = true
+
+                if command == .scanCover {
+                    // Auto-open scan cover after sheet appears, wait for camera to initialize
+                    Task {
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        openCoverCapturePanel()
+                        try? await Task.sleep(nanoseconds: 4_000_000_000)
+                        if showCoverCapturePanel && coverCountdownTask == nil && !isWaitingForCoverSnapshot {
+                            startCoverCaptureCountdown()
+                        }
+                    }
+                }
+            }
+        }
+        .onChange(of: showNewSessionForm) { showing in
+            if showing {
+                homeVoice.suspendListening()
+            } else {
+                addBookVoice.stopListening()
+                // Brief delay to let add book voice fully release the mic
+                Task {
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    homeVoice.resumeListening()
+                }
+            }
+        }
+        .onChange(of: selectedBook?.id) { id in
+            if id != nil {
+                homeVoice.suspendListening()
+            } else {
+                homeVoice.resumeListening()
+            }
+        }
         .fullScreenCover(item: $selectedBook, onDismiss: {
             viewModel.loadBooks()
         }) { book in
@@ -67,6 +115,48 @@ struct MemorizeHomeView: View {
             newSessionSheet
                 .presentationDetents([.medium, .large], selection: $newSessionDetent)
                 .presentationDragIndicator(.visible)
+                .task {
+                    // Ensure home voice controller fully releases the mic first
+                    homeVoice.suspendListening()
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    await addBookVoice.requestPermissionsIfNeeded()
+                    addBookVoice.startListening { command in
+                        switch command {
+                        case .scanCover:
+                            if !showCoverCapturePanel && !isAutoFillingBookInfo && !isWaitingForCoverSnapshot {
+                                openCoverCapturePanel()
+                                // Wait for camera to fully initialize before starting countdown
+                                Task {
+                                    try? await Task.sleep(nanoseconds: 4_000_000_000)
+                                    if showCoverCapturePanel && coverCountdownTask == nil && !isWaitingForCoverSnapshot {
+                                        startCoverCaptureCountdown()
+                                    }
+                                }
+                            }
+                        case .addBook:
+                            if isNewSessionValid {
+                                addBookVoice.stopListening()
+                                isWaitingForCoverSnapshot = false
+                                coverSnapshotTimeoutTask?.cancel()
+                                coverSnapshotTimeoutTask = nil
+                                coverCountdownTask?.cancel()
+                                coverCountdownTask = nil
+                                coverCountdownValue = nil
+                                showCoverCapturePanel = false
+                                stopCoverCaptureStreamIfNeeded()
+                                selectedBook = Book(
+                                    title: newSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    author: newSessionAuthor.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    chapter: newSessionChapter.trimmingCharacters(in: .whitespacesAndNewlines)
+                                )
+                                showNewSessionForm = false
+                            }
+                        }
+                    }
+                }
+                .onDisappear {
+                    addBookVoice.stopListening()
+                }
         }
         .alert(item: $pendingDeleteBook) { book in
             Alert(
@@ -93,6 +183,7 @@ struct MemorizeHomeView: View {
             streamViewModel.capturedPhoto = nil
             Task {
                 await fillBookInfo(from: image)
+                addBookVoice.resumeListening()
             }
         }
     }
@@ -573,6 +664,9 @@ struct MemorizeHomeView: View {
     private func startCoverCaptureCountdown() {
         guard coverCountdownTask == nil, !isWaitingForCoverSnapshot else { return }
 
+        // Suspend voice commands during countdown to avoid audio session conflict
+        addBookVoice.stopListening()
+
         coverCountdownTask = Task { @MainActor in
             defer {
                 coverCountdownTask = nil
@@ -684,5 +778,333 @@ struct MemorizeHomeView: View {
             return ""
         }
         return trimmed
+    }
+}
+
+// MARK: - Add Book Voice Controller
+
+@MainActor
+private final class AddBookVoiceController: NSObject, ObservableObject {
+    enum Command {
+        case scanCover
+        case addBook
+    }
+
+    private let audioEngine = AVAudioEngine()
+    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: Locale.preferredLanguages.first ?? "en-US"))
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTask: SFSpeechRecognitionTask?
+    private var onCommand: ((Command) -> Void)?
+    private var lastTriggerAt: Date = .distantPast
+    private var speechPermissionDenied = false
+    private var micPermissionDenied = false
+    private var shouldListen = false
+    private var restartTask: Task<Void, Never>?
+
+    func requestPermissionsIfNeeded() async {
+        let speechAuthorized: Bool = await withCheckedContinuation { continuation in
+            let status = SFSpeechRecognizer.authorizationStatus()
+            if status == .authorized {
+                continuation.resume(returning: true)
+            } else {
+                SFSpeechRecognizer.requestAuthorization { newStatus in
+                    continuation.resume(returning: newStatus == .authorized)
+                }
+            }
+        }
+        speechPermissionDenied = !speechAuthorized
+
+        let micAuthorized: Bool = await withCheckedContinuation { continuation in
+            if #available(iOS 17.0, *) {
+                AVAudioApplication.requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            } else {
+                AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            }
+        }
+        micPermissionDenied = !micAuthorized
+    }
+
+    func startListening(onCommand: @escaping (Command) -> Void) {
+        self.onCommand = onCommand
+        shouldListen = true
+        beginListeningIfNeeded()
+    }
+
+    func stopListening() {
+        shouldListen = false
+        restartTask?.cancel()
+        restartTask = nil
+        stopListeningInternal()
+    }
+
+    func resumeListening() {
+        shouldListen = true
+        beginListeningIfNeeded()
+    }
+
+    private func beginListeningIfNeeded() {
+        guard shouldListen else { return }
+        guard !speechPermissionDenied, !micPermissionDenied else { return }
+        guard recognitionTask == nil else { return }
+
+        restartTask?.cancel()
+        restartTask = nil
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.record, mode: .default, options: [.duckOthers])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch { return }
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        recognitionRequest = request
+
+        guard let speechRecognizer, speechRecognizer.isAvailable else { return }
+
+        let inputNode = audioEngine.inputNode
+        let inputFormat = inputNode.inputFormat(forBus: 0)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            scheduleRestart()
+            return
+        }
+        inputNode.removeTap(onBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+            self?.recognitionRequest?.append(buffer)
+        }
+
+        audioEngine.prepare()
+        try? audioEngine.start()
+        print("🎤 [AddBookVoice] Listening...")
+
+        recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let text = result?.bestTranscription.formattedString.lowercased() {
+                    print("🎤 [AddBookVoice] Heard: \(text)")
+                    if let command = self.parseCommand(from: text) {
+                        let now = Date()
+                        if now.timeIntervalSince(self.lastTriggerAt) > 2.0 {
+                            self.lastTriggerAt = now
+                            self.onCommand?(command)
+                        }
+                    }
+                }
+                if let error {
+                    print("🎤 [AddBookVoice] Error: \(error.localizedDescription)")
+                    self.stopListeningInternal()
+                    self.scheduleRestart()
+                } else if result?.isFinal ?? false {
+                    self.stopListeningInternal()
+                    self.scheduleRestart()
+                }
+            }
+        }
+    }
+
+    private func stopListeningInternal() {
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
+        audioEngine.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func scheduleRestart() {
+        guard shouldListen else { return }
+        restartTask?.cancel()
+        restartTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            self?.beginListeningIfNeeded()
+        }
+    }
+
+    private func parseCommand(from text: String) -> Command? {
+        let normalized = text.replacingOccurrences(of: "-", with: " ")
+        if normalized.contains("scan cover") ||
+            normalized.contains("scan book") ||
+            normalized.contains("take cover") ||
+            normalized.contains("capture cover") {
+            return .scanCover
+        }
+        if normalized.contains("add book") ||
+            normalized.contains("at book") ||
+            normalized.contains("start session") ||
+            normalized.contains("start reading") {
+            return .addBook
+        }
+        return nil
+    }
+}
+
+// MARK: - Home Voice Controller
+
+@MainActor
+private final class HomeVoiceController: NSObject, ObservableObject {
+    enum Command: Equatable {
+        case addNewBook
+        case scanCover
+    }
+
+    private let audioEngine = AVAudioEngine()
+    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: Locale.preferredLanguages.first ?? "en-US"))
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTask: SFSpeechRecognitionTask?
+    private var onCommand: ((Command) -> Void)?
+    private var lastTriggerAt: Date = .distantPast
+    private var speechPermissionDenied = false
+    private var micPermissionDenied = false
+    private var shouldListen = false
+    private var restartTask: Task<Void, Never>?
+
+    func requestPermissionsIfNeeded() async {
+        let speechAuthorized: Bool = await withCheckedContinuation { continuation in
+            let status = SFSpeechRecognizer.authorizationStatus()
+            if status == .authorized {
+                continuation.resume(returning: true)
+            } else {
+                SFSpeechRecognizer.requestAuthorization { newStatus in
+                    continuation.resume(returning: newStatus == .authorized)
+                }
+            }
+        }
+        speechPermissionDenied = !speechAuthorized
+
+        let micAuthorized: Bool = await withCheckedContinuation { continuation in
+            if #available(iOS 17.0, *) {
+                AVAudioApplication.requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            } else {
+                AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            }
+        }
+        micPermissionDenied = !micAuthorized
+    }
+
+    func startListening(onCommand: @escaping (Command) -> Void) {
+        self.onCommand = onCommand
+        shouldListen = true
+        beginListeningIfNeeded()
+    }
+
+    func suspendListening() {
+        shouldListen = false
+        restartTask?.cancel()
+        restartTask = nil
+        stopListeningInternal()
+    }
+
+    func resumeListening() {
+        shouldListen = true
+        beginListeningIfNeeded()
+    }
+
+    private func beginListeningIfNeeded() {
+        guard shouldListen else { return }
+        guard !speechPermissionDenied, !micPermissionDenied else { return }
+        guard recognitionTask == nil else { return }
+
+        restartTask?.cancel()
+        restartTask = nil
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.record, mode: .default, options: [.duckOthers])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch { return }
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        recognitionRequest = request
+
+        guard let speechRecognizer, speechRecognizer.isAvailable else { return }
+
+        let inputNode = audioEngine.inputNode
+        let inputFormat = inputNode.inputFormat(forBus: 0)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            scheduleRestart()
+            return
+        }
+        inputNode.removeTap(onBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+            self?.recognitionRequest?.append(buffer)
+        }
+
+        audioEngine.prepare()
+        try? audioEngine.start()
+        print("🎤 [HomeVoice] Listening...")
+
+        recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let text = result?.bestTranscription.formattedString.lowercased() {
+                    let normalized = text.replacingOccurrences(of: "-", with: " ")
+                    print("🎤 [HomeVoice] Heard: \(normalized)")
+                    var command: Command?
+                    if normalized.contains("scan cover") ||
+                        normalized.contains("scan book") ||
+                        normalized.contains("scanning") ||
+                        normalized.contains("can cover") ||
+                        normalized.contains("book cover") ||
+                        normalized.contains("scan") {
+                        command = .scanCover
+                    } else if normalized.contains("add new book") ||
+                        normalized.contains("new book") ||
+                        normalized.contains("add book") {
+                        command = .addNewBook
+                    }
+                    if let command {
+                        let now = Date()
+                        if now.timeIntervalSince(lastTriggerAt) > 2.0 {
+                            lastTriggerAt = now
+                            onCommand?(command)
+                        }
+                    }
+                }
+                if let error {
+                    print("🎤 [HomeVoice] Error: \(error.localizedDescription)")
+                    stopListeningInternal()
+                    scheduleRestart()
+                } else if result?.isFinal ?? false {
+                    print("🎤 [HomeVoice] Final, restarting...")
+                    stopListeningInternal()
+                    scheduleRestart()
+                }
+            }
+        }
+    }
+
+    private func stopListeningInternal() {
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
+        audioEngine.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func scheduleRestart() {
+        guard shouldListen else { return }
+        restartTask?.cancel()
+        restartTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            self?.beginListeningIfNeeded()
+        }
     }
 }
