@@ -1328,12 +1328,70 @@ private final class VoiceSummarySpeechRecognizer: NSObject, ObservableObject {
     }
 }
 
+@MainActor
+private final class VoiceSummaryFeedbackSpeaker: ObservableObject {
+    private var geminiService: GeminiLiveService?
+    private var pendingText: String?
+
+    func speak(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if let service = geminiService {
+            service.sendTextInput("[READ] \(trimmed) [/READ]")
+        } else {
+            pendingText = trimmed
+            connect()
+        }
+    }
+
+    func stop() {
+        geminiService?.interruptPlayback()
+        geminiService?.disconnect()
+        geminiService = nil
+        pendingText = nil
+    }
+
+    private func connect() {
+        let apiKey = APIProviderManager.staticLiveAIAPIKey
+        let systemPrompt = """
+        You are a text-to-speech engine. You receive text between [READ] and [/READ] tags.
+        Read ONLY the text inside those tags aloud, word for word.
+        After reading, STOP IMMEDIATELY. Do not continue speaking or add commentary.
+        Each message is independent.
+        """
+
+        let service = GeminiLiveService(
+            apiKey: apiKey,
+            systemPrompt: systemPrompt,
+            includeTools: false
+        )
+
+        service.onConnected = { [weak self] in
+            Task { @MainActor [weak self] in
+                if let pending = self?.pendingText {
+                    self?.pendingText = nil
+                    self?.geminiService?.sendTextInput("[READ] \(pending) [/READ]")
+                }
+            }
+        }
+
+        service.onError = { (errorText: String) in
+            print("❌ [VoiceSummaryFeedback] Gemini error: \(errorText)")
+        }
+
+        geminiService = service
+        service.connect()
+    }
+}
+
 private struct MemorizeVoiceSummaryView: View {
     let pages: [PageCapture]
     let bookTitle: String
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var speechRecognizer = VoiceSummarySpeechRecognizer()
+    @StateObject private var feedbackSpeaker = VoiceSummaryFeedbackSpeaker()
     @State private var isGrading: Bool = false
     @State private var gradeResult: MemorizeService.VoiceSummaryEvaluation?
     @State private var errorMessage: String?
@@ -1408,6 +1466,7 @@ private struct MemorizeVoiceSummaryView: View {
         }
         .onDisappear {
             speechRecognizer.stopListening()
+            feedbackSpeaker.stop()
         }
     }
 
@@ -1584,10 +1643,14 @@ private struct MemorizeVoiceSummaryView: View {
         defer { isGrading = false }
 
         do {
-            gradeResult = try await memorizeService.gradeVoiceSummary(
+            let result = try await memorizeService.gradeVoiceSummary(
                 summary: summary,
                 from: pages
             )
+            gradeResult = result
+            // Speak the grading feedback using Gemini voice
+            let spokenFeedback = "Your score is \(result.score) out of 100. \(result.feedback)"
+            feedbackSpeaker.speak(spokenFeedback)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -1679,6 +1742,12 @@ private struct MemorizeExplainView: View {
                 }
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .task {
+            // Let previous audio session fully release
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            explainSpeech.connect()
         }
         .onAppear {
             loadingPulse = false
@@ -1774,75 +1843,79 @@ private struct MemorizeExplainView: View {
     }
 }
 
-private final class MemorizeExplainSpeechAssistant: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
-    private let synthesizer = AVSpeechSynthesizer()
+@MainActor
+private final class MemorizeExplainSpeechAssistant: ObservableObject {
     @Published var isSpeaking: Bool = false
+    @Published var isConnected: Bool = false
 
-    override init() {
-        super.init()
-        synthesizer.delegate = self
+    private var geminiService: GeminiLiveService?
+    private var pendingText: String?
+
+    func connect() {
+        guard geminiService == nil else { return }
+
+        let apiKey = APIProviderManager.staticLiveAIAPIKey
+        let systemPrompt = """
+        You are a text-to-speech engine. You receive text between [READ] and [/READ] tags.
+        Read ONLY the text inside those tags aloud, word for word.
+        After reading, STOP IMMEDIATELY. Do not continue speaking or add commentary.
+        Speak at a calm, clear pace suitable for learning.
+        Each message is independent.
+        """
+
+        let service = GeminiLiveService(
+            apiKey: apiKey,
+            systemPrompt: systemPrompt,
+            includeTools: false
+        )
+
+        service.onConnected = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.isConnected = true
+                // If text was queued before connection, speak it now
+                if let pending = self?.pendingText {
+                    self?.pendingText = nil
+                    self?.geminiService?.sendTextInput("[READ] \(pending) [/READ]")
+                    self?.isSpeaking = true
+                }
+            }
+        }
+
+        service.onAudioDone = { [weak self] in
+            Task { @MainActor in
+                self?.isSpeaking = false
+            }
+        }
+
+        service.onError = { (errorText: String) in
+            print("❌ [ExplainVoice] Gemini error: \(errorText)")
+        }
+
+        geminiService = service
+        service.connect()
     }
 
     func speak(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        stop()
-
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-        } catch {}
-
-        if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
+        if isConnected {
+            geminiService?.sendTextInput("[READ] \(trimmed) [/READ]")
+            isSpeaking = true
+        } else {
+            // Queue text for when connection completes
+            pendingText = trimmed
+            connect()
         }
-
-        let utterance = AVSpeechUtterance(string: trimmed)
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        utterance.pitchMultiplier = 1.0
-        utterance.volume = 1.0
-        utterance.voice = preferredNaturalVoice() ?? AVSpeechSynthesisVoice(language: Locale.preferredLanguages.first ?? "en-US")
-        synthesizer.speak(utterance)
     }
 
     func stop() {
-        if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
-        }
+        geminiService?.interruptPlayback()
         isSpeaking = false
-    }
-
-    private func preferredNaturalVoice() -> AVSpeechSynthesisVoice? {
-        let preferredLanguage = Locale.preferredLanguages.first ?? "en-US"
-        let languagePrefix = String(preferredLanguage.prefix(2))
-        let candidates = AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language.lowercased().hasPrefix(languagePrefix.lowercased()) }
-            .filter { !$0.identifier.lowercased().contains("siri") }
-
-        if let premiumLike = candidates.first(where: { $0.identifier.lowercased().contains("premium") || $0.identifier.lowercased().contains("enhanced") }) {
-            return premiumLike
-        }
-        return candidates.first
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
-        Task { @MainActor in
-            self.isSpeaking = true
-        }
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor in
-            self.isSpeaking = false
-        }
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        Task { @MainActor in
-            self.isSpeaking = false
-        }
+        geminiService?.disconnect()
+        geminiService = nil
+        isConnected = false
+        pendingText = nil
     }
 }
 

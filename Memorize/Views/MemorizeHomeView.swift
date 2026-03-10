@@ -673,6 +673,12 @@ struct MemorizeHomeView: View {
             defer {
                 coverCountdownTask = nil
             }
+            // Configure audio session and let it settle so "3" is audible
+            configureCoverCountdownAudioSession()
+            if coverCountdownSynthesizer.isSpeaking {
+                coverCountdownSynthesizer.stopSpeaking(at: .immediate)
+            }
+            try? await Task.sleep(nanoseconds: 400_000_000)
             for value in stride(from: 3, through: 1, by: -1) {
                 guard !Task.isCancelled else { return }
                 coverCountdownValue = value

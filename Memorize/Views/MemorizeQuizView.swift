@@ -4,7 +4,6 @@
  */
 
 import SwiftUI
-import Speech
 import AVFoundation
 
 struct MemorizeQuizView: View {
@@ -52,8 +51,8 @@ struct MemorizeQuizView: View {
         }
         .task {
             // Let the audio session from the previous screen fully release
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             try? await Task.sleep(nanoseconds: 1_000_000_000)
-            await voiceAssistant.requestPermissionsIfNeeded()
             voiceAssistant.enableVoiceAnswering { action in
                 switch action {
                 case .answer(let answerIndex):
@@ -61,6 +60,12 @@ struct MemorizeQuizView: View {
                 case .next:
                     goToNextQuestion()
                 }
+            }
+            voiceAssistant.connect()
+            // Wait for connection before speaking the first question
+            for _ in 0..<20 {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                if voiceAssistant.isConnected { break }
             }
             speakCurrentQuestionIfNeeded()
         }
@@ -186,7 +191,7 @@ struct MemorizeQuizView: View {
         }()
 
         return Button {
-            selectAnswer(index)
+            selectAnswer(index, fromTap: true)
         } label: {
             HStack(spacing: 12) {
                 // Option letter
@@ -303,7 +308,7 @@ struct MemorizeQuizView: View {
         voiceAssistant.speakQuestion(question: question, index: currentIndex + 1, total: questions.count)
     }
 
-    private func selectAnswer(_ index: Int) {
+    private func selectAnswer(_ index: Int, fromTap: Bool = false) {
         guard !showResults, currentIndex < questions.count else { return }
         guard questions[currentIndex].selectedIndex == nil else { return }
         guard index >= 0, index < questions[currentIndex].options.count else { return }
@@ -312,12 +317,12 @@ struct MemorizeQuizView: View {
 
         let isCorrect = index == questions[currentIndex].correctIndex
         if isCorrect {
-            voiceAssistant.speakFeedback("Correct.")
+            voiceAssistant.speakFeedback("Correct.", immediate: fromTap)
         } else {
             let correctIndex = questions[currentIndex].correctIndex
             let correctLetter = ["A", "B", "C", "D"][correctIndex]
             let correctText = questions[currentIndex].options[correctIndex]
-            voiceAssistant.speakFeedback("Wrong. The correct answer is \(correctLetter): \(correctText).")
+            voiceAssistant.speakFeedback("Wrong. The correct answer is \(correctLetter): \(correctText).", immediate: fromTap)
         }
     }
 
@@ -337,65 +342,187 @@ struct MemorizeQuizView: View {
 }
 
 @MainActor
-private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+private final class QuizVoiceAssistant: ObservableObject {
     enum VoiceAction {
         case answer(Int)
         case next
     }
 
-    private let audioEngine = AVAudioEngine()
-    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: Locale.preferredLanguages.first ?? "en-US"))
-    private let synthesizer = AVSpeechSynthesizer()
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
-    private var onAction: ((VoiceAction) -> Void)?
-    private var speechPermissionDenied = false
-    private var micPermissionDenied = false
-    private var isSpeaking = false
-    private var lastHeardAt: Date = .distantPast
-    private var shouldListen = false
-    private var restartTask: Task<Void, Never>?
-
-    override init() {
-        super.init()
-        synthesizer.delegate = self
+    enum ListenMode {
+        case waitingForAnswer   // only accept A/B/C/D
+        case waitingForNext     // only accept "next"
     }
 
-    func requestPermissionsIfNeeded() async {
-        let speechAuthorized: Bool = await withCheckedContinuation { continuation in
-            let status = SFSpeechRecognizer.authorizationStatus()
-            if status == .authorized {
-                continuation.resume(returning: true)
-            } else {
-                SFSpeechRecognizer.requestAuthorization { newStatus in
-                    continuation.resume(returning: newStatus == .authorized)
-                }
-            }
-        }
-        speechPermissionDenied = !speechAuthorized
+    @Published var isConnected = false
 
-        let micAuthorized: Bool = await withCheckedContinuation { continuation in
-            if #available(iOS 17.0, *) {
-                AVAudioApplication.requestRecordPermission { granted in
-                    continuation.resume(returning: granted)
+    private var geminiService: GeminiLiveService?
+    private var onAction: ((VoiceAction) -> Void)?
+    private var lastHeardAt: Date = .distantPast
+    private var shouldListen = false
+    private var isListeningForAnswer = false
+    private var listenMode: ListenMode = .waitingForAnswer
+    private var listenTask: Task<Void, Never>?
+    private var speechTask: Task<Void, Never>?
+    private var fallbackTask: Task<Void, Never>?
+    // Accumulate transcript fragments from Gemini
+    private var accumulatedTranscript = ""
+    // Only start listening after OUR text finishes playing, not unsolicited Gemini responses
+    private var awaitingOurSpeechDone = false
+
+    func connect() {
+        guard geminiService == nil else { return }
+
+        let apiKey = APIProviderManager.staticLiveAIAPIKey
+        let systemPrompt = """
+        You are a text-to-speech engine. You receive text between [READ] and [/READ] tags.
+        Read ONLY the text inside those tags aloud, word for word.
+        After reading the text, STOP IMMEDIATELY. Do not continue speaking.
+        NEVER add your own words, commentary, or follow-up.
+        NEVER respond to audio from the microphone.
+        NEVER say things like "Sure", "Of course", "Here we go", or any filler.
+        Each message is independent — do NOT reference previous messages.
+        """
+
+        let service = GeminiLiveService(
+            apiKey: apiKey,
+            systemPrompt: systemPrompt,
+            includeTools: false
+        )
+
+        // Do NOT auto-start recording — we control mic on/off precisely
+        service.onConnected = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.isConnected = true
+            }
+        }
+
+        service.onUserTranscript = { [weak self] (text: String) in
+            Task { @MainActor [weak self] in
+                guard let self, self.shouldListen, self.isListeningForAnswer else { return }
+                // Accumulate fragments (Gemini sends "Ne" then "xt question." as separate callbacks)
+                self.accumulatedTranscript += text
+                let normalized = self.accumulatedTranscript.lowercased()
+                    .replacingOccurrences(of: "-", with: " ")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: "[^a-z0-9 ]", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespaces)
+                guard !normalized.isEmpty else { return }
+                print("🎤 [QuizVoice] Heard: \(normalized) (mode: \(self.listenMode))")
+
+                let action: VoiceAction?
+                switch self.listenMode {
+                case .waitingForAnswer:
+                    if let answer = self.parseAnswer(from: normalized) {
+                        action = .answer(answer)
+                    } else {
+                        action = nil
+                    }
+                case .waitingForNext:
+                    if self.parseNext(from: normalized) {
+                        action = .next
+                    } else {
+                        action = nil
+                    }
                 }
-            } else {
-                AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                    continuation.resume(returning: granted)
+
+                guard let action else { return }
+                let now = Date()
+                if now.timeIntervalSince(self.lastHeardAt) > 1.2 {
+                    self.lastHeardAt = now
+                    self.stopListeningForAnswer()
+                    self.onAction?(action)
                 }
             }
         }
-        micPermissionDenied = !micAuthorized
+
+        // Only start listening when OUR speech finishes (not unsolicited Gemini responses)
+        service.onAudioDone = { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.shouldListen, self.awaitingOurSpeechDone else { return }
+                self.awaitingOurSpeechDone = false
+                self.fallbackTask?.cancel()
+                self.fallbackTask = nil
+                print("🔊 [QuizVoice] Our speech finished, starting mic")
+                self.startListeningForAnswer()
+            }
+        }
+
+        service.onError = { (errorText: String) in
+            print("❌ [QuizVoice] Gemini error: \(errorText)")
+        }
+
+        geminiService = service
+        service.connect()
+    }
+
+    func disconnect() {
+        listenTask?.cancel()
+        listenTask = nil
+        speechTask?.cancel()
+        speechTask = nil
+        fallbackTask?.cancel()
+        fallbackTask = nil
+        geminiService?.disconnect()
+        geminiService = nil
+        isConnected = false
+        isListeningForAnswer = false
+        awaitingOurSpeechDone = false
     }
 
     func speakQuestion(question: QuizQuestion, index: Int, total: Int) {
+        stopListeningForAnswer()
+        speechTask?.cancel()
+        listenMode = .waitingForAnswer
+
         let letters = ["A", "B", "C", "D"]
-        let optionText = question.options.enumerated().map { "\(letters[$0.offset]). \($0.element)" }.joined(separator: " ")
-        speak("Question \(index) of \(total). \(question.question). \(optionText)")
+        let optionText = question.options.enumerated().map { "\(letters[$0.offset]). \($0.element)" }.joined(separator: ". ")
+        let text = "[READ] Question \(index) of \(total). \(question.question). \(optionText) [/READ]"
+
+        speechTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            // Wait for Gemini to finish processing any audio it already received
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            guard !Task.isCancelled else { return }
+            self.geminiService?.interruptPlayback()
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard !Task.isCancelled else { return }
+            self.markSpeechSentAndStartFallback()
+            self.geminiService?.sendTextInput(text)
+            print("🔊 [QuizVoice] Sent question \(index)")
+        }
     }
 
-    func speakFeedback(_ text: String) {
-        speak(text)
+    func speakFeedback(_ text: String, immediate: Bool = false) {
+        stopListeningForAnswer()
+        speechTask?.cancel()
+        listenMode = .waitingForNext
+
+        if immediate {
+            // Tap: interrupt immediately and send feedback without delay
+            geminiService?.interruptPlayback()
+            speechTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                guard !Task.isCancelled else { return }
+                self.markSpeechSentAndStartFallback()
+                self.geminiService?.sendTextInput("[READ] \(text) [/READ]")
+                print("🔊 [QuizVoice] Sent feedback (immediate)")
+            }
+        } else {
+            // Voice: wait for Gemini to finish processing the user's audio
+            speechTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                guard !Task.isCancelled else { return }
+                self.geminiService?.interruptPlayback()
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                guard !Task.isCancelled else { return }
+                self.markSpeechSentAndStartFallback()
+                self.geminiService?.sendTextInput("[READ] \(text) [/READ]")
+                print("🔊 [QuizVoice] Sent feedback")
+            }
+        }
     }
 
     func enableVoiceAnswering(onAction: @escaping (VoiceAction) -> Void) {
@@ -405,100 +532,50 @@ private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynt
 
     func disableVoiceAnswering() {
         shouldListen = false
-        stopListeningInternal(deactivateSession: true)
+        onAction = nil
+        stopListeningForAnswer()
+        disconnect()
     }
 
-    private func beginListeningIfNeeded() {
-        guard shouldListen else { return }
-        guard !speechPermissionDenied, !micPermissionDenied else { return }
-        guard recognitionTask == nil else { return }
-        guard !isSpeaking else { return }
-
-        restartTask?.cancel()
-        restartTask = nil
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .default, options: [.duckOthers])
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-        } catch {
-            return
-        }
-
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        recognitionRequest = request
-
-        guard let speechRecognizer, speechRecognizer.isAvailable else { return }
-
-        let inputNode = audioEngine.inputNode
-        let inputFormat = inputNode.inputFormat(forBus: 0)
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            scheduleRestart()
-            return
-        }
-        inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
-        }
-
-        audioEngine.prepare()
-        try? audioEngine.start()
-
-        recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
-            guard let self else { return }
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                if let transcript = result?.bestTranscription.formattedString.lowercased(),
-                   let action = parseAction(from: transcript),
-                   !isSpeaking {
-                    let now = Date()
-                    if now.timeIntervalSince(lastHeardAt) > 1.2 {
-                        lastHeardAt = now
-                        self.onAction?(action)
-                    }
-                }
-
-                if error != nil || (result?.isFinal ?? false) {
-                    stopListeningInternal(deactivateSession: false)
-                    scheduleRestart()
-                }
+    /// Mark that we sent text and expect onAudioDone. Start a fallback timer
+    /// in case onAudioDone never fires (e.g. playback engine was stopped).
+    private func markSpeechSentAndStartFallback() {
+        awaitingOurSpeechDone = true
+        fallbackTask?.cancel()
+        fallbackTask = Task { @MainActor [weak self] in
+            // If onAudioDone doesn't fire within 6 seconds, start listening anyway
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            guard !Task.isCancelled, let self else { return }
+            if self.awaitingOurSpeechDone && self.shouldListen {
+                print("⏰ [QuizVoice] Fallback: onAudioDone didn't fire, starting mic")
+                self.awaitingOurSpeechDone = false
+                self.startListeningForAnswer()
             }
         }
     }
 
-    private func stopListeningInternal(deactivateSession: Bool = false) {
-        restartTask?.cancel()
-        restartTask = nil
-        if audioEngine.isRunning {
-            audioEngine.stop()
-        }
-        audioEngine.inputNode.removeTap(onBus: 0)
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
-        recognitionTask = nil
-        recognitionRequest = nil
-        if deactivateSession {
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    private func startListeningForAnswer() {
+        guard shouldListen, !isListeningForAnswer else { return }
+        listenTask?.cancel()
+        listenTask = Task { @MainActor [weak self] in
+            // Brief delay for audio session to settle after playback
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.accumulatedTranscript = ""
+            self.isListeningForAnswer = true
+            self.geminiService?.startRecording()
+            print("🎤 [QuizVoice] Listening for \(self.listenMode)...")
         }
     }
 
-    private func speak(_ text: String) {
-        // Keep audio session active for faster TTS -> mic handoff after speaking.
-        stopListeningInternal(deactivateSession: false)
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-        } catch {}
-        if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
+    private func stopListeningForAnswer() {
+        listenTask?.cancel()
+        listenTask = nil
+        if isListeningForAnswer {
+            isListeningForAnswer = false
+            geminiService?.stopRecording()
+            print("🔇 [QuizVoice] Stopped listening")
         }
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        utterance.pitchMultiplier = 1.0
-        utterance.volume = 1.0
-        utterance.voice = preferredNaturalVoice() ?? AVSpeechSynthesisVoice(language: Locale.preferredLanguages.first ?? "en-US")
-        synthesizer.speak(utterance)
     }
 
     private func parseAnswer(from text: String) -> Int? {
@@ -512,7 +589,6 @@ private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynt
         let rawTokens = normalized.split(whereSeparator: { !$0.isLetter }).map(String.init)
         let tokens = rawTokens.map { canonicalToken($0) }
 
-        // Natural speech pattern: "A, Macbook" / "B Macbook" / "C the answer is ..."
         if let first = tokens.first {
             switch first {
             case "a": return 0
@@ -527,7 +603,6 @@ private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynt
             return explicit
         }
 
-        // Fallback: single utterance like "a", "bee", "dee", etc.
         if let last = tokens.last {
             switch last {
             case "a": return 0
@@ -541,23 +616,11 @@ private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynt
         return nil
     }
 
-    private func parseAction(from text: String) -> VoiceAction? {
-        let normalized = text
-            .lowercased()
-            .replacingOccurrences(of: "-", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if normalized.contains("next question") ||
+    private func parseNext(from normalized: String) -> Bool {
+        return normalized.contains("next question") ||
             normalized == "next" ||
-            normalized.contains("go next") ||
-            normalized.contains("continue") {
-            return .next
-        }
-
-        if let answer = parseAnswer(from: normalized) {
-            return .answer(answer)
-        }
-        return nil
+            normalized.hasSuffix(" next") ||
+            normalized.contains("go next")
     }
 
     private func extractExplicitChoice(from normalized: String, tokens: [String]) -> Int? {
@@ -588,7 +651,6 @@ private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynt
             }
         }
 
-        // Direct token fallback anywhere in transcript.
         if tokens.contains("a") { return 0 }
         if tokens.contains("b") { return 1 }
         if tokens.contains("c") { return 2 }
@@ -598,60 +660,16 @@ private final class QuizVoiceAssistant: NSObject, ObservableObject, AVSpeechSynt
 
     private func canonicalToken(_ token: String) -> String {
         switch token {
-        case "a", "ay", "eh", "hey":
+        case "a", "ay", "eh", "hey", "ey", "age":
             return "a"
-        case "b", "bee", "be":
+        case "b", "bee", "be", "bea", "bi", "bei":
             return "b"
-        case "c", "see", "cee", "sea":
+        case "c", "see", "cee", "sea", "si", "ce", "she", "ski", "se":
             return "c"
-        case "d", "dee", "de":
+        case "d", "dee", "de", "di", "the", "die", "dy":
             return "d"
         default:
             return token
-        }
-    }
-
-    private func preferredNaturalVoice() -> AVSpeechSynthesisVoice? {
-        let preferredLanguage = Locale.preferredLanguages.first ?? "en-US"
-        let languagePrefix = String(preferredLanguage.prefix(2))
-        let candidates = AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language.lowercased().hasPrefix(languagePrefix.lowercased()) }
-            .filter { !$0.identifier.lowercased().contains("siri") }
-
-        if let premiumLike = candidates.first(where: { $0.identifier.lowercased().contains("premium") || $0.identifier.lowercased().contains("enhanced") }) {
-            return premiumLike
-        }
-        return candidates.first
-    }
-
-    private func scheduleRestart() {
-        guard shouldListen else { return }
-        restartTask?.cancel()
-        restartTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 400_000_000)
-            self?.beginListeningIfNeeded()
-        }
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
-        Task { @MainActor in
-            self.isSpeaking = true
-        }
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor in
-            // Brief delay so the last word fully renders through Bluetooth audio
-            try? await Task.sleep(nanoseconds: 600_000_000)
-            self.isSpeaking = false
-            self.scheduleRestart()
-        }
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        Task { @MainActor in
-            self.isSpeaking = false
-            self.scheduleRestart()
         }
     }
 }
