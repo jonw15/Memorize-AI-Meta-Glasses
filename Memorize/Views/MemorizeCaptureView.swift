@@ -111,8 +111,12 @@ struct MemorizeCaptureView: View {
         .onAppear {
             viewModel.streamViewModel = streamViewModel
             viewModel.loadBook(book)
+            // Release any audio session held by previous voice controllers
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             introSequenceTask?.cancel()
             introSequenceTask = Task {
+                // Brief delay to let previous audio sessions fully release
+                try? await Task.sleep(nanoseconds: 500_000_000)
                 await streamViewModel.handleStartStreaming()
 
                 if !didPlayIntroInstruction {

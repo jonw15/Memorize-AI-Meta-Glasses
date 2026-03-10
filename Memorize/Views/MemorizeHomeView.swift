@@ -89,10 +89,12 @@ struct MemorizeHomeView: View {
                 homeVoice.suspendListening()
             } else {
                 addBookVoice.stopListening()
-                // Brief delay to let add book voice fully release the mic
-                Task {
-                    try? await Task.sleep(nanoseconds: 300_000_000)
-                    homeVoice.resumeListening()
+                // Only resume home voice if we're not navigating to a capture view
+                if selectedBook == nil {
+                    Task {
+                        try? await Task.sleep(nanoseconds: 300_000_000)
+                        homeVoice.resumeListening()
+                    }
                 }
             }
         }
