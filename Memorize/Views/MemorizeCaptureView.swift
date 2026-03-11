@@ -1056,17 +1056,12 @@ private struct MemorizePostCaptureActionsView: View {
                 }
             )
         }
-        .actionSheet(isPresented: $showExplainPersonaSelector) {
-            var buttons: [ActionSheet.Button] = MemorizeExplainPersona.allCases.map { persona in
-                .default(Text("\(persona.iconSystemImage) \(persona.displayKey.localized)")) {
-                    viewModel.generateExplanation(as: persona)
-                }
+        .sheet(isPresented: $showExplainPersonaSelector) {
+            ExplainPersonaPickerView { persona in
+                showExplainPersonaSelector = false
+                viewModel.generateExplanation(as: persona)
             }
-            buttons.append(.cancel(Text("memorize.cancel".localized)))
-            return ActionSheet(
-                title: Text("memorize.explain.select_persona".localized),
-                buttons: buttons
-            )
+            .presentationDetents([.medium])
         }
         .task {
             guard !completedPages.isEmpty else { return }
@@ -1242,7 +1237,7 @@ private final class VoiceSummarySpeechRecognizer: NSObject, ObservableObject {
     @Published var speechPermissionDenied: Bool = false
     @Published var micPermissionDenied: Bool = false
 
-    private let audioEngine = AVAudioEngine()
+    private var audioEngine = AVAudioEngine()
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: Locale.preferredLanguages.first ?? "en-US"))
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
@@ -1285,8 +1280,12 @@ private final class VoiceSummarySpeechRecognizer: NSObject, ObservableObject {
         recognitionRequest = nil
 
         let audioSession = AVAudioSession.sharedInstance()
+        try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
         try audioSession.setCategory(.record, mode: .measurement, options: [.duckOthers, .allowBluetoothHFP])
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+
+        // Fresh engine to avoid stale input node after Gemini session
+        audioEngine = AVAudioEngine()
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
@@ -1343,70 +1342,12 @@ private final class VoiceSummarySpeechRecognizer: NSObject, ObservableObject {
     }
 }
 
-@MainActor
-private final class VoiceSummaryFeedbackSpeaker: ObservableObject {
-    private var geminiService: GeminiLiveService?
-    private var pendingText: String?
-
-    func speak(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        if let service = geminiService {
-            service.sendTextInput("[READ] \(trimmed) [/READ]")
-        } else {
-            pendingText = trimmed
-            connect()
-        }
-    }
-
-    func stop() {
-        geminiService?.interruptPlayback()
-        geminiService?.disconnect()
-        geminiService = nil
-        pendingText = nil
-    }
-
-    private func connect() {
-        let apiKey = APIProviderManager.staticLiveAIAPIKey
-        let systemPrompt = """
-        You are a text-to-speech engine. You receive text between [READ] and [/READ] tags.
-        Read ONLY the text inside those tags aloud, word for word.
-        After reading, STOP IMMEDIATELY. Do not continue speaking or add commentary.
-        Each message is independent.
-        """
-
-        let service = GeminiLiveService(
-            apiKey: apiKey,
-            systemPrompt: systemPrompt,
-            includeTools: false
-        )
-
-        service.onConnected = { [weak self] in
-            Task { @MainActor [weak self] in
-                if let pending = self?.pendingText {
-                    self?.pendingText = nil
-                    self?.geminiService?.sendTextInput("[READ] \(pending) [/READ]")
-                }
-            }
-        }
-
-        service.onError = { (errorText: String) in
-            print("❌ [VoiceSummaryFeedback] Gemini error: \(errorText)")
-        }
-
-        geminiService = service
-        service.connect()
-    }
-}
-
 private struct MemorizeVoiceSummaryView: View {
     let pages: [PageCapture]
     let bookTitle: String
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var speechRecognizer = VoiceSummarySpeechRecognizer()
-    @StateObject private var feedbackSpeaker = VoiceSummaryFeedbackSpeaker()
     @State private var isGrading: Bool = false
     @State private var gradeResult: MemorizeService.VoiceSummaryEvaluation?
     @State private var errorMessage: String?
@@ -1481,7 +1422,6 @@ private struct MemorizeVoiceSummaryView: View {
         }
         .onDisappear {
             speechRecognizer.stopListening()
-            feedbackSpeaker.stop()
         }
     }
 
@@ -1663,9 +1603,6 @@ private struct MemorizeVoiceSummaryView: View {
                 from: pages
             )
             gradeResult = result
-            // Speak the grading feedback using Gemini voice
-            let spokenFeedback = "Your score is \(result.score) out of 100. \(result.feedback)"
-            feedbackSpeaker.speak(spokenFeedback)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -2122,7 +2059,7 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
     }
 
     private func parseMenuCommand(from text: String) -> MenuCommand? {
-        let normalized = text.replacingOccurrences(of: "-", with: " ")
+        let normalized = text.replacingOccurrences(of: "-", with: " ").lowercased()
         if normalized.contains("interact") || normalized.contains("conversation") || normalized.contains("chat") {
             return .interact
         }
@@ -2134,6 +2071,226 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         }
         if normalized.contains("explain") || (normalized.contains("summary") && !normalized.contains("voice")) {
             return .explain
+        }
+        return nil
+    }
+
+}
+
+// MARK: - Explain Persona Picker with Voice
+
+private struct ExplainPersonaPickerView: View {
+    let onSelect: (MemorizeExplainPersona) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var voiceListener = ExplainPersonaVoiceListener()
+    private let explainAccent = Color(red: 0.94, green: 0.55, blue: 0.24)
+
+    var body: some View {
+        VStack(spacing: AppSpacing.md) {
+            Text("memorize.explain.select_persona".localized)
+                .font(AppTypography.headline)
+                .foregroundColor(.white)
+                .padding(.top, 32)
+
+            if voiceListener.isListening {
+                HStack(spacing: 6) {
+                    Image(systemName: "mic.fill")
+                        .foregroundColor(explainAccent)
+                    Text("Listening...")
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.7))
+                }
+            }
+
+            ForEach(MemorizeExplainPersona.allCases) { persona in
+                Button {
+                    voiceListener.stop()
+                    onSelect(persona)
+                } label: {
+                    HStack(spacing: 10) {
+                        Text(persona.iconSystemImage)
+                            .font(.system(size: 22))
+                        Text(persona.displayKey.localized)
+                            .font(AppTypography.body)
+                            .foregroundColor(.white)
+                        Spacer()
+                    }
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, AppSpacing.md)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(AppCornerRadius.sm)
+                }
+            }
+            .padding(.horizontal, AppSpacing.md)
+
+            Button {
+                voiceListener.stop()
+                dismiss()
+            } label: {
+                Text("memorize.cancel".localized)
+                    .font(AppTypography.body)
+                    .foregroundColor(Color.white.opacity(0.65))
+            }
+            .padding(.bottom, AppSpacing.lg)
+        }
+        .background(AppColors.memorizeBackground.ignoresSafeArea())
+        .task {
+            // Brief delay for audio session to settle
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            voiceListener.startListening { persona in
+                onSelect(persona)
+            }
+        }
+        .onDisappear {
+            voiceListener.stop()
+        }
+    }
+}
+
+@MainActor
+private final class ExplainPersonaVoiceListener: ObservableObject {
+    @Published var isListening = false
+
+    private var audioEngine = AVAudioEngine()
+    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: Locale.preferredLanguages.first ?? "en-US"))
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTask: SFSpeechRecognitionTask?
+    private var onPersona: ((MemorizeExplainPersona) -> Void)?
+    private var hasTriggered = false
+    private var restartTask: Task<Void, Never>?
+
+    func startListening(onPersona: @escaping (MemorizeExplainPersona) -> Void) {
+        self.onPersona = onPersona
+        hasTriggered = false
+        beginListening()
+    }
+
+    func stop() {
+        hasTriggered = true
+        restartTask?.cancel()
+        restartTask = nil
+        stopInternal()
+    }
+
+    private func beginListening() {
+        guard !hasTriggered else { return }
+        guard recognitionTask == nil else { return }
+
+        restartTask?.cancel()
+        restartTask = nil
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.record, mode: .default, options: [.duckOthers])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("⚠️ [PersonaVoice] Audio session setup failed: \(error.localizedDescription)")
+            scheduleRestart()
+            return
+        }
+
+        audioEngine = AVAudioEngine()
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        recognitionRequest = request
+
+        guard let speechRecognizer, speechRecognizer.isAvailable else {
+            print("⚠️ [PersonaVoice] Speech recognizer not available")
+            return
+        }
+
+        let inputNode = audioEngine.inputNode
+        let inputFormat = inputNode.inputFormat(forBus: 0)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            print("⚠️ [PersonaVoice] Invalid input format")
+            scheduleRestart()
+            return
+        }
+        inputNode.removeTap(onBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+            self?.recognitionRequest?.append(buffer)
+        }
+
+        audioEngine.prepare()
+        do {
+            try audioEngine.start()
+        } catch {
+            print("⚠️ [PersonaVoice] Audio engine start failed: \(error.localizedDescription)")
+            scheduleRestart()
+            return
+        }
+
+        isListening = true
+        print("🎤 [PersonaVoice] Listening for persona...")
+
+        recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self, !self.hasTriggered else { return }
+                if let text = result?.bestTranscription.formattedString.lowercased() {
+                    print("🎤 [PersonaVoice] Heard: \(text)")
+                    if let persona = self.parsePersona(from: text) {
+                        self.hasTriggered = true
+                        self.stopInternal()
+                        self.onPersona?(persona)
+                        return
+                    }
+                }
+                if let error {
+                    print("⚠️ [PersonaVoice] Recognition error: \(error.localizedDescription)")
+                    self.stopInternal()
+                    self.scheduleRestart()
+                } else if result?.isFinal ?? false {
+                    self.stopInternal()
+                    self.scheduleRestart()
+                }
+            }
+        }
+    }
+
+    private func stopInternal() {
+        restartTask?.cancel()
+        restartTask = nil
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
+        audioEngine.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        isListening = false
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func scheduleRestart() {
+        guard !hasTriggered else { return }
+        restartTask?.cancel()
+        restartTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            self?.beginListening()
+        }
+    }
+
+    private func parsePersona(from text: String) -> MemorizeExplainPersona? {
+        let normalized = text.replacingOccurrences(of: "-", with: " ")
+        if normalized.contains("5") || normalized.contains("five") || normalized.contains("like i am") || normalized.contains("like a kid") || normalized.contains("year old") {
+            return .likeIAm5
+        }
+        if normalized.contains("high school") {
+            return .highSchoolStudent
+        }
+        if normalized.contains("college") || normalized.contains("university") {
+            return .collegeStudent
+        }
+        if normalized.contains("artist") || normalized.contains("creative") {
+            return .artist
+        }
+        if normalized.contains("research") || normalized.contains("academic") || normalized.contains("scientist") {
+            return .researcher
         }
         return nil
     }
