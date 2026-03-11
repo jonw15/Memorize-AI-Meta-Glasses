@@ -1280,7 +1280,7 @@ private final class VoiceSummarySpeechRecognizer: NSObject, ObservableObject {
         recognitionRequest = nil
 
         let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+        try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
         try audioSession.setCategory(.record, mode: .measurement, options: [.duckOthers, .allowBluetoothHFP])
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
 
@@ -1415,6 +1415,8 @@ private struct MemorizeVoiceSummaryView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .task {
+            // Release any previous audio session (voice menu, Gemini, etc.)
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             await speechRecognizer.requestPermissionsIfNeeded()
             if speechRecognizer.speechPermissionDenied || speechRecognizer.micPermissionDenied {
                 errorMessage = "memorize.voice_permission_required".localized
