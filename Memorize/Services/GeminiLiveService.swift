@@ -51,7 +51,7 @@ class GeminiLiveService: NSObject {
     private var audioBuffer = Data()
     private var isCollectingAudio = false
     private var audioChunkCount = 0
-    private let minChunksBeforePlay = 2
+    private let minChunksBeforePlay: Int
     private var hasStartedPlaying = false
     private var isPlaybackEngineRunning = false
 
@@ -77,11 +77,18 @@ class GeminiLiveService: NSObject {
     private var isPlaybackEnabled = true
     private var connectWaitTask: Task<Void, Never>?
 
-    init(apiKey: String, model: String? = nil, systemPrompt: String? = nil, includeTools: Bool = true) {
+    init(
+        apiKey: String,
+        model: String? = nil,
+        systemPrompt: String? = nil,
+        includeTools: Bool = true,
+        minChunksBeforePlay: Int = 2
+    ) {
         self.apiKey = apiKey
         self.model = model ?? APIProviderManager.staticLiveAIDefaultModel
         self.customSystemPrompt = systemPrompt
         self.includeTools = includeTools
+        self.minChunksBeforePlay = max(1, minChunksBeforePlay)
         super.init()
         setupAudioEngine()
     }
