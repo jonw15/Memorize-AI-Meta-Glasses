@@ -1954,7 +1954,7 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
     }
 
     private let synthesizer = AVSpeechSynthesizer()
-    private let audioEngine = AVAudioEngine()
+    private var audioEngine = AVAudioEngine()
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: Locale.preferredLanguages.first ?? "en-US"))
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
@@ -1973,12 +1973,29 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         hasTriggered = false
         shouldListen = true
 
+        speakMenuPrompt()
+    }
+
+    private func speakMenuPrompt(retryCount: Int = 0) {
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
-        } catch {}
+        } catch {
+            print("⚠️ [VoiceMenu] Audio session setup failed (attempt \(retryCount + 1)): \(error.localizedDescription)")
+            if retryCount < 3 {
+                // Retry after a delay — previous audio session may still be tearing down
+                restartTask?.cancel()
+                restartTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    guard !Task.isCancelled else { return }
+                    self?.speakMenuPrompt(retryCount: retryCount + 1)
+                }
+            }
+            return
+        }
 
+        print("🔊 [VoiceMenu] Speaking menu prompt")
         let utterance = AVSpeechUtterance(string: "Would you like an interactive conversation, explain, pop quiz, or voice summary?")
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         utterance.voice = AVSpeechSynthesisVoice(language: Locale.preferredLanguages.first ?? "en-US")
@@ -2015,17 +2032,28 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.record, mode: .default, options: [.duckOthers])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
-        } catch { return }
+        } catch {
+            print("⚠️ [VoiceMenu] Record session setup failed: \(error.localizedDescription)")
+            scheduleRestart()
+            return
+        }
+
+        // Create a fresh audio engine to avoid stale input node state
+        audioEngine = AVAudioEngine()
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         recognitionRequest = request
 
-        guard let speechRecognizer, speechRecognizer.isAvailable else { return }
+        guard let speechRecognizer, speechRecognizer.isAvailable else {
+            print("⚠️ [VoiceMenu] Speech recognizer not available")
+            return
+        }
 
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.inputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            print("⚠️ [VoiceMenu] Invalid input format: rate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
             scheduleRestart()
             return
         }
@@ -2035,19 +2063,34 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         }
 
         audioEngine.prepare()
-        try? audioEngine.start()
+        do {
+            try audioEngine.start()
+        } catch {
+            print("⚠️ [VoiceMenu] Audio engine start failed: \(error.localizedDescription)")
+            scheduleRestart()
+            return
+        }
+
+        print("🎤 [VoiceMenu] Listening for menu command...")
 
         recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
             Task { @MainActor [weak self] in
                 guard let self, !hasTriggered else { return }
-                if let text = result?.bestTranscription.formattedString.lowercased(),
-                   let command = parseMenuCommand(from: text) {
-                    hasTriggered = true
-                    stopListeningInternal()
-                    onCommand?(command)
+                if let text = result?.bestTranscription.formattedString.lowercased() {
+                    print("🎤 [VoiceMenu] Heard: \(text)")
+                    if let command = parseMenuCommand(from: text) {
+                        hasTriggered = true
+                        stopListeningInternal()
+                        onCommand?(command)
+                        return
+                    }
                 }
-                if error != nil || (result?.isFinal ?? false) {
+                if let error {
+                    print("⚠️ [VoiceMenu] Recognition error: \(error.localizedDescription)")
+                    stopListeningInternal()
+                    scheduleRestart()
+                } else if result?.isFinal ?? false {
                     stopListeningInternal()
                     scheduleRestart()
                 }
