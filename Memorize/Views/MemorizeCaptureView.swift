@@ -1068,6 +1068,9 @@ private struct MemorizePostCaptureActionsView: View {
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             startVoiceMenu()
         }
+        .onChange(of: showExplainPersonaSelector) { showing in
+            if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
+        }
         .onChange(of: showInteract) { showing in
             if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
         }
@@ -1912,52 +1915,16 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         hasTriggered = false
         shouldListen = true
 
-        speakMenuPrompt()
-    }
-
-    private func speakMenuPrompt(retryCount: Int = 0) {
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-        } catch {
-            print("⚠️ [VoiceMenu] Audio session setup failed (attempt \(retryCount + 1)): \(error.localizedDescription)")
-            if retryCount < 3 {
-                // Retry after a delay — previous audio session may still be tearing down
-                restartTask?.cancel()
-                restartTask = Task { @MainActor [weak self] in
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
-                    guard !Task.isCancelled else { return }
-                    self?.speakMenuPrompt(retryCount: retryCount + 1)
-                }
-            }
-            return
-        }
-
-        print("🔊 [VoiceMenu] Speaking menu prompt")
-        let utterance = AVSpeechUtterance(string: "Would you like an interactive conversation, explanation, pop quiz, or voice summary?")
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        utterance.voice = AVSpeechSynthesisVoice(language: Locale.preferredLanguages.first ?? "en-US")
-        synthesizer.speak(utterance)
+        // Go straight to listening — no TTS prompt
+        beginListeningIfNeeded()
     }
 
     func stop() {
         shouldListen = false
         restartTask?.cancel()
         restartTask = nil
-        if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
-        }
+        synthesizer.stopSpeaking(at: .immediate)
         stopListeningInternal(deactivateSession: true)
-    }
-
-    // AVSpeechSynthesizerDelegate — start listening after speech finishes
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor in
-            // Brief delay so the last word fully renders through the audio output
-            try? await Task.sleep(nanoseconds: 600_000_000)
-            beginListeningIfNeeded()
-        }
     }
 
     private func beginListeningIfNeeded() {
