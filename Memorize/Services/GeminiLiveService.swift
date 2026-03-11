@@ -54,6 +54,7 @@ class GeminiLiveService: NSObject {
     private let minChunksBeforePlay: Int
     private var hasStartedPlaying = false
     private var isPlaybackEngineRunning = false
+    private var dropIncomingAudioUntilInterrupted = false
 
     // Callbacks
     var onTranscriptDelta: ((String) -> Void)?
@@ -406,7 +407,10 @@ Do not apologize.
 
     /// Interrupt AI speech by clearing the playback buffer and resetting the player node.
     /// Recording continues so the user can speak immediately.
-    func interruptPlayback() {
+    func interruptPlayback(expectServerInterruption: Bool = false) {
+        if expectServerInterruption, (isCollectingAudio || hasStartedPlaying || !audioBuffer.isEmpty) {
+            dropIncomingAudioUntilInterrupted = true
+        }
         guard isPlaybackEngineRunning else { return }
         print("🤚 [Gemini] Interrupting AI playback")
         playerNode?.stop()
@@ -857,7 +861,9 @@ Do not apologize.
                    mimeType.contains("audio"),
                    let base64Audio = inlineData["data"] as? String,
                    let audioData = Data(base64Encoded: base64Audio) {
-
+                    if dropIncomingAudioUntilInterrupted {
+                        continue
+                    }
                     onAudioDelta?(audioData)
                     handleAudioChunk(audioData)
                 }
@@ -867,6 +873,7 @@ Do not apologize.
         // Check if turn is complete
         if let turnComplete = content["turnComplete"] as? Bool, turnComplete {
             print("✅ [Gemini] AI response complete")
+            dropIncomingAudioUntilInterrupted = false
             finishAudioPlayback()
             onTranscriptDone?("")
         }
@@ -874,6 +881,7 @@ Do not apologize.
         // Check for interrupted flag
         if let interrupted = content["interrupted"] as? Bool, interrupted {
             print("⚠️ [Gemini] Response interrupted")
+            dropIncomingAudioUntilInterrupted = false
             stopPlaybackEngine()
             setupPlaybackEngine()
         }

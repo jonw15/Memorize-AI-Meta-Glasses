@@ -61,12 +61,6 @@ struct MemorizeQuizView: View {
                     goToNextQuestion()
                 }
             }
-            voiceAssistant.connect()
-            // Wait for connection before speaking the first question
-            for _ in 0..<20 {
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                if voiceAssistant.isConnected { break }
-            }
             speakCurrentQuestionIfNeeded()
         }
         .onChange(of: currentIndex) { _ in
@@ -391,8 +385,7 @@ private final class QuizVoiceAssistant: ObservableObject {
         let service = GeminiLiveService(
             apiKey: apiKey,
             systemPrompt: systemPrompt,
-            includeTools: false,
-            minChunksBeforePlay: 1
+            includeTools: false
         )
 
         // Do NOT auto-start recording — we control mic on/off precisely
@@ -480,11 +473,8 @@ private final class QuizVoiceAssistant: ObservableObject {
 
         speechTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            // Wait for Gemini to finish processing any audio it already received
-            try? await Task.sleep(nanoseconds: 600_000_000)
-            guard !Task.isCancelled else { return }
-            self.geminiService?.interruptPlayback()
-            try? await Task.sleep(nanoseconds: 200_000_000)
+            let connected = await self.prepareFreshSpeechConnection()
+            guard connected, !Task.isCancelled else { return }
             guard !Task.isCancelled else { return }
             self.markSpeechSentAndStartFallback()
             self.geminiService?.sendTextInput(text)
@@ -501,12 +491,12 @@ private final class QuizVoiceAssistant: ObservableObject {
         listenMode = .waitingForNext
 
         // Always interrupt first — mic is already off from transcript processing
-        geminiService?.interruptPlayback()
         speechTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            // Tap feedback should go out essentially immediately, but still give the
-            // audio session a moment to settle after stopping the mic.
-            try? await Task.sleep(nanoseconds: immediate ? 50_000_000 : 300_000_000)
+            let connected = await self.prepareFreshSpeechConnection()
+            guard connected, !Task.isCancelled else { return }
+            // Give the brand-new playback engine a moment to settle.
+            try? await Task.sleep(nanoseconds: immediate ? 50_000_000 : 150_000_000)
             guard !Task.isCancelled else { return }
             self.markSpeechSentAndStartFallback()
             self.geminiService?.sendTextInput("[READ] \(text) [/READ]")
@@ -541,6 +531,28 @@ private final class QuizVoiceAssistant: ObservableObject {
                 self.startListeningForAnswer()
             }
         }
+    }
+
+    private func prepareFreshSpeechConnection() async -> Bool {
+        resetConnectionForFreshTurn()
+        connect()
+
+        for _ in 0..<30 {
+            if isConnected { return true }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        return isConnected
+    }
+
+    private func resetConnectionForFreshTurn() {
+        geminiService?.disconnect()
+        geminiService = nil
+        isConnected = false
+        isListeningForAnswer = false
+        isProcessingTranscript = false
+        accumulatedTranscript = ""
+        awaitingOurSpeechDone = false
     }
 
     private func startListeningForAnswer() {
