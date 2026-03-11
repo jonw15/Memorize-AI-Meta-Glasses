@@ -464,7 +464,7 @@
 "memorize.connecting_camera" = "Connecting to camera...";
 "memorize.test_mode_prompt" = "Pick a Test Mode";
 "memorize.pop_quiz" = "Pop Quiz";
-"memorize.explain" = "Explain";
+"memorize.explain" = "Explanation";
 "memorize.explain.select_persona" = "Explain this section as:";
 "memorize.explain.persona.high_school_student" = "High School Student";
 "memorize.explain.persona.college_student" = "College Student";

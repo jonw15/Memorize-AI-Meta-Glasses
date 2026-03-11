@@ -1933,7 +1933,7 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         }
 
         print("🔊 [VoiceMenu] Speaking menu prompt")
-        let utterance = AVSpeechUtterance(string: "Would you like an interactive conversation, explain, pop quiz, or voice summary?")
+        let utterance = AVSpeechUtterance(string: "Would you like an interactive conversation, explanation, pop quiz, or voice summary?")
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         utterance.voice = AVSpeechSynthesisVoice(language: Locale.preferredLanguages.first ?? "en-US")
         synthesizer.speak(utterance)
@@ -1946,7 +1946,7 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
         }
-        stopListeningInternal()
+        stopListeningInternal(deactivateSession: true)
     }
 
     // AVSpeechSynthesizerDelegate — start listening after speech finishes
@@ -2013,12 +2013,18 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
             Task { @MainActor [weak self] in
-                guard let self, !hasTriggered else { return }
-                if let text = result?.bestTranscription.formattedString.lowercased() {
-                    print("🎤 [VoiceMenu] Heard: \(text)")
-                    if let command = parseMenuCommand(from: text) {
+                guard let self else { return }
+                if hasTriggered {
+                    print("🎤 [VoiceMenu] Ignoring (already triggered)")
+                    return
+                }
+                if let text = result?.bestTranscription.formattedString {
+                    let lower = text.lowercased()
+                    print("🎤 [VoiceMenu] Heard: \"\(text)\" (isFinal: \(result?.isFinal ?? false))")
+                    if let command = parseMenuCommand(from: lower) {
+                        print("✅ [VoiceMenu] Matched command: \(command)")
                         hasTriggered = true
-                        stopListeningInternal()
+                        stopListeningInternal(deactivateSession: true)
                         onCommand?(command)
                         return
                     }
@@ -2028,6 +2034,7 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
                     stopListeningInternal()
                     scheduleRestart()
                 } else if result?.isFinal ?? false {
+                    print("ℹ️ [VoiceMenu] Final result, no match — restarting")
                     stopListeningInternal()
                     scheduleRestart()
                 }
@@ -2035,25 +2042,27 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         }
     }
 
-    private func stopListeningInternal() {
+    private func stopListeningInternal(deactivateSession: Bool = false) {
         restartTask?.cancel()
         restartTask = nil
         if audioEngine.isRunning {
             audioEngine.stop()
+            audioEngine.inputNode.removeTap(onBus: 0)
         }
-        audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if deactivateSession {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 
     private func scheduleRestart() {
         guard shouldListen, !hasTriggered else { return }
         restartTask?.cancel()
         restartTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 400_000_000)
+            try? await Task.sleep(nanoseconds: 600_000_000)
             self?.beginListeningIfNeeded()
         }
     }
@@ -2069,7 +2078,9 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         if normalized.contains("voice summary") || (normalized.contains("voice") && !normalized.contains("quiz")) {
             return .voiceSummary
         }
-        if normalized.contains("explain") || (normalized.contains("summary") && !normalized.contains("voice")) {
+        if normalized.contains("explain") || normalized.contains("explanation") ||
+           normalized.contains("expla") || normalized.contains("xplan") ||
+           (normalized.contains("summary") && !normalized.contains("voice")) {
             return .explain
         }
         return nil
