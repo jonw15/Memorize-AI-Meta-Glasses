@@ -1089,6 +1089,7 @@ Do not apologize.
     // MARK: - Audio Playback
 
     private func handleAudioChunk(_ audioData: Data) {
+        print("🔊 [Gemini] Audio chunk received: \(audioData.count) bytes, playbackEnabled=\(isPlaybackEnabled), engineRunning=\(isPlaybackEngineRunning)")
         guard isPlaybackEnabled else { return }
 
         if !isCollectingAudio {
@@ -1138,8 +1139,10 @@ Do not apologize.
         guard isPlaybackEnabled,
               let playerNode = playerNode,
               let playbackAudioFormat else {
+            print("🔊 [Gemini] playAudio skipped: enabled=\(isPlaybackEnabled), node=\(playerNode != nil), format=\(playbackAudioFormat != nil)")
             return
         }
+        print("🔊 [Gemini] playAudio: \(audioData.count) bytes, engineRunning=\(isPlaybackEngineRunning), nodeIsPlaying=\(playerNode.isPlaying)")
 
         if !isPlaybackEngineRunning {
             startPlaybackEngine()

@@ -947,6 +947,8 @@ private struct MemorizePostCaptureActionsView: View {
                 viewModel.generateQuiz()
             case .voiceSummary:
                 showVoiceSummary = true
+            case .podcast:
+                viewModel.startPodcast()
             }
         }
     }
@@ -968,38 +970,50 @@ private struct MemorizePostCaptureActionsView: View {
 
     var body: some View {
         NavigationView {
-            VStack(spacing: AppSpacing.md) {
-                Spacer()
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(spacing: AppSpacing.md) {
+                        Text(bookTitle)
+                            .font(AppTypography.title2)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .padding(.horizontal, AppSpacing.md)
+                            .padding(.top, AppSpacing.lg)
 
-                Text(bookTitle)
-                    .font(AppTypography.title2)
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .padding(.horizontal, AppSpacing.md)
+                        interactButton
+                            .padding(.horizontal, AppSpacing.md)
+                            .padding(.top, AppSpacing.md)
 
-                interactButton
-                    .padding(.horizontal, AppSpacing.md)
-                    .padding(.top, AppSpacing.md)
+                        explainButton
+                            .padding(.horizontal, AppSpacing.md)
 
-                explainButton
-                    .padding(.horizontal, AppSpacing.md)
-                    .padding(.top, AppSpacing.md)
+                        podcastButton
+                            .padding(.horizontal, AppSpacing.md)
 
-                Text("memorize.test_mode_prompt".localized)
-                    .font(AppTypography.subheadline)
-                    .foregroundColor(Color.white.opacity(0.7))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, AppSpacing.md)
+                        Text("memorize.test_mode_prompt".localized)
+                            .font(AppTypography.subheadline)
+                            .foregroundColor(Color.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, AppSpacing.md)
+                            .padding(.top, AppSpacing.sm)
 
-                popQuizButton
-                    .padding(.horizontal, AppSpacing.md)
-                    .padding(.top, AppSpacing.md)
+                        popQuizButton
+                            .padding(.horizontal, AppSpacing.md)
 
-                voiceSummaryButton
-                    .padding(.horizontal, AppSpacing.md)
+                        voiceSummaryButton
+                            .padding(.horizontal, AppSpacing.md)
 
-                Spacer()
+                        if let podcastError = viewModel.podcastErrorMessage, !podcastError.isEmpty {
+                            Text(podcastError)
+                                .font(AppTypography.caption)
+                                .foregroundColor(.red.opacity(0.9))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, AppSpacing.md)
+                        }
+                    }
+                    .padding(.bottom, AppSpacing.md)
+                }
 
                 Button {
                     dismiss()
@@ -1064,6 +1078,15 @@ private struct MemorizePostCaptureActionsView: View {
             }
             .presentationDetents([.medium])
         }
+        .fullScreenCover(isPresented: $viewModel.showPodcastPlayer) {
+            MemorizePodcastPlayerView(
+                pages: completedPages,
+                bookTitle: bookTitle,
+                onClose: {
+                    viewModel.showPodcastPlayer = false
+                }
+            )
+        }
         .task {
             guard !completedPages.isEmpty else { return }
             try? await Task.sleep(nanoseconds: 5_000_000_000)
@@ -1082,6 +1105,9 @@ private struct MemorizePostCaptureActionsView: View {
             if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
         }
         .onChange(of: viewModel.showQuiz) { showing in
+            if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
+        }
+        .onChange(of: viewModel.showPodcastPlayer) { showing in
             if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
         }
         .onDisappear {
@@ -1204,6 +1230,349 @@ private struct MemorizePostCaptureActionsView: View {
         }
         .disabled(viewModel.isGeneratingQuiz || completedPages.isEmpty)
         .opacity((viewModel.isGeneratingQuiz || completedPages.isEmpty) ? 0.5 : 1.0)
+    }
+
+    private var podcastButton: some View {
+        Button {
+            viewModel.startPodcast()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "waveform.circle.fill")
+                    .font(.system(size: 16, weight: .semibold))
+
+                Text("memorize.podcast".localized)
+                    .font(AppTypography.headline)
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                LinearGradient(
+                    colors: [Color(red: 0.64, green: 0.21, blue: 0.83), Color(red: 0.50, green: 0.14, blue: 0.70)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(AppCornerRadius.md)
+        }
+        .disabled(completedPages.isEmpty)
+        .opacity(completedPages.isEmpty ? 0.5 : 1.0)
+    }
+}
+
+// MARK: - Podcast Player View (Gemini Live)
+
+private struct MemorizePodcastPlayerView: View {
+    let pages: [PageCapture]
+    let bookTitle: String
+    let onClose: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var geminiService: GeminiLiveService?
+    @State private var isConnected = false
+    @State private var isRecording = false
+    @State private var isMuted = true
+    @State private var currentTranscript = ""
+    @State private var fullTranscript = ""
+    @State private var errorMessage: String?
+    @State private var isPlaying = false
+    @State private var barHeights: [CGFloat] = [12, 12, 12, 12, 12]
+    @State private var barTimer: Timer?
+
+    private let podcastAccent = Color(red: 0.64, green: 0.21, blue: 0.83)
+    private let barMinHeight: CGFloat = 8
+    private let barMaxHeights: [CGFloat] = [36, 48, 40, 44, 32]
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: AppSpacing.md) {
+                Spacer()
+
+                // Podcast artwork with soundwave bars
+                ZStack {
+                    Circle()
+                        .fill(podcastAccent.opacity(0.1))
+                        .frame(width: 200, height: 200)
+
+                    Circle()
+                        .fill(podcastAccent.opacity(0.18))
+                        .frame(width: 160, height: 160)
+
+                    Circle()
+                        .fill(podcastAccent.opacity(0.25))
+                        .frame(width: 120, height: 120)
+
+                    // Soundwave bars
+                    HStack(spacing: 5) {
+                        ForEach(0..<5, id: \.self) { i in
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(podcastAccent)
+                                .frame(width: 6, height: barHeights[i])
+                                .animation(.easeInOut(duration: 0.3), value: barHeights[i])
+                        }
+                    }
+                }
+
+                Text(bookTitle)
+                    .font(AppTypography.title2)
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .padding(.horizontal, AppSpacing.lg)
+
+                Text("memorize.podcast_header".localized)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(Color.white.opacity(0.6))
+
+                // Status indicator
+                if !isConnected || !isPlaying {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(0.8)
+                        Text("memorize.podcast_loading".localized)
+                            .font(AppTypography.caption)
+                            .foregroundColor(Color.white.opacity(0.6))
+                    }
+                    .padding(AppSpacing.md)
+                }
+
+                if let errorMessage, !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .font(AppTypography.caption)
+                        .foregroundColor(.red.opacity(0.9))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, AppSpacing.md)
+                }
+
+                if isConnected {
+                    microphoneButton
+                }
+
+                Spacer()
+
+                Button {
+                    disconnectAndDismiss()
+                } label: {
+                    Text("memorize.podcast_stop".localized)
+                        .font(AppTypography.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(podcastAccent)
+                        .cornerRadius(AppCornerRadius.md)
+                }
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.bottom, AppSpacing.lg)
+            }
+            .background(AppColors.memorizeBackground.ignoresSafeArea())
+            .navigationTitle("memorize.podcast".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        disconnectAndDismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .task {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            setupAndConnect()
+        }
+        .onChange(of: isPlaying) { playing in
+            if playing {
+                startBarTimer()
+            } else {
+                stopBarTimer()
+            }
+        }
+        .onDisappear {
+            stopBarTimer()
+            geminiService?.disconnect()
+            geminiService = nil
+        }
+    }
+
+    private var microphoneButton: some View {
+        Button {
+            guard isConnected, let service = geminiService else { return }
+            if isMuted {
+                // Unmute — user wants to talk, interrupt AI speech
+                service.interruptPlayback()
+                service.startRecording()
+                isRecording = true
+                isMuted = false
+                print("🎙️ [Podcast] Mic unmuted")
+            } else {
+                // Mute — stop sending audio to Gemini
+                service.stopRecording()
+                isRecording = false
+                isMuted = true
+                print("🎙️ [Podcast] Mic muted")
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isMuted ? "mic.slash.fill" : "mic.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                Text(isMuted ? "memorize.podcast_unmute".localized : "memorize.podcast_mute".localized)
+                    .font(AppTypography.subheadline)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(isMuted ? Color.white.opacity(0.15) : podcastAccent.opacity(0.5))
+            .cornerRadius(AppCornerRadius.md)
+        }
+    }
+
+    private func startBarTimer() {
+        barTimer?.invalidate()
+        barTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { _ in
+            Task { @MainActor in
+                for i in 0..<5 {
+                    barHeights[i] = CGFloat.random(in: barMinHeight...barMaxHeights[i])
+                }
+            }
+        }
+    }
+
+    private func stopBarTimer() {
+        barTimer?.invalidate()
+        barTimer = nil
+        for i in 0..<5 { barHeights[i] = barMinHeight }
+    }
+
+    private func disconnectAndDismiss() {
+        geminiService?.disconnect()
+        geminiService = nil
+        dismiss()
+        onClose()
+    }
+
+    private func setupAndConnect() {
+        let completedPages = pages.filter { $0.status == .completed }
+        print("🎙️ [Podcast] Starting setup — \(completedPages.count) completed pages, \(pages.count) total pages")
+
+        let combinedText = completedPages
+            .enumerated()
+            .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
+            .joined(separator: "\n\n")
+
+        print("🎙️ [Podcast] Combined text length: \(combinedText.count) chars")
+
+        if combinedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            print("❌ [Podcast] No text content in completed pages!")
+            errorMessage = "No text content available. Capture some pages first."
+            return
+        }
+
+        let maxChars = 15000
+        let truncatedText = combinedText.count > maxChars
+            ? String(combinedText.prefix(maxChars)) + "\n[... text truncated ...]"
+            : combinedText
+
+        let systemPrompt = """
+        You are the host of an engaging educational podcast called "Deep Dive". You have a warm, enthusiastic personality.
+
+        Your task: Create a compelling podcast episode discussing the following reading material from "\(bookTitle)".
+
+        ---
+        \(truncatedText)
+        ---
+
+        Guidelines for your podcast:
+        1. Start with a brief, energetic intro: "Welcome to Deep Dive! Today we're exploring..."
+        2. Present the key ideas, themes, and insights from the text in a conversational, engaging way
+        3. Use a dynamic speaking style — vary your tone, add emphasis, use rhetorical questions
+        4. Break down complex ideas into digestible explanations with real-world analogies
+        5. Highlight surprising or particularly interesting points from the text
+        6. Add your own analysis and connections between ideas
+        7. End with a brief wrap-up summarizing the main takeaways
+
+        Speak naturally as if recording a real podcast episode. Be enthusiastic but not over the top.
+        Keep the episode concise — aim for about 3-4 minutes of content.
+        Do NOT mention that you are an AI. Speak as a human podcast host would.
+        Begin the podcast immediately.
+        """
+
+        let apiKey = APIProviderManager.staticLiveAIAPIKey
+        print("🎙️ [Podcast] API key present: \(!apiKey.isEmpty) (length: \(apiKey.count))")
+
+        let service = GeminiLiveService(
+            apiKey: apiKey,
+            systemPrompt: systemPrompt,
+            includeTools: false
+        )
+
+        service.onConnected = { [service] in
+            Task { @MainActor in
+                print("🎙️ [Podcast] Connected to Gemini Live!")
+                isConnected = true
+                // Start recording to initialize the audio session (needed for playback too)
+                service.startRecording()
+                isRecording = true
+                isMuted = false
+                // Send a text prompt to trigger the AI to start the podcast
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                service.sendTextInput("Begin the podcast now. Start with your intro and dive into the content.")
+                print("🎙️ [Podcast] Sent trigger prompt to start podcast")
+            }
+        }
+
+        service.onTranscriptDelta = { (delta: String) in
+            Task { @MainActor in
+                let cleaned = delta.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !cleaned.isEmpty else { return }
+                if !isPlaying { isPlaying = true }
+                print("🎙️ [Podcast] Transcript delta: \(cleaned.prefix(80))...")
+                if cleaned.hasPrefix(currentTranscript) && cleaned.count > currentTranscript.count {
+                    currentTranscript = cleaned
+                } else if currentTranscript.isEmpty || !cleaned.hasPrefix(currentTranscript) {
+                    if currentTranscript.isEmpty {
+                        currentTranscript = cleaned
+                    } else {
+                        let needsSpace = !currentTranscript.hasSuffix(" ") && !cleaned.hasPrefix(" ")
+                        currentTranscript += (needsSpace ? " " : "") + cleaned
+                    }
+                }
+            }
+        }
+
+        service.onTranscriptDone = { (fullText: String) in
+            print("🎙️ [Podcast] Transcript done: \(fullText.prefix(80))...")
+            Task { @MainActor in
+                let trimmed = (fullText.isEmpty ? currentTranscript : fullText)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    if !fullTranscript.isEmpty {
+                        fullTranscript += "\n\n"
+                    }
+                    fullTranscript += trimmed
+                }
+                currentTranscript = ""
+            }
+        }
+
+        service.onAudioDone = {
+            print("🎙️ [Podcast] Audio playback done")
+        }
+
+        service.onError = { (errorText: String) in
+            print("❌ [Podcast] Error: \(errorText)")
+            Task { @MainActor in
+                errorMessage = errorText
+            }
+        }
+
+        geminiService = service
+        print("🎙️ [Podcast] Calling service.connect()...")
+        service.connect()
     }
 }
 
@@ -2074,6 +2443,7 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         case explain
         case popQuiz
         case voiceSummary
+        case podcast
     }
 
     private let synthesizer = AVSpeechSynthesizer()
@@ -2233,6 +2603,9 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         }
         if normalized.contains("summarize") || normalized.contains("summar") {
             return .explain
+        }
+        if normalized.contains("podcast") {
+            return .podcast
         }
         return nil
     }

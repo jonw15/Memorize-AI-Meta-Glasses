@@ -501,5 +501,12 @@
 "memorize.interact_prompt" = "用语音讨论你刚刚阅读的内容";
 "memorize.interact_connecting" = "连接中...";
 "memorize.interact_placeholder" = "问我任何关于你拍摄文本的问题。";
+"memorize.podcast" = "播客";
+"memorize.podcast_header" = "AI 生成播客";
+"memorize.podcast_listening" = "正在启动播客...";
+"memorize.podcast_loading" = "播客加载中...";
+"memorize.podcast_stop" = "停止播客";
+"memorize.podcast_mute" = "静音麦克风";
+"memorize.podcast_unmute" = "取消静音";
 "memorize.upload_pdf" = "上传 PDF";
 "memorize.pdf_importing_progress" = "正在导入第 %d 页，共 %d 页...";

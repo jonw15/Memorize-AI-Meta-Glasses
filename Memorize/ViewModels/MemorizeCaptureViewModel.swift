@@ -26,6 +26,8 @@ class MemorizeCaptureViewModel: ObservableObject {
     @Published var explanationPersona: MemorizeExplainPersona = .highSchoolStudent
     @Published var explanationText: String = ""
     @Published var explanationErrorMessage: String?
+    @Published var podcastErrorMessage: String?
+    @Published var showPodcastPlayer: Bool = false
 
     private let storage = MemorizeStorage.shared
     private let memorizeService = MemorizeService()
@@ -299,6 +301,18 @@ class MemorizeCaptureViewModel: ObservableObject {
             }
             self.isGeneratingExplanation = false
         }
+    }
+
+    // MARK: - Podcast
+
+    func startPodcast() {
+        let completedPages = pages.filter { $0.status == .completed }
+        guard !completedPages.isEmpty else {
+            podcastErrorMessage = "memorize.explain_no_pages_error".localized
+            return
+        }
+        podcastErrorMessage = nil
+        showPodcastPlayer = true
     }
 
     // MARK: - Done Reading
