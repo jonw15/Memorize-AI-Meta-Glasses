@@ -1999,7 +1999,7 @@ private struct MemorizeExplainView: View {
     @State private var currentUserText = ""
     @State private var isAIThinking = false
     @State private var errorMessage: String?
-    @State private var pulseAnimation = false
+    @State private var isMuted = false
     @State private var loadingPulse = false
     private let explainAccent = Color(red: 0.94, green: 0.55, blue: 0.24)
 
@@ -2189,6 +2189,10 @@ private struct MemorizeExplainView: View {
                 isConnected = true
                 service.startRecording()
                 isRecording = true
+                isMuted = false
+                // Trigger the AI to start reading the summary aloud immediately
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                service.sendTextInput("Please begin reading the summary aloud now.")
             }
         }
 
@@ -2391,38 +2395,32 @@ private struct MemorizeExplainView: View {
 
     private var microphoneButton: some View {
         Button {
-            guard isConnected else { return }
-            geminiService?.interruptPlayback()
-        } label: {
-            ZStack {
-                if isRecording {
-                    Circle()
-                        .stroke(explainAccent.opacity(0.4), lineWidth: 3)
-                        .frame(width: 120, height: 120)
-                        .scaleEffect(pulseAnimation ? 1.25 : 1.0)
-                        .opacity(pulseAnimation ? 0.1 : 0.85)
-                }
-
-                Circle()
-                    .fill(isRecording ? explainAccent : explainAccent.opacity(0.22))
-                    .frame(width: 84, height: 84)
-
-                Image(systemName: "waveform")
-                    .font(.system(size: 30, weight: .semibold))
-                    .foregroundColor(.white)
+            guard isConnected, let service = geminiService else { return }
+            if isMuted {
+                service.interruptPlayback()
+                service.startRecording()
+                isRecording = true
+                isMuted = false
+            } else {
+                service.stopRecording()
+                isRecording = false
+                isMuted = true
             }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isMuted ? "mic.slash.fill" : "mic.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                Text(isMuted ? "memorize.podcast_unmute".localized : "memorize.podcast_mute".localized)
+                    .font(AppTypography.subheadline)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(isMuted ? Color.white.opacity(0.15) : explainAccent.opacity(0.5))
+            .cornerRadius(AppCornerRadius.md)
         }
         .disabled(!isConnected)
         .opacity(!isConnected ? 0.5 : 1.0)
-        .onChange(of: isRecording) { recording in
-            pulseAnimation = recording
-        }
-        .animation(
-            isRecording
-                ? .easeOut(duration: 1.0).repeatForever(autoreverses: true)
-                : .easeOut(duration: 0.2),
-            value: pulseAnimation
-        )
     }
 }
 
