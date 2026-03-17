@@ -502,6 +502,7 @@
 "memorize.interact_connecting" = "连接中...";
 "memorize.interact_placeholder" = "问我任何关于你拍摄文本的问题。";
 "memorize.podcast" = "播客";
+"memorize.voice_menu_prompt" = "你可以说：对话、总结、播客、小测验 或 语音摘要。";
 "memorize.podcast_header" = "AI 生成播客";
 "memorize.podcast_listening" = "正在启动播客...";
 "memorize.podcast_loading" = "播客加载中...";

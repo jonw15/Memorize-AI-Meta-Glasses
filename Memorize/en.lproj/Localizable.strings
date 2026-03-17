@@ -501,6 +501,7 @@
 "memorize.interact_connecting" = "Connecting...";
 "memorize.interact_placeholder" = "Ask me anything about the text you captured.";
 "memorize.podcast" = "Podcast";
+"memorize.voice_menu_prompt" = "You can say: conversation, summary, podcast, pop quiz, or voice summary.";
 "memorize.podcast_header" = "AI-Generated Podcast";
 "memorize.podcast_listening" = "Starting podcast...";
 "memorize.podcast_loading" = "Podcast loading...";

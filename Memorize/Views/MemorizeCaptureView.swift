@@ -956,13 +956,13 @@ private struct MemorizePostCaptureActionsView: View {
     private func restartVoiceMenuAfterDelay() {
         voiceMenuRestartTask?.cancel()
         voiceMenuRestartTask = Task {
-            // Wait for Gemini audio session to fully release
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            // Wait for Gemini audio session to release
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
             guard !Task.isCancelled else { return }
             // Force-reset audio session so SFSpeechRecognizer can claim it
             let session = AVAudioSession.sharedInstance()
             try? session.setActive(false, options: .notifyOthersOnDeactivation)
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled else { return }
             startVoiceMenu()
         }
@@ -1089,7 +1089,7 @@ private struct MemorizePostCaptureActionsView: View {
         }
         .task {
             guard !completedPages.isEmpty else { return }
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
             startVoiceMenu()
         }
         .onChange(of: showExplainPersonaSelector) { showing in
@@ -1255,8 +1255,8 @@ private struct MemorizePostCaptureActionsView: View {
             )
             .cornerRadius(AppCornerRadius.md)
         }
-        .disabled(completedPages.isEmpty)
-        .opacity(completedPages.isEmpty ? 0.5 : 1.0)
+        .disabled(viewModel.isGeneratingQuiz || completedPages.isEmpty)
+        .opacity((viewModel.isGeneratingQuiz || completedPages.isEmpty) ? 0.5 : 1.0)
     }
 }
 
@@ -2465,8 +2465,39 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         hasTriggered = false
         shouldListen = true
 
-        // Go straight to listening — no TTS prompt
-        beginListeningIfNeeded()
+        // Speak a prompt, then listen for the command
+        speakPromptThenListen()
+    }
+
+    private func speakPromptThenListen() {
+        guard shouldListen, !hasTriggered else { return }
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("⚠️ [VoiceMenu] TTS session setup failed: \(error.localizedDescription)")
+            beginListeningIfNeeded()
+            return
+        }
+
+        let promptText = "memorize.voice_menu_prompt".localized
+        let utterance = AVSpeechUtterance(string: promptText)
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        utterance.pitchMultiplier = 1.0
+        utterance.voice = AVSpeechSynthesisVoice(language: Locale.preferredLanguages.first ?? "en-US")
+        synthesizer.speak(utterance)
+    }
+
+    // AVSpeechSynthesizerDelegate — start listening after TTS finishes
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            guard shouldListen, !hasTriggered else { return }
+            // Small delay to let audio session transition
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            beginListeningIfNeeded()
+        }
     }
 
     func stop() {
@@ -2861,7 +2892,7 @@ private struct MemorizeInteractView: View {
     @State private var currentUserText = ""
     @State private var isAIThinking = false
     @State private var errorMessage: String?
-    @State private var pulseAnimation = false
+    @State private var isMuted = true
 
     private let interactAccent = Color(red: 0.15, green: 0.72, blue: 0.52)
 
@@ -2984,18 +3015,18 @@ private struct MemorizeInteractView: View {
         service.onConnected = { [service] in
             Task { @MainActor in
                 isConnected = true
-                // Auto-start recording once connected
+                // Start recording with mic live — conversation mode is fully hands-free
+                service.isMicMuted = false
                 service.startRecording()
                 isRecording = true
+                isMuted = false
             }
         }
 
         service.onUserTranscript = { (userText: String) in
             Task { @MainActor in
                 guard !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                // Gemini sends fragments with their own spacing (e.g. " what" " 's") — concatenate raw
                 currentUserText += userText
-                // Show thinking indicator since user has spoken
                 isAIThinking = true
             }
         }
@@ -3152,38 +3183,29 @@ private struct MemorizeInteractView: View {
 
     private var microphoneButton: some View {
         Button {
-            guard isConnected else { return }
-            // Interrupt AI speech so the user can talk
-            geminiService?.interruptPlayback()
-        } label: {
-            ZStack {
-                if isRecording {
-                    Circle()
-                        .stroke(interactAccent.opacity(0.4), lineWidth: 3)
-                        .frame(width: 120, height: 120)
-                        .scaleEffect(pulseAnimation ? 1.25 : 1.0)
-                        .opacity(pulseAnimation ? 0.1 : 0.85)
-                }
-
-                Circle()
-                    .fill(isRecording ? interactAccent : interactAccent.opacity(0.22))
-                    .frame(width: 84, height: 84)
-
-                Image(systemName: "waveform")
-                    .font(.system(size: 30, weight: .semibold))
-                    .foregroundColor(.white)
+            guard isConnected, let service = geminiService else { return }
+            if isMuted {
+                service.interruptPlayback()
+                service.isMicMuted = false
+                isMuted = false
+            } else {
+                service.isMicMuted = true
+                isMuted = true
             }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isMuted ? "mic.slash.fill" : "mic.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                Text(isMuted ? "memorize.podcast_unmute".localized : "memorize.podcast_mute".localized)
+                    .font(AppTypography.subheadline)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(isMuted ? Color.white.opacity(0.15) : interactAccent.opacity(0.5))
+            .cornerRadius(AppCornerRadius.md)
         }
         .disabled(!isConnected)
         .opacity(!isConnected ? 0.5 : 1.0)
-        .onChange(of: isRecording) { recording in
-            pulseAnimation = recording
-        }
-        .animation(
-            isRecording
-                ? .easeOut(duration: 1.0).repeatForever(autoreverses: true)
-                : .easeOut(duration: 0.2),
-            value: pulseAnimation
-        )
     }
 }
