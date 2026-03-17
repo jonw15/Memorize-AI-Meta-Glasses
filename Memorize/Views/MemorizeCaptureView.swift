@@ -1403,16 +1403,14 @@ private struct MemorizePodcastPlayerView: View {
         Button {
             guard isConnected, let service = geminiService else { return }
             if isMuted {
-                // Unmute — user wants to talk, interrupt AI speech
+                // Unmute — allow user to interrupt and speak
                 service.interruptPlayback()
-                service.startRecording()
-                isRecording = true
+                service.isMicMuted = false
                 isMuted = false
                 print("🎙️ [Podcast] Mic unmuted")
             } else {
                 // Mute — stop sending audio to Gemini
-                service.stopRecording()
-                isRecording = false
+                service.isMicMuted = true
                 isMuted = true
                 print("🎙️ [Podcast] Mic muted")
             }
@@ -1514,10 +1512,11 @@ private struct MemorizePodcastPlayerView: View {
             Task { @MainActor in
                 print("🎙️ [Podcast] Connected to Gemini Live!")
                 isConnected = true
-                // Start recording to initialize the audio session (needed for playback too)
+                // Start recording with mic muted — keeps audio session alive for playback
+                service.isMicMuted = true
                 service.startRecording()
                 isRecording = true
-                isMuted = false
+                isMuted = true
                 // Send a text prompt to trigger the AI to start the podcast
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 service.sendTextInput("Begin the podcast now. Start with your intro and dive into the content.")
@@ -2187,9 +2186,11 @@ private struct MemorizeExplainView: View {
         service.onConnected = { [service] in
             Task { @MainActor in
                 isConnected = true
+                // Start recording with mic muted — keeps audio session alive for playback
+                service.isMicMuted = true
                 service.startRecording()
                 isRecording = true
-                isMuted = false
+                isMuted = true
                 // Trigger the AI to start reading the summary aloud immediately
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 service.sendTextInput("Please begin reading the summary aloud now.")
@@ -2397,13 +2398,13 @@ private struct MemorizeExplainView: View {
         Button {
             guard isConnected, let service = geminiService else { return }
             if isMuted {
+                // Unmute — allow user to interrupt and speak
                 service.interruptPlayback()
-                service.startRecording()
-                isRecording = true
+                service.isMicMuted = false
                 isMuted = false
             } else {
-                service.stopRecording()
-                isRecording = false
+                // Mute — stop sending audio to Gemini
+                service.isMicMuted = true
                 isMuted = true
             }
         } label: {

@@ -77,6 +77,8 @@ class GeminiLiveService: NSObject {
     private var isDisconnecting = false
     private var isPlaybackEnabled = true
     private var connectWaitTask: Task<Void, Never>?
+    /// When true, recording stays active (audio session alive) but audio is not sent to Gemini.
+    var isMicMuted = false
 
     init(
         apiKey: String,
@@ -522,6 +524,7 @@ Do not apologize.
     }
 
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat) {
+        guard !isMicMuted else { return }
         guard let recordConverter, let recordTargetFormat else { return }
 
         let ratio = recordTargetFormat.sampleRate / inputFormat.sampleRate
