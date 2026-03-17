@@ -1093,7 +1093,9 @@ private struct MemorizePostCaptureActionsView: View {
             startVoiceMenu()
         }
         .onChange(of: showExplainPersonaSelector) { showing in
-            if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
+            if showing { voiceMenu.stop() }
+            // Don't restart here — the summary view will open next.
+            // Voice menu restarts when showExplain closes.
         }
         .onChange(of: showInteract) { showing in
             if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
@@ -2186,11 +2188,11 @@ private struct MemorizeExplainView: View {
         service.onConnected = { [service] in
             Task { @MainActor in
                 isConnected = true
-                // Start recording with mic muted — keeps audio session alive for playback
-                service.isMicMuted = true
+                // Start recording with mic live — user can interrupt anytime
+                service.isMicMuted = false
                 service.startRecording()
                 isRecording = true
-                isMuted = true
+                isMuted = false
                 // Trigger the AI to start reading the summary aloud immediately
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 service.sendTextInput("Please begin reading the summary aloud now.")
