@@ -100,6 +100,7 @@
 		MZ0006000600060006 /* MemorizeHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1006000600060006 /* MemorizeHomeView.swift */; };
 		MZ0007000700070007 /* MemorizeCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1007000700070007 /* MemorizeCaptureView.swift */; };
 		MQ0001000100010001 /* MemorizeQuizView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MQ1001000100010001 /* MemorizeQuizView.swift */; };
+		PD0001000100010001 /* PDFImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = PD1001000100010001 /* PDFImportService.swift */; };
 
 /* End PBXBuildFile section */
 
@@ -217,6 +218,7 @@
 		MZ1006000600060006 /* MemorizeHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeHomeView.swift; sourceTree = "<group>"; };
 		MZ1007000700070007 /* MemorizeCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeCaptureView.swift; sourceTree = "<group>"; };
 		MQ1001000100010001 /* MemorizeQuizView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeQuizView.swift; sourceTree = "<group>"; };
+		PD1001000100010001 /* PDFImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFImportService.swift; sourceTree = "<group>"; };
 
 /* End PBXFileReference section */
 
@@ -307,6 +309,7 @@
 				LA1002000200020002 /* AIConfigService.swift */,
 				MZ1002000200020002 /* MemorizeStorage.swift */,
 				MZ1003000300030003 /* MemorizeService.swift */,
+				PD1001000100010001 /* PDFImportService.swift */,
 
 			);
 			path = Services;
@@ -672,6 +675,7 @@
 				MZ0006000600060006 /* MemorizeHomeView.swift in Sources */,
 				MZ0007000700070007 /* MemorizeCaptureView.swift in Sources */,
 				MQ0001000100010001 /* MemorizeQuizView.swift in Sources */,
+				PD0001000100010001 /* PDFImportService.swift in Sources */,
 
 			);
 			runOnlyForDeploymentPostprocessing = 0;

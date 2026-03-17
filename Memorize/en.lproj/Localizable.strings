@@ -500,3 +500,5 @@
 "memorize.interact_prompt" = "Have a voice conversation about what you've read";
 "memorize.interact_connecting" = "Connecting...";
 "memorize.interact_placeholder" = "Ask me anything about the text you captured.";
+"memorize.upload_pdf" = "Upload PDF";
+"memorize.pdf_importing_progress" = "Importing page %d of %d...";

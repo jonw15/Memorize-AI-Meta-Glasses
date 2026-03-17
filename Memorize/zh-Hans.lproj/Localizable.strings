@@ -501,3 +501,5 @@
 "memorize.interact_prompt" = "用语音讨论你刚刚阅读的内容";
 "memorize.interact_connecting" = "连接中...";
 "memorize.interact_placeholder" = "问我任何关于你拍摄文本的问题。";
+"memorize.upload_pdf" = "上传 PDF";
+"memorize.pdf_importing_progress" = "正在导入第 %d 页，共 %d 页...";

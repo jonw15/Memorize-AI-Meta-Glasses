@@ -8,6 +8,7 @@ import Combine
 import UIKit
 import AVFoundation
 import Speech
+import UniformTypeIdentifiers
 
 struct MemorizeHomeView: View {
     @ObservedObject var streamViewModel: StreamSessionViewModel
@@ -30,9 +31,14 @@ struct MemorizeHomeView: View {
     @State private var coverCountdownTask: Task<Void, Never>?
     @State private var didStartStreamForCoverCapture = false
     @State private var coverCountdownSynthesizer = AVSpeechSynthesizer()
+    @State private var showPDFPicker = false
+    @State private var isImportingPDF = false
+    @State private var pdfImportProgress: PDFImportService.PDFImportProgress?
+    @State private var pdfImportError: String?
     @StateObject private var addBookVoice = AddBookVoiceController()
     @StateObject private var homeVoice = HomeVoiceController()
     private let memorizeService = MemorizeService()
+    private let pdfImportService = PDFImportService()
 
     var body: some View {
         NavigationView {
@@ -557,7 +563,44 @@ struct MemorizeHomeView: View {
                             .stroke(AppColors.memorizeAccent.opacity(0.45), lineWidth: 1)
                     )
                 }
-                .disabled(isAutoFillingBookInfo || isWaitingForCoverSnapshot || showCoverCapturePanel)
+                .disabled(isAutoFillingBookInfo || isWaitingForCoverSnapshot || showCoverCapturePanel || isImportingPDF)
+
+                Button {
+                    showPDFPicker = true
+                } label: {
+                    HStack(spacing: AppSpacing.sm) {
+                        if isImportingPDF {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        } else {
+                            Image(systemName: "doc.fill")
+                        }
+                        if let progress = pdfImportProgress, isImportingPDF {
+                            Text(String(format: "memorize.pdf_importing_progress".localized, progress.currentPage, progress.totalPages))
+                                .font(AppTypography.subheadline)
+                        } else {
+                            Text("memorize.upload_pdf".localized)
+                                .font(AppTypography.subheadline)
+                        }
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.orange.opacity(0.25))
+                    .cornerRadius(AppCornerRadius.md)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppCornerRadius.md)
+                            .stroke(Color.orange.opacity(0.45), lineWidth: 1)
+                    )
+                }
+                .disabled(isImportingPDF || isAutoFillingBookInfo || isWaitingForCoverSnapshot)
+
+                if let pdfImportError, !pdfImportError.isEmpty {
+                    Text(pdfImportError)
+                        .font(AppTypography.caption)
+                        .foregroundColor(.red.opacity(0.9))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
                 if let autoFillErrorMessage, !autoFillErrorMessage.isEmpty {
                     Text(autoFillErrorMessage)
@@ -628,6 +671,21 @@ struct MemorizeHomeView: View {
             .opacity(isNewSessionValid ? 1 : 0.5)
 
             Spacer()
+        }
+        .fileImporter(
+            isPresented: $showPDFPicker,
+            allowedContentTypes: [.pdf],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                Task {
+                    await importPDF(from: url)
+                }
+            case .failure(let error):
+                pdfImportError = error.localizedDescription
+            }
         }
     }
 
@@ -786,6 +844,45 @@ struct MemorizeHomeView: View {
             return ""
         }
         return trimmed
+    }
+
+    private func importPDF(from url: URL) async {
+        isImportingPDF = true
+        pdfImportError = nil
+        pdfImportProgress = nil
+
+        do {
+            let result = try await pdfImportService.importPDF(from: url) { progress in
+                pdfImportProgress = progress
+            }
+
+            // Save thumbnails to disk
+            for thumbnail in result.thumbnails {
+                MemorizeStorage.shared.saveThumbnail(thumbnail.data, for: thumbnail.pageId)
+            }
+
+            // Create and save the book
+            var book = Book(
+                title: result.title,
+                author: result.author,
+                pages: result.pages
+            )
+            MemorizeStorage.shared.saveBook(book)
+            MemorizeStorage.shared.loadThumbnails(for: &book)
+
+            isImportingPDF = false
+            pdfImportProgress = nil
+            showNewSessionForm = false
+
+            // Navigate to the book
+            selectedBook = book
+            viewModel.loadBooks()
+        } catch {
+            isImportingPDF = false
+            pdfImportProgress = nil
+            pdfImportError = error.localizedDescription
+            print("❌ [Memorize] PDF import failed: \(error.localizedDescription)")
+        }
     }
 }
 
