@@ -1051,6 +1051,7 @@ private struct MemorizePostCaptureActionsView: View {
             MemorizeExplainView(
                 viewModel: viewModel,
                 bookTitle: bookTitle,
+                pages: viewModel.pages,
                 onClose: {
                     viewModel.showExplain = false
                 }
@@ -1617,23 +1618,25 @@ private struct MemorizeVoiceSummaryView: View {
 private struct MemorizeExplainView: View {
     @ObservedObject var viewModel: MemorizeCaptureViewModel
     let bookTitle: String
+    let pages: [PageCapture]
     let onClose: () -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var explainSpeech = MemorizeExplainSpeechAssistant()
-    @State private var hasAutoSpoken = false
+    @State private var geminiService: GeminiLiveService?
+    @State private var isConnected = false
+    @State private var isRecording = false
+    @State private var messages: [MemorizeInteractMessage] = []
+    @State private var currentAIText = ""
+    @State private var currentUserText = ""
+    @State private var isAIThinking = false
+    @State private var errorMessage: String?
+    @State private var pulseAnimation = false
     @State private var loadingPulse = false
     private let explainAccent = Color(red: 0.94, green: 0.55, blue: 0.24)
 
     var body: some View {
         NavigationView {
             VStack(spacing: AppSpacing.md) {
-                Text("memorize.explain_header".localized)
-                    .font(AppTypography.subheadline)
-                    .foregroundColor(Color.white.opacity(0.75))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, AppSpacing.md)
-
                 Label {
                     Text(viewModel.explanationPersona.displayKey.localized)
                 } icon: {
@@ -1643,14 +1646,47 @@ private struct MemorizeExplainView: View {
                 .foregroundColor(explainAccent)
                 .multilineTextAlignment(.center)
 
-                explanationCard
+                Text(bookTitle)
+                    .font(AppTypography.caption)
+                    .foregroundColor(Color.white.opacity(0.55))
+                    .lineLimit(1)
                     .padding(.horizontal, AppSpacing.md)
 
-                Spacer()
+                // Show generating state before Gemini connects
+                if viewModel.isGeneratingExplanation && viewModel.explanationText.isEmpty {
+                    generatingCard
+                        .padding(.horizontal, AppSpacing.md)
+                } else {
+                    conversationCard
+                        .padding(.horizontal, AppSpacing.md)
+                }
 
-                if let errorMessage = viewModel.explanationErrorMessage, !errorMessage.isEmpty {
+                if !isConnected && !viewModel.isGeneratingExplanation {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(0.8)
+                        Text("memorize.interact_connecting".localized)
+                            .font(AppTypography.caption)
+                            .foregroundColor(Color.white.opacity(0.6))
+                    }
+                }
+
+                if isConnected {
+                    microphoneButton
+                }
+
+                if let errorMessage, !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .font(AppTypography.caption)
+                        .foregroundColor(.red.opacity(0.9))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, AppSpacing.md)
+                }
+
+                if let explanationError = viewModel.explanationErrorMessage, !explanationError.isEmpty {
                     VStack(spacing: AppSpacing.sm) {
-                        Text(errorMessage)
+                        Text(explanationError)
                             .font(AppTypography.caption)
                             .foregroundColor(.red.opacity(0.9))
                             .multilineTextAlignment(.center)
@@ -1670,19 +1706,13 @@ private struct MemorizeExplainView: View {
                 }
 
                 Button {
-                    dismiss()
-                    onClose()
+                    disconnectAndDismiss()
                 } label: {
                     Text("memorize.done".localized)
-                        .font(AppTypography.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(explainAccent)
-                        .cornerRadius(AppCornerRadius.md)
+                        .font(AppTypography.body)
+                        .foregroundColor(Color.white.opacity(0.65))
+                        .padding(.bottom, AppSpacing.lg)
                 }
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.bottom, AppSpacing.lg)
             }
             .background(AppColors.memorizeBackground.ignoresSafeArea())
             .navigationTitle("memorize.explain".localized)
@@ -1690,8 +1720,7 @@ private struct MemorizeExplainView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
-                        dismiss()
-                        onClose()
+                        disconnectAndDismiss()
                     } label: {
                         Image(systemName: "chevron.left")
                             .foregroundColor(.white)
@@ -1700,179 +1729,331 @@ private struct MemorizeExplainView: View {
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
-        .task {
-            // Let previous audio session fully release
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            explainSpeech.connect()
-        }
         .onAppear {
             loadingPulse = false
             withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
                 loadingPulse = true
             }
-            speakLatestExplanationIfNeeded()
         }
         .onChange(of: viewModel.explanationText) { value in
-            if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                hasAutoSpoken = false
-                return
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            // Summary text is ready — connect Gemini Live to speak it and allow conversation
+            if geminiService == nil {
+                setupAndConnect(summaryText: trimmed)
             }
-            speakLatestExplanationIfNeeded()
+        }
+        .task {
+            // If summary text is already available (e.g. cached), connect immediately
+            let existing = viewModel.explanationText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !existing.isEmpty {
+                // Let previous audio session fully release
+                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                setupAndConnect(summaryText: existing)
+            }
         }
         .onDisappear {
             viewModel.explanationErrorMessage = nil
-            explainSpeech.stop()
-            hasAutoSpoken = false
             loadingPulse = false
         }
     }
 
-    private var explanationCard: some View {
-        ScrollView {
-            Text(bookTitle)
-                .font(AppTypography.caption)
-                .foregroundColor(Color.white.opacity(0.55))
-                .lineLimit(1)
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.top, AppSpacing.sm)
-
-            if viewModel.isGeneratingExplanation && viewModel.explanationText.isEmpty {
-                VStack(alignment: .leading, spacing: AppSpacing.md) {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .tint(.white)
-                            .scaleEffect(0.9)
-                        Text("memorize.explain_generating".localized)
-                            .font(AppTypography.body)
-                            .foregroundColor(.white.opacity(0.85))
-                    }
-                    .padding(.horizontal, AppSpacing.md)
-
-                    ForEach(0..<4, id: \.self) { idx in
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.white.opacity(0.2))
-                            .frame(height: 14)
-                            .overlay(
-                                GeometryReader { geo in
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(
-                                            LinearGradient(
-                                                colors: [Color.white.opacity(0), Color.white.opacity(0.45), Color.white.opacity(0)],
-                                                startPoint: .leading,
-                                                endPoint: .trailing
-                                            )
-                                        )
-                                        .frame(width: loadingPulse ? geo.size.width : 0)
-                                }
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                            )
-                            .padding(.horizontal, AppSpacing.md)
-                            .frame(maxWidth: .infinity)
-                            .opacity(idx == 3 ? 0.7 : 1.0)
-                            .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: loadingPulse)
-                    }
-                }
-                .padding(.top, AppSpacing.sm)
-                .padding(.bottom, AppSpacing.md)
-            } else {
-                Text(viewModel.explanationText.isEmpty ? "memorize.explain_result_placeholder".localized : viewModel.explanationText)
-                    .font(AppTypography.body)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(AppSpacing.md)
-            }
-        }
-        .frame(minHeight: 240, maxHeight: 320)
-        .background(AppColors.memorizeCard)
-        .cornerRadius(AppCornerRadius.md)
+    private func disconnectAndDismiss() {
+        geminiService?.disconnect()
+        geminiService = nil
+        dismiss()
+        onClose()
     }
 
-    private func speakLatestExplanationIfNeeded() {
-        let explanation = viewModel.explanationText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !explanation.isEmpty, !hasAutoSpoken else { return }
-        hasAutoSpoken = true
-        explainSpeech.speak(explanation)
-    }
-}
+    // MARK: - Setup
 
-@MainActor
-private final class MemorizeExplainSpeechAssistant: ObservableObject {
-    @Published var isSpeaking: Bool = false
-    @Published var isConnected: Bool = false
-
-    private var geminiService: GeminiLiveService?
-    private var pendingText: String?
-
-    func connect() {
+    private func setupAndConnect(summaryText: String) {
         guard geminiService == nil else { return }
 
-        let apiKey = APIProviderManager.staticLiveAIAPIKey
+        let completedPages = pages.filter { $0.status == .completed }
+        let combinedText = completedPages
+            .enumerated()
+            .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
+            .joined(separator: "\n\n")
+
+        let maxChars = 15000
+        let truncatedText = combinedText.count > maxChars
+            ? String(combinedText.prefix(maxChars)) + "\n[... text truncated ...]"
+            : combinedText
+
+        let personaInstruction = viewModel.explanationPersona.promptInstruction
+
         let systemPrompt = """
-        You are a text-to-speech engine. You receive text between [READ] and [/READ] tags.
-        Read ONLY the text inside those tags aloud, word for word.
-        After reading, STOP IMMEDIATELY. Do not continue speaking or add commentary.
-        Speak at a calm, clear pace suitable for learning.
-        Each message is independent.
+        You are a friendly reading tutor summarizing a book for a student. Explain as if the student is \(personaInstruction)
+
+        The student has read the following text from "\(bookTitle)":
+
+        ---
+        \(truncatedText)
+        ---
+
+        Here is a written summary that was prepared:
+
+        ---
+        \(summaryText)
+        ---
+
+        Your task:
+        1. First, read the summary aloud to the student in a clear, engaging way. Use the persona style described above.
+        2. After reading the summary, pause briefly and invite the student to ask questions — for example: "Do you have any questions about what we just covered?"
+        3. Then answer any follow-up questions the student asks, drawing from the original text and the summary.
+
+        Keep your responses concise and conversational. Speak clearly and at a pace suitable for learning.
+        Do not apologize. Do not mention that you are an AI unless asked.
         """
 
+        let apiKey = APIProviderManager.staticLiveAIAPIKey
         let service = GeminiLiveService(
             apiKey: apiKey,
             systemPrompt: systemPrompt,
             includeTools: false
         )
 
-        service.onConnected = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.isConnected = true
-                // If text was queued before connection, speak it now
-                if let pending = self?.pendingText {
-                    self?.pendingText = nil
-                    self?.geminiService?.sendTextInput("[READ] \(pending) [/READ]")
-                    self?.isSpeaking = true
+        service.onConnected = { [service] in
+            Task { @MainActor in
+                isConnected = true
+                service.startRecording()
+                isRecording = true
+            }
+        }
+
+        service.onUserTranscript = { (userText: String) in
+            Task { @MainActor in
+                guard !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                currentUserText += userText
+                isAIThinking = true
+            }
+        }
+
+        service.onTranscriptDelta = { (delta: String) in
+            Task { @MainActor in
+                let cleaned = delta.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !cleaned.isEmpty else { return }
+                if !currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    let finalUserText = currentUserText
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                    messages.append(MemorizeInteractMessage(isUser: true, text: finalUserText))
+                    currentUserText = ""
+                }
+                isAIThinking = false
+                if cleaned.hasPrefix(currentAIText) && cleaned.count > currentAIText.count {
+                    currentAIText = cleaned
+                } else if currentAIText.isEmpty || !cleaned.hasPrefix(currentAIText) {
+                    if currentAIText.isEmpty {
+                        currentAIText = cleaned
+                    } else {
+                        let needsSpace = !currentAIText.hasSuffix(" ") && !cleaned.hasPrefix(" ")
+                        currentAIText += (needsSpace ? " " : "") + cleaned
+                    }
                 }
             }
         }
 
-        service.onAudioDone = { [weak self] in
+        service.onTranscriptDone = { (fullText: String) in
             Task { @MainActor in
-                self?.isSpeaking = false
+                let trimmed = (fullText.isEmpty ? currentAIText : fullText)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    messages.append(MemorizeInteractMessage(isUser: false, text: trimmed))
+                }
+                currentAIText = ""
+                isAIThinking = false
             }
         }
 
         service.onError = { (errorText: String) in
-            print("❌ [ExplainVoice] Gemini error: \(errorText)")
+            Task { @MainActor in
+                errorMessage = errorText
+            }
         }
 
         geminiService = service
         service.connect()
     }
 
-    func speak(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+    // MARK: - UI Components
 
-        if isConnected {
-            geminiService?.sendTextInput("[READ] \(trimmed) [/READ]")
-            isSpeaking = true
-        } else {
-            // Queue text for when connection completes
-            pendingText = trimmed
-            connect()
+    private var generatingCard: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.md) {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .tint(.white)
+                    .scaleEffect(0.9)
+                Text("memorize.explain_generating".localized)
+                    .font(AppTypography.body)
+                    .foregroundColor(.white.opacity(0.85))
+            }
+            .padding(.horizontal, AppSpacing.md)
+
+            ForEach(0..<4, id: \.self) { idx in
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.white.opacity(0.2))
+                    .frame(height: 14)
+                    .overlay(
+                        GeometryReader { geo in
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.white.opacity(0), Color.white.opacity(0.45), Color.white.opacity(0)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: loadingPulse ? geo.size.width : 0)
+                        }
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+                    .padding(.horizontal, AppSpacing.md)
+                    .frame(maxWidth: .infinity)
+                    .opacity(idx == 3 ? 0.7 : 1.0)
+                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: loadingPulse)
+            }
         }
+        .padding(.top, AppSpacing.sm)
+        .padding(.bottom, AppSpacing.md)
+        .frame(minHeight: 240, maxHeight: 320)
+        .background(AppColors.memorizeCard)
+        .cornerRadius(AppCornerRadius.md)
     }
 
-    func stop() {
-        geminiService?.interruptPlayback()
-        isSpeaking = false
-        geminiService?.disconnect()
-        geminiService = nil
-        isConnected = false
-        pendingText = nil
+    private var conversationCard: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                if messages.isEmpty && currentAIText.isEmpty && !isAIThinking {
+                    Text("memorize.explain_result_placeholder".localized)
+                        .font(AppTypography.body)
+                        .foregroundColor(Color.white.opacity(0.5))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(AppSpacing.md)
+                } else {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(messages) { message in
+                            HStack {
+                                if message.isUser { Spacer() }
+                                Text(message.text)
+                                    .font(AppTypography.body)
+                                    .foregroundColor(.white)
+                                    .multilineTextAlignment(message.isUser ? .trailing : .leading)
+                                    .padding(AppSpacing.sm)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: AppCornerRadius.sm)
+                                            .fill(message.isUser ? explainAccent.opacity(0.3) : AppColors.memorizeCard)
+                                    )
+                                if !message.isUser { Spacer() }
+                            }
+                            .id(message.id)
+                        }
+
+                        if !currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            HStack {
+                                Spacer()
+                                Text(currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression))
+                                    .font(AppTypography.body)
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .padding(AppSpacing.sm)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: AppCornerRadius.sm)
+                                            .fill(explainAccent.opacity(0.2))
+                                    )
+                            }
+                            .id("userStreaming")
+                        }
+
+                        if isAIThinking && currentAIText.isEmpty {
+                            HStack {
+                                ThinkingDotsView()
+                                    .padding(AppSpacing.sm)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: AppCornerRadius.sm)
+                                            .fill(AppColors.memorizeCard.opacity(0.7))
+                                    )
+                                Spacer()
+                            }
+                            .id("thinking")
+                        }
+
+                        if !currentAIText.isEmpty {
+                            HStack {
+                                Text(currentAIText)
+                                    .font(AppTypography.body)
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .padding(AppSpacing.sm)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: AppCornerRadius.sm)
+                                            .fill(AppColors.memorizeCard.opacity(0.7))
+                                    )
+                                Spacer()
+                            }
+                            .id("streaming")
+                        }
+                    }
+                    .padding(AppSpacing.sm)
+                }
+            }
+            .onChange(of: messages.count) { _ in
+                if let last = messages.last {
+                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
+            }
+            .onChange(of: currentUserText) { _ in
+                withAnimation { proxy.scrollTo("userStreaming", anchor: .bottom) }
+            }
+            .onChange(of: isAIThinking) { _ in
+                withAnimation { proxy.scrollTo("thinking", anchor: .bottom) }
+            }
+            .onChange(of: currentAIText) { _ in
+                withAnimation { proxy.scrollTo("streaming", anchor: .bottom) }
+            }
+        }
+        .frame(minHeight: 260, maxHeight: 400)
+        .background(AppColors.memorizeCard)
+        .cornerRadius(AppCornerRadius.md)
+    }
+
+    private var microphoneButton: some View {
+        Button {
+            guard isConnected else { return }
+            geminiService?.interruptPlayback()
+        } label: {
+            ZStack {
+                if isRecording {
+                    Circle()
+                        .stroke(explainAccent.opacity(0.4), lineWidth: 3)
+                        .frame(width: 120, height: 120)
+                        .scaleEffect(pulseAnimation ? 1.25 : 1.0)
+                        .opacity(pulseAnimation ? 0.1 : 0.85)
+                }
+
+                Circle()
+                    .fill(isRecording ? explainAccent : explainAccent.opacity(0.22))
+                    .frame(width: 84, height: 84)
+
+                Image(systemName: "waveform")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+        }
+        .disabled(!isConnected)
+        .opacity(!isConnected ? 0.5 : 1.0)
+        .onChange(of: isRecording) { recording in
+            pulseAnimation = recording
+        }
+        .animation(
+            isRecording
+                ? .easeOut(duration: 1.0).repeatForever(autoreverses: true)
+                : .easeOut(duration: 0.2),
+            value: pulseAnimation
+        )
     }
 }
 
@@ -2047,9 +2228,10 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         if normalized.contains("voice summary") || (normalized.contains("voice") && !normalized.contains("quiz")) {
             return .voiceSummary
         }
-        if normalized.contains("explain") || normalized.contains("explanation") ||
-           normalized.contains("expla") || normalized.contains("xplan") ||
-           (normalized.contains("summary") && !normalized.contains("voice")) {
+        if normalized.contains("summary") && !normalized.contains("voice") {
+            return .explain
+        }
+        if normalized.contains("summarize") || normalized.contains("summar") {
             return .explain
         }
         return nil
