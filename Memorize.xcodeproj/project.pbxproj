@@ -101,6 +101,7 @@
 		MZ0007000700070007 /* MemorizeCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1007000700070007 /* MemorizeCaptureView.swift */; };
 		MQ0001000100010001 /* MemorizeQuizView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MQ1001000100010001 /* MemorizeQuizView.swift */; };
 		PD0001000100010001 /* PDFImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = PD1001000100010001 /* PDFImportService.swift */; };
+		PS0001000100010001 /* PDFSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = PS1001000100010001 /* PDFSyncService.swift */; };
 		PC0001000100010001 /* PodcastService.swift in Sources */ = {isa = PBXBuildFile; fileRef = PC1001000100010001 /* PodcastService.swift */; };
 
 /* End PBXBuildFile section */
@@ -220,6 +221,7 @@
 		MZ1007000700070007 /* MemorizeCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeCaptureView.swift; sourceTree = "<group>"; };
 		MQ1001000100010001 /* MemorizeQuizView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeQuizView.swift; sourceTree = "<group>"; };
 		PD1001000100010001 /* PDFImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFImportService.swift; sourceTree = "<group>"; };
+		PS1001000100010001 /* PDFSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFSyncService.swift; sourceTree = "<group>"; };
 		PC1001000100010001 /* PodcastService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodcastService.swift; sourceTree = "<group>"; };
 
 /* End PBXFileReference section */
@@ -312,6 +314,7 @@
 				MZ1002000200020002 /* MemorizeStorage.swift */,
 				MZ1003000300030003 /* MemorizeService.swift */,
 				PD1001000100010001 /* PDFImportService.swift */,
+				PS1001000100010001 /* PDFSyncService.swift */,
 				PC1001000100010001 /* PodcastService.swift */,
 
 			);
@@ -679,6 +682,7 @@
 				MZ0007000700070007 /* MemorizeCaptureView.swift in Sources */,
 				MQ0001000100010001 /* MemorizeQuizView.swift in Sources */,
 				PD0001000100010001 /* PDFImportService.swift in Sources */,
+				PS0001000100010001 /* PDFSyncService.swift in Sources */,
 				PC0001000100010001 /* PodcastService.swift in Sources */,
 
 			);

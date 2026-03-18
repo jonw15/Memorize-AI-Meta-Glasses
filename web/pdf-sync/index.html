@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memorize - Upload PDF</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d0f14;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            max-width: 480px;
+            width: 100%;
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .logo h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .logo p {
+            color: rgba(255,255,255,0.5);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        .card {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 32px;
+        }
+        .step-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.4);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+        }
+        .code-input-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .code-input {
+            flex: 1;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 12px;
+            padding: 14px 16px;
+            color: #fff;
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: 4px;
+            text-align: center;
+            text-transform: uppercase;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .code-input:focus {
+            border-color: #6c5ce7;
+        }
+        .code-input::placeholder {
+            color: rgba(255,255,255,0.25);
+            letter-spacing: 2px;
+            font-size: 16px;
+        }
+        .btn {
+            background: linear-gradient(135deg, #6c5ce7, #5a4bd1);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            padding: 14px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+            white-space: nowrap;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn:active { transform: scale(0.97); }
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-full { width: 100%; }
+
+        /* Upload section */
+        #upload-section { display: none; }
+        .connected-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0,200,83,0.15);
+            color: #69f0ae;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 20px;
+            margin-bottom: 20px;
+        }
+        .connected-badge .dot {
+            width: 8px; height: 8px;
+            background: #69f0ae;
+            border-radius: 50%;
+        }
+        .dropzone {
+            border: 2px dashed rgba(255,255,255,0.2);
+            border-radius: 12px;
+            padding: 48px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            margin-bottom: 16px;
+        }
+        .dropzone:hover, .dropzone.dragover {
+            border-color: #6c5ce7;
+            background: rgba(108,92,231,0.08);
+        }
+        .dropzone-icon {
+            font-size: 40px;
+            margin-bottom: 12px;
+        }
+        .dropzone-text {
+            color: rgba(255,255,255,0.6);
+            font-size: 14px;
+        }
+        .dropzone-text strong {
+            color: #a29bfe;
+        }
+        .file-input { display: none; }
+
+        /* Progress */
+        .upload-status {
+            margin-top: 16px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #6c5ce7, #a29bfe);
+            border-radius: 3px;
+            transition: width 0.3s;
+            width: 0%;
+        }
+        .status-text {
+            font-size: 13px;
+            color: rgba(255,255,255,0.5);
+        }
+        .status-text.success { color: #69f0ae; }
+        .status-text.error { color: #ff5252; }
+
+        /* Upload history */
+        .upload-list {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .upload-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            font-size: 14px;
+        }
+        .upload-item .icon { font-size: 18px; }
+        .upload-item .name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .upload-item .check { color: #69f0ae; }
+
+        .change-code {
+            display: block;
+            margin-top: 16px;
+            text-align: center;
+            color: rgba(255,255,255,0.4);
+            font-size: 13px;
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+        .change-code:hover { color: rgba(255,255,255,0.7); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <h1>Memorize</h1>
+            <p>Upload PDFs to your reading library</p>
+        </div>
+
+        <!-- Step 1: Enter Code -->
+        <div class="card" id="code-section">
+            <div class="step-label">Enter your sync code</div>
+            <div class="code-input-group">
+                <input type="text" class="code-input" id="code-input"
+                       placeholder="ABC123" maxlength="6" autocomplete="off" spellcheck="false">
+                <button class="btn" id="connect-btn" onclick="connect()">Connect</button>
+            </div>
+            <p class="status-text" id="code-status">Open the Memorize app to find your sync code</p>
+        </div>
+
+        <!-- Step 2: Upload PDFs -->
+        <div class="card" id="upload-section">
+            <div class="connected-badge">
+                <span class="dot"></span>
+                Connected: <span id="display-code"></span>
+            </div>
+
+            <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+                <div class="dropzone-icon">📄</div>
+                <div class="dropzone-text">
+                    <strong>Click to browse</strong> or drag a PDF here
+                </div>
+            </div>
+            <input type="file" class="file-input" id="file-input" accept=".pdf,application/pdf" onchange="handleFile(this.files[0])">
+
+            <div class="upload-status" id="upload-status" style="display:none">
+                <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+                <p class="status-text" id="upload-text">Uploading...</p>
+            </div>
+
+            <div class="upload-list" id="upload-list"></div>
+
+            <button class="change-code" onclick="disconnect()">Change sync code</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://yp3pqak8l7.execute-api.us-east-1.amazonaws.com/prod';
+        let syncCode = '';
+
+        // Code input: auto-uppercase, auto-connect at 6 chars
+        const codeInput = document.getElementById('code-input');
+        codeInput.addEventListener('input', (e) => {
+            e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            document.getElementById('connect-btn').disabled = e.target.value.length !== 6;
+        });
+        codeInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && codeInput.value.length === 6) connect();
+        });
+
+        // Drag and drop
+        const dropzone = document.getElementById('dropzone');
+        dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type === 'application/pdf') handleFile(file);
+            else showUploadStatus('Please select a PDF file', 'error');
+        });
+
+        async function connect() {
+            const code = codeInput.value.trim().toUpperCase();
+            if (code.length !== 6) return;
+
+            const btn = document.getElementById('connect-btn');
+            const status = document.getElementById('code-status');
+            btn.disabled = true;
+            status.textContent = 'Connecting...';
+            status.className = 'status-text';
+
+            try {
+                const res = await fetch(`${API_BASE}/sync/validate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code })
+                });
+                if (!res.ok) throw new Error('Invalid code');
+                const data = await res.json();
+                if (data.status !== 'ok') throw new Error(data.message || 'Invalid code');
+
+                syncCode = code;
+                document.getElementById('display-code').textContent = code;
+                document.getElementById('code-section').style.display = 'none';
+                document.getElementById('upload-section').style.display = 'block';
+            } catch (err) {
+                status.textContent = 'Invalid sync code. Please check the code in your app.';
+                status.className = 'status-text error';
+                btn.disabled = false;
+            }
+        }
+
+        function disconnect() {
+            syncCode = '';
+            document.getElementById('code-section').style.display = 'block';
+            document.getElementById('upload-section').style.display = 'none';
+            document.getElementById('upload-list').innerHTML = '';
+            codeInput.value = '';
+            document.getElementById('code-status').textContent = 'Open the Memorize app to find your sync code';
+            document.getElementById('code-status').className = 'status-text';
+        }
+
+        async function handleFile(file) {
+            if (!file || file.type !== 'application/pdf') {
+                showUploadStatus('Please select a PDF file', 'error');
+                return;
+            }
+            if (file.size > 50 * 1024 * 1024) {
+                showUploadStatus('File too large (max 50MB)', 'error');
+                return;
+            }
+
+            const statusEl = document.getElementById('upload-status');
+            statusEl.style.display = 'block';
+            showUploadStatus('Getting upload URL...', '');
+            setProgress(10);
+
+            try {
+                // Step 1: Get presigned upload URL
+                const urlRes = await fetch(`${API_BASE}/sync/upload-url`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: syncCode, filename: file.name })
+                });
+                if (!urlRes.ok) throw new Error('Failed to get upload URL');
+                const { uploadUrl, fileId } = await urlRes.json();
+                setProgress(20);
+
+                // Step 2: Upload directly to S3
+                showUploadStatus('Uploading PDF...', '');
+                const uploadRes = await fetch(uploadUrl, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/pdf' },
+                    body: file
+                });
+                if (!uploadRes.ok) throw new Error('Upload failed');
+                setProgress(90);
+
+                // Step 3: Confirm upload
+                showUploadStatus('Confirming...', '');
+                await fetch(`${API_BASE}/sync/confirm-upload`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: syncCode, fileId, filename: file.name })
+                });
+                setProgress(100);
+
+                showUploadStatus('Upload complete!', 'success');
+                addToList(file.name);
+
+                // Reset after delay
+                setTimeout(() => {
+                    statusEl.style.display = 'none';
+                    setProgress(0);
+                    document.getElementById('file-input').value = '';
+                }, 2000);
+            } catch (err) {
+                showUploadStatus('Upload failed: ' + err.message, 'error');
+                setProgress(0);
+            }
+        }
+
+        function showUploadStatus(text, type) {
+            const el = document.getElementById('upload-text');
+            el.textContent = text;
+            el.className = 'status-text' + (type ? ' ' + type : '');
+        }
+
+        function setProgress(pct) {
+            document.getElementById('progress-fill').style.width = pct + '%';
+        }
+
+        function addToList(name) {
+            const list = document.getElementById('upload-list');
+            const item = document.createElement('div');
+            item.className = 'upload-item';
+            item.innerHTML = `<span class="icon">📄</span><span class="name">${name}</span><span class="check">✓</span>`;
+            list.prepend(item);
+        }
+    </script>
+</body>
+</html>

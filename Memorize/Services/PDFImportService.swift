@@ -27,10 +27,8 @@ class PDFImportService {
         from url: URL,
         progressHandler: @escaping (PDFImportProgress) -> Void
     ) async throws -> PDFImportResult {
-        guard url.startAccessingSecurityScopedResource() else {
-            throw PDFImportError.accessDenied
-        }
-        defer { url.stopAccessingSecurityScopedResource() }
+        let isSecurityScoped = url.startAccessingSecurityScopedResource()
+        defer { if isSecurityScoped { url.stopAccessingSecurityScopedResource() } }
 
         guard let document = PDFDocument(url: url) else {
             throw PDFImportError.invalidPDF

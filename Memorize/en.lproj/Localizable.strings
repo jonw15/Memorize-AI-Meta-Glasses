@@ -510,3 +510,10 @@
 "memorize.podcast_unmute" = "Unmute Mic";
 "memorize.upload_pdf" = "Upload PDF";
 "memorize.pdf_importing_progress" = "Importing page %d of %d...";
+"memorize.sync_title" = "Cloud Sync";
+"memorize.sync_code_label" = "Your Sync Code";
+"memorize.sync_code_instructions" = "Enter this code on the upload website to send PDFs to your library";
+"memorize.sync_copy" = "Copy";
+"memorize.sync_regenerate" = "New Code";
+"memorize.sync_pending" = "Pending Uploads";
+"memorize.sync_no_pending" = "No pending uploads";

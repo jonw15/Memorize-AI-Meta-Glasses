@@ -511,3 +511,10 @@
 "memorize.podcast_unmute" = "取消静音";
 "memorize.upload_pdf" = "上传 PDF";
 "memorize.pdf_importing_progress" = "正在导入第 %d 页，共 %d 页...";
+"memorize.sync_title" = "云同步";
+"memorize.sync_code_label" = "你的同步代码";
+"memorize.sync_code_instructions" = "在上传网站输入此代码，将 PDF 发送到你的书库";
+"memorize.sync_copy" = "复制";
+"memorize.sync_regenerate" = "新代码";
+"memorize.sync_pending" = "待导入文件";
+"memorize.sync_no_pending" = "没有待导入的文件";

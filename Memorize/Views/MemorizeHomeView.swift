@@ -37,8 +37,15 @@ struct MemorizeHomeView: View {
     @State private var pdfImportError: String?
     @StateObject private var addBookVoice = AddBookVoiceController()
     @StateObject private var homeVoice = HomeVoiceController()
+    @State private var syncCode: String = ""
+    @State private var pendingCloudPDFs: [PDFSyncService.PendingPDF] = []
+    @State private var isImportingCloudPDF = false
+    @State private var cloudImportError: String?
+    @State private var syncPollTask: Task<Void, Never>?
+    @State private var showSyncCode = false
     private let memorizeService = MemorizeService()
     private let pdfImportService = PDFImportService()
+    private let syncService = PDFSyncService.shared
 
     var body: some View {
         NavigationView {
@@ -63,6 +70,10 @@ struct MemorizeHomeView: View {
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
             viewModel.loadBooks()
+            initializeSync()
+        }
+        .onDisappear {
+            syncPollTask?.cancel()
         }
         .task {
             await homeVoice.requestPermissionsIfNeeded()
@@ -231,9 +242,155 @@ struct MemorizeHomeView: View {
 
             Spacer()
 
+            // Cloud sync button
+            Button {
+                showSyncCode.toggle()
+            } label: {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "icloud.and.arrow.down")
+                        .font(.system(size: 20))
+                        .foregroundColor(.white.opacity(0.7))
+                        .frame(width: 40, height: 40)
+
+                    if !pendingCloudPDFs.isEmpty {
+                        Text("\(pendingCloudPDFs.count)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 18, height: 18)
+                            .background(Color.red)
+                            .clipShape(Circle())
+                            .offset(x: 4, y: -4)
+                    }
+                }
+            }
+
             if wearablesViewModel.registrationState == .registered {
                 disconnectGlassesButton
             }
+        }
+        .sheet(isPresented: $showSyncCode) {
+            cloudSyncSheet
+                .presentationDetents([.medium])
+        }
+    }
+
+    private var cloudSyncSheet: some View {
+        NavigationView {
+            VStack(spacing: AppSpacing.lg) {
+                // Sync Code Display
+                VStack(spacing: 8) {
+                    Text("memorize.sync_code_label".localized)
+                        .font(AppTypography.subheadline)
+                        .foregroundColor(.white.opacity(0.6))
+
+                    Text(syncCode)
+                        .font(.system(size: 36, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                        .tracking(6)
+
+                    Text("memorize.sync_code_instructions".localized)
+                        .font(AppTypography.caption)
+                        .foregroundColor(.white.opacity(0.4))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, AppSpacing.md)
+                }
+                .padding(.top, AppSpacing.lg)
+
+                HStack(spacing: 12) {
+                    Button {
+                        UIPasteboard.general.string = syncCode
+                    } label: {
+                        Label("memorize.sync_copy".localized, systemImage: "doc.on.doc")
+                            .font(AppTypography.subheadline)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color.white.opacity(0.12))
+                            .cornerRadius(AppCornerRadius.sm)
+                    }
+
+                    Button {
+                        syncCode = syncService.regenerateSyncCode()
+                        Task { try? await syncService.registerCode(syncCode) }
+                        startSyncPolling()
+                    } label: {
+                        Label("memorize.sync_regenerate".localized, systemImage: "arrow.clockwise")
+                            .font(AppTypography.subheadline)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color.white.opacity(0.12))
+                            .cornerRadius(AppCornerRadius.sm)
+                    }
+                }
+
+                // Pending PDFs
+                if !pendingCloudPDFs.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("memorize.sync_pending".localized)
+                            .font(AppTypography.headline)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, AppSpacing.md)
+
+                        ForEach(pendingCloudPDFs) { pdf in
+                            HStack {
+                                Image(systemName: "doc.fill")
+                                    .foregroundColor(.white.opacity(0.5))
+                                Text(pdf.filename)
+                                    .font(AppTypography.body)
+                                    .foregroundColor(.white)
+                                    .lineLimit(1)
+                                Spacer()
+                                Button {
+                                    Task { await importCloudPDF(pdf) }
+                                } label: {
+                                    if isImportingCloudPDF {
+                                        ProgressView()
+                                            .tint(.white)
+                                            .scaleEffect(0.8)
+                                    } else {
+                                        Image(systemName: "arrow.down.circle.fill")
+                                            .font(.system(size: 24))
+                                            .foregroundColor(Color(red: 0.42, green: 0.35, blue: 0.90))
+                                    }
+                                }
+                                .disabled(isImportingCloudPDF)
+                            }
+                            .padding(AppSpacing.sm)
+                            .background(Color.white.opacity(0.06))
+                            .cornerRadius(AppCornerRadius.sm)
+                            .padding(.horizontal, AppSpacing.md)
+                        }
+                    }
+                } else {
+                    Text("memorize.sync_no_pending".localized)
+                        .font(AppTypography.body)
+                        .foregroundColor(.white.opacity(0.4))
+                }
+
+                if let error = cloudImportError {
+                    Text(error)
+                        .font(AppTypography.caption)
+                        .foregroundColor(.red.opacity(0.9))
+                        .padding(.horizontal, AppSpacing.md)
+                }
+
+                Spacer()
+            }
+            .background(AppColors.memorizeBackground.ignoresSafeArea())
+            .navigationTitle("memorize.sync_title".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showSyncCode = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
         }
     }
 
@@ -844,6 +1001,77 @@ struct MemorizeHomeView: View {
             return ""
         }
         return trimmed
+    }
+
+    // MARK: - Cloud Sync
+
+    private func initializeSync() {
+        syncCode = syncService.getOrCreateSyncCode()
+        Task {
+            try? await syncService.registerCode(syncCode)
+        }
+        startSyncPolling()
+    }
+
+    private func startSyncPolling() {
+        syncPollTask?.cancel()
+        syncPollTask = Task {
+            while !Task.isCancelled {
+                do {
+                    let pending = try await syncService.checkPending(code: syncCode)
+                    await MainActor.run { pendingCloudPDFs = pending }
+                } catch {
+                    print("☁️ [Sync] Poll error: \(error.localizedDescription)")
+                }
+                try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
+            }
+        }
+    }
+
+    private func importCloudPDF(_ pdf: PDFSyncService.PendingPDF) async {
+        isImportingCloudPDF = true
+        cloudImportError = nil
+
+        do {
+            // Download PDF
+            let localURL = try await syncService.downloadPDF(from: pdf.downloadUrl)
+            defer { try? FileManager.default.removeItem(at: localURL) }
+
+            // Import using existing PDF pipeline
+            let result = try await pdfImportService.importPDF(from: localURL) { _ in }
+
+            // Save thumbnails
+            for thumbnail in result.thumbnails {
+                MemorizeStorage.shared.saveThumbnail(thumbnail.data, for: thumbnail.pageId)
+            }
+
+            // Create book
+            var book = Book(
+                title: result.title.isEmpty ? pdf.filename.replacingOccurrences(of: ".pdf", with: "") : result.title,
+                author: result.author,
+                pages: result.pages
+            )
+            MemorizeStorage.shared.saveBook(book)
+            MemorizeStorage.shared.loadThumbnails(for: &book)
+
+            // Acknowledge download
+            try? await syncService.acknowledge(code: syncCode, fileId: pdf.id)
+
+            // Refresh state
+            pendingCloudPDFs.removeAll { $0.id == pdf.id }
+            viewModel.loadBooks()
+
+            isImportingCloudPDF = false
+            showSyncCode = false
+
+            // Navigate to imported book
+            selectedBook = book
+            print("☁️ [Sync] Cloud PDF imported: \(pdf.filename)")
+        } catch {
+            isImportingCloudPDF = false
+            cloudImportError = error.localizedDescription
+            print("❌ [Sync] Cloud import failed: \(error.localizedDescription)")
+        }
     }
 
     private func importPDF(from url: URL) async {
