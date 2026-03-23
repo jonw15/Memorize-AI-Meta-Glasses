@@ -1062,19 +1062,22 @@ private struct MemorizePostCaptureActionsView: View {
         .fullScreenCover(isPresented: $showVoiceSummary) {
             MemorizeVoiceSummaryView(
                 pages: completedPages,
-                bookTitle: bookTitle
+                bookTitle: bookTitle,
+                sectionTitle: sectionTitle
             )
         }
         .fullScreenCover(isPresented: $showInteract) {
             MemorizeInteractView(
                 pages: completedPages,
-                bookTitle: bookTitle
+                bookTitle: bookTitle,
+                sectionTitle: sectionTitle
             )
         }
         .fullScreenCover(isPresented: $viewModel.showExplain) {
             MemorizeExplainView(
                 viewModel: viewModel,
                 bookTitle: bookTitle,
+                sectionTitle: sectionTitle,
                 pages: viewModel.pages,
                 onClose: {
                     viewModel.showExplain = false
@@ -1092,6 +1095,7 @@ private struct MemorizePostCaptureActionsView: View {
             MemorizePodcastPlayerView(
                 pages: completedPages,
                 bookTitle: bookTitle,
+                sectionTitle: sectionTitle,
                 onClose: {
                     viewModel.showPodcastPlayer = false
                 }
@@ -1277,6 +1281,7 @@ private struct MemorizePostCaptureActionsView: View {
 private struct MemorizePodcastPlayerView: View {
     let pages: [PageCapture]
     let bookTitle: String
+    let sectionTitle: String
     let onClose: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -1331,6 +1336,14 @@ private struct MemorizePodcastPlayerView: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .padding(.horizontal, AppSpacing.lg)
+
+                if !sectionTitle.isEmpty {
+                    Text(sectionTitle)
+                        .font(AppTypography.subheadline)
+                        .foregroundColor(AppColors.memorizeAccent)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                }
 
                 Text("memorize.podcast_header".localized)
                     .font(AppTypography.subheadline)
@@ -1490,7 +1503,7 @@ private struct MemorizePodcastPlayerView: View {
         let systemPrompt = """
         You are the host of an engaging educational podcast called "Deep Dive". You have a warm, enthusiastic personality.
 
-        Your task: Create a compelling podcast episode discussing the following reading material from "\(bookTitle)".
+        Your task: Create a compelling podcast episode discussing the following reading material from "\(bookTitle)"\(sectionTitle.isEmpty ? "" : " — section: \(sectionTitle)").
 
         ---
         \(truncatedText)
@@ -1729,6 +1742,7 @@ private final class VoiceSummarySpeechRecognizer: NSObject, ObservableObject {
 private struct MemorizeVoiceSummaryView: View {
     let pages: [PageCapture]
     let bookTitle: String
+    let sectionTitle: String
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var speechRecognizer = VoiceSummarySpeechRecognizer()
@@ -1813,10 +1827,10 @@ private struct MemorizeVoiceSummaryView: View {
 
     private var transcriptCard: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            Text(bookTitle)
+            Text(sectionTitle.isEmpty ? bookTitle : "\(bookTitle) — \(sectionTitle)")
                 .font(AppTypography.caption)
                 .foregroundColor(Color.white.opacity(0.55))
-                .lineLimit(1)
+                .lineLimit(2)
 
             ScrollView {
                 Text(speechRecognizer.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1998,6 +2012,7 @@ private struct MemorizeVoiceSummaryView: View {
 private struct MemorizeExplainView: View {
     @ObservedObject var viewModel: MemorizeCaptureViewModel
     let bookTitle: String
+    let sectionTitle: String
     let pages: [PageCapture]
     let onClose: () -> Void
 
@@ -2026,10 +2041,10 @@ private struct MemorizeExplainView: View {
                 .foregroundColor(explainAccent)
                 .multilineTextAlignment(.center)
 
-                Text(bookTitle)
+                Text(sectionTitle.isEmpty ? bookTitle : "\(bookTitle) — \(sectionTitle)")
                     .font(AppTypography.caption)
                     .foregroundColor(Color.white.opacity(0.55))
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .padding(.horizontal, AppSpacing.md)
 
                 // Show generating state before Gemini connects
@@ -2167,7 +2182,7 @@ private struct MemorizeExplainView: View {
         let systemPrompt = """
         You are a friendly reading tutor summarizing a book for a student. Explain as if the student is \(personaInstruction)
 
-        The student has read the following text from "\(bookTitle)":
+        The student has read the following text from "\(bookTitle)"\(sectionTitle.isEmpty ? "" : " — section: \(sectionTitle)"):
 
         ---
         \(truncatedText)
@@ -2894,6 +2909,7 @@ private struct ThinkingDotsView: View {
 private struct MemorizeInteractView: View {
     let pages: [PageCapture]
     let bookTitle: String
+    let sectionTitle: String
 
     @Environment(\.dismiss) private var dismiss
     @State private var geminiService: GeminiLiveService?
@@ -2917,10 +2933,10 @@ private struct MemorizeInteractView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, AppSpacing.md)
 
-                Text(bookTitle)
+                Text(sectionTitle.isEmpty ? bookTitle : "\(bookTitle) — \(sectionTitle)")
                     .font(AppTypography.caption)
                     .foregroundColor(Color.white.opacity(0.55))
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .padding(.horizontal, AppSpacing.md)
 
                 conversationCard
@@ -2999,7 +3015,7 @@ private struct MemorizeInteractView: View {
             : combinedText
 
         let systemPrompt = """
-        You are a friendly, knowledgeable reading tutor. The student has just read the following text from "\(bookTitle)":
+        You are a friendly, knowledgeable reading tutor. The student has just read the following text from "\(bookTitle)"\(sectionTitle.isEmpty ? "" : " — section: \(sectionTitle)"):
 
         ---
         \(truncatedText)
