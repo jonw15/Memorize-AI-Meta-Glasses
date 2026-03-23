@@ -61,6 +61,8 @@ class OmniRealtimeViewModel: ObservableObject {
         geminiService.onConnected = { [weak self] in
             Task { @MainActor in
                 self?.isConnected = true
+                // Send an initial prompt so the AI greets the user first
+                self?.geminiService?.sendTextInput("Greet the user briefly and ask what they'd like to know about or help with today. Keep it to one short sentence.")
             }
         }
 

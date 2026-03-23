@@ -487,12 +487,11 @@ struct MemorizeCaptureView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Color.white.opacity(0.1))
+                .background(isDoneReadingEnabled ? Color.blue : Color.gray.opacity(0.5))
                 .cornerRadius(AppCornerRadius.md)
         }
         .padding(.horizontal, AppSpacing.md)
         .disabled(!isDoneReadingEnabled)
-        .opacity(isDoneReadingEnabled ? 1 : 0.5)
     }
 }
 
