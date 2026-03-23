@@ -123,6 +123,97 @@ class PDFImportService {
 
         return image.jpegData(compressionQuality: 0.3)
     }
+
+    // MARK: - Detect Sections
+
+    struct PDFSection {
+        let title: String
+        let pageIndices: [Int]  // 0-based indices into the pages array
+    }
+
+    func detectSections(from pages: [PageCapture]) async throws -> [PDFSection] {
+        // Build a summary of each page's opening text for the AI to analyze
+        var pageSummaries: [String] = []
+        for (i, page) in pages.enumerated() {
+            let preview = String(page.extractedText.prefix(300))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            pageSummaries.append("Page \(i + 1): \(preview)")
+        }
+
+        let prompt = """
+        Analyze these PDF page previews and identify chapter/section boundaries.
+
+        \(pageSummaries.joined(separator: "\n"))
+
+        Rules:
+        1. Only include: Introduction/Preface, numbered or named chapters, and Conclusion/Epilogue
+        2. EXCLUDE these page types: title pages, copyright pages, dedication, table of contents, acknowledgments, about the author, bibliography, index, appendix, blank pages
+        3. Group consecutive pages that belong to the same chapter together
+
+        Respond with ONLY a JSON array, no other text:
+        [
+          {"title": "Introduction", "startPage": 1, "endPage": 5},
+          {"title": "Chapter 1: Name", "startPage": 6, "endPage": 20}
+        ]
+
+        Use the actual chapter titles from the text. Page numbers are 1-based.
+        """
+
+        let visionService = VisionAPIService()
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1))
+        let placeholder = renderer.image { ctx in
+            UIColor.white.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+
+        let result = try await visionService.analyzeImage(placeholder, prompt: prompt)
+        return parseSections(from: result, totalPages: pages.count)
+    }
+
+    private func parseSections(from response: String, totalPages: Int) -> [PDFSection] {
+        let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Extract JSON array from response
+        guard let regex = try? NSRegularExpression(pattern: "\\[[\\s\\S]*\\]", options: []) else {
+            return fallbackSingleSection(totalPages: totalPages)
+        }
+        let nsRange = NSRange(cleaned.startIndex..<cleaned.endIndex, in: cleaned)
+        guard let match = regex.firstMatch(in: cleaned, options: [], range: nsRange),
+              let range = Range(match.range, in: cleaned) else {
+            return fallbackSingleSection(totalPages: totalPages)
+        }
+
+        let jsonString = String(cleaned[range])
+        guard let data = jsonString.data(using: .utf8) else {
+            return fallbackSingleSection(totalPages: totalPages)
+        }
+
+        struct RawSection: Decodable {
+            let title: String
+            let startPage: Int
+            let endPage: Int
+        }
+
+        do {
+            let raw = try JSONDecoder().decode([RawSection].self, from: data)
+            return raw.compactMap { section in
+                let start = max(section.startPage - 1, 0)  // convert to 0-based
+                let end = min(section.endPage - 1, totalPages - 1)
+                guard start <= end else { return nil }
+                return PDFSection(
+                    title: section.title,
+                    pageIndices: Array(start...end)
+                )
+            }
+        } catch {
+            print("❌ [Memorize] Section detection JSON parse error: \(error)")
+            return fallbackSingleSection(totalPages: totalPages)
+        }
+    }
+
+    private func fallbackSingleSection(totalPages: Int) -> [PDFSection] {
+        return [PDFSection(title: "", pageIndices: Array(0..<totalPages))]
+    }
 }
 
 // MARK: - Errors

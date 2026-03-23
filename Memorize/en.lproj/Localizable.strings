@@ -510,3 +510,9 @@
 "memorize.podcast_unmute" = "Unmute Mic";
 "memorize.upload_pdf" = "Upload PDF";
 "memorize.pdf_importing_progress" = "Importing page %d of %d...";
+"memorize.pdf_sections" = "Sections";
+"memorize.chapters" = "chapters";
+"memorize.view_chapters" = "View Chapters";
+"memorize.sections_count" = "%d chapters";
+"memorize.section_pages" = "%d pages";
+"memorize.back" = "Back";

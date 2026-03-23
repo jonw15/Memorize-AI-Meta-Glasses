@@ -57,23 +57,47 @@ class MemorizeStorage {
 
     func updateBook(_ book: Book) {
         var books = loadBooks()
+
+        // Check top-level books first
         if let index = books.firstIndex(where: { $0.id == book.id }) {
             books[index] = book
-            if let encoded = try? JSONEncoder().encode(books) {
-                userDefaults.set(encoded, forKey: booksKey)
-                print("📚 [MemorizeStorage] Book updated: \(book.title)")
+        } else {
+            // Check inside parent book sections
+            for i in books.indices {
+                if let sectionIndex = books[i].sections.firstIndex(where: { $0.id == book.id }) {
+                    books[i].sections[sectionIndex] = book
+                    books[i].updatedAt = Date()
+                    break
+                }
             }
         }
+
+        if let encoded = try? JSONEncoder().encode(books) {
+            userDefaults.set(encoded, forKey: booksKey)
+            print("📚 [MemorizeStorage] Book updated: \(book.title)")
+        }
+    }
+
+    /// Check if a book exists, either top-level or as a section inside a parent
+    func bookExists(_ id: UUID) -> Bool {
+        let books = loadBooks()
+        if books.contains(where: { $0.id == id }) { return true }
+        return books.contains(where: { $0.sections.contains(where: { $0.id == id }) })
     }
 
     // MARK: - Delete Book
 
     func deleteBook(_ id: UUID) {
-        // Delete thumbnail files for this book's pages
+        // Delete thumbnail files for this book's pages (and section pages)
         let books = loadBooks()
         if let book = books.first(where: { $0.id == id }) {
             for page in book.pages {
                 deleteThumbnail(for: page.id)
+            }
+            for section in book.sections {
+                for page in section.pages {
+                    deleteThumbnail(for: page.id)
+                }
             }
         }
 

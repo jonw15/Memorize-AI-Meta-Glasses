@@ -511,3 +511,9 @@
 "memorize.podcast_unmute" = "取消静音";
 "memorize.upload_pdf" = "上传 PDF";
 "memorize.pdf_importing_progress" = "正在导入第 %d 页，共 %d 页...";
+"memorize.pdf_sections" = "章节";
+"memorize.chapters" = "章";
+"memorize.view_chapters" = "查看章节";
+"memorize.sections_count" = "%d 个章节";
+"memorize.section_pages" = "%d 页";
+"memorize.back" = "返回";

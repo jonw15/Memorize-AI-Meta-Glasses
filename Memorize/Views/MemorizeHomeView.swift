@@ -18,6 +18,7 @@ struct MemorizeHomeView: View {
     @State private var showNewSessionForm = false
     @State private var newSessionDetent: PresentationDetent = .medium
     @State private var selectedBook: Book?
+    @State private var selectedParentBook: Book?
     @State private var pendingDeleteBook: Book?
     @State private var newSessionTitle: String = ""
     @State private var newSessionAuthor: String = ""
@@ -35,6 +36,7 @@ struct MemorizeHomeView: View {
     @State private var isImportingPDF = false
     @State private var pdfImportProgress: PDFImportService.PDFImportProgress?
     @State private var pdfImportError: String?
+    @State private var splitPDFBySections = false
     @StateObject private var addBookVoice = AddBookVoiceController()
     @StateObject private var homeVoice = HomeVoiceController()
     private let memorizeService = MemorizeService()
@@ -111,12 +113,27 @@ struct MemorizeHomeView: View {
                 homeVoice.resumeListening()
             }
         }
+        .onChange(of: selectedParentBook?.id) { id in
+            if id != nil {
+                homeVoice.suspendListening()
+            } else {
+                homeVoice.resumeListening()
+            }
+        }
         .fullScreenCover(item: $selectedBook, onDismiss: {
             viewModel.loadBooks()
         }) { book in
             MemorizeCaptureView(
                 streamViewModel: streamViewModel,
                 book: book
+            )
+        }
+        .fullScreenCover(item: $selectedParentBook, onDismiss: {
+            viewModel.loadBooks()
+        }) { parentBook in
+            BookSectionsView(
+                parentBook: parentBook,
+                streamViewModel: streamViewModel
             )
         }
         .sheet(isPresented: $showNewSessionForm) {
@@ -230,10 +247,6 @@ struct MemorizeHomeView: View {
             }
 
             Spacer()
-
-            if wearablesViewModel.registrationState == .registered {
-                disconnectGlassesButton
-            }
         }
     }
 
@@ -272,19 +285,33 @@ struct MemorizeHomeView: View {
             }
 
             HStack(spacing: AppSpacing.sm) {
-                Label("\(book.completedPages)", systemImage: "doc.text.fill")
-                    .font(AppTypography.caption)
-                    .foregroundColor(Color.white.opacity(0.5))
+                if book.hasSections {
+                    Label("\(book.sections.count)", systemImage: "list.bullet")
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.5))
 
-                Text("memorize.pages_captured".localized)
-                    .font(AppTypography.caption)
-                    .foregroundColor(Color.white.opacity(0.5))
+                    Text("memorize.chapters".localized)
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.5))
+                } else {
+                    Label("\(book.completedPages)", systemImage: "doc.text.fill")
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.5))
+
+                    Text("memorize.pages_captured".localized)
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.5))
+                }
             }
 
             Button {
-                selectedBook = book
+                if book.hasSections {
+                    selectedParentBook = book
+                } else {
+                    selectedBook = book
+                }
             } label: {
-                Text("memorize.continue_session".localized)
+                Text(book.hasSections ? "memorize.view_chapters".localized : "memorize.continue_session".localized)
                     .font(AppTypography.headline)
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
@@ -387,39 +414,6 @@ struct MemorizeHomeView: View {
                 }
                 .toolbarColorScheme(.dark, for: .navigationBar)
         }
-    }
-
-    private var disconnectGlassesButton: some View {
-        Button {
-            Task {
-                await disconnectGlassesForAddSession()
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "link.badge.minus")
-                    .font(.system(size: 14, weight: .semibold))
-                Text("memorize.disconnect_glasses".localized)
-                    .font(AppTypography.caption)
-            }
-            .foregroundColor(.red)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color.red.opacity(0.12))
-            .clipShape(Capsule())
-        }
-    }
-
-    private func disconnectGlassesForAddSession() async {
-        await wearablesViewModel.disconnectGlasses()
-        isWaitingForCoverSnapshot = false
-        coverSnapshotTimeoutTask?.cancel()
-        coverSnapshotTimeoutTask = nil
-        coverCountdownTask?.cancel()
-        coverCountdownTask = nil
-        coverCountdownValue = nil
-        stopCoverCountdownSpeech()
-        showCoverCapturePanel = false
-        showNewSessionForm = false
     }
 
     private var coverCapturePanel: some View {
@@ -533,6 +527,7 @@ struct MemorizeHomeView: View {
     }
 
     private var newSessionFormContent: some View {
+        ScrollView {
         VStack(spacing: AppSpacing.md) {
             Text("memorize.enter_book_details".localized)
                 .font(AppTypography.subheadline)
@@ -594,6 +589,21 @@ struct MemorizeHomeView: View {
                     )
                 }
                 .disabled(isImportingPDF || isAutoFillingBookInfo || isWaitingForCoverSnapshot)
+
+                // Sections toggle
+                HStack {
+                    Toggle(isOn: $splitPDFBySections) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "list.bullet.indent")
+                                .font(.system(size: 14))
+                            Text("memorize.pdf_sections".localized)
+                                .font(AppTypography.subheadline)
+                        }
+                        .foregroundColor(.white)
+                    }
+                    .toggleStyle(SwitchToggleStyle(tint: Color.orange))
+                }
+                .padding(.horizontal, AppSpacing.sm)
 
                 if let pdfImportError, !pdfImportError.isEmpty {
                     Text(pdfImportError)
@@ -670,8 +680,8 @@ struct MemorizeHomeView: View {
             .disabled(!isNewSessionValid)
             .opacity(isNewSessionValid ? 1 : 0.5)
 
-            Spacer()
         }
+        } // ScrollView
         .fileImporter(
             isPresented: $showPDFPicker,
             allowedContentTypes: [.pdf],
@@ -861,22 +871,59 @@ struct MemorizeHomeView: View {
                 MemorizeStorage.shared.saveThumbnail(thumbnail.data, for: thumbnail.pageId)
             }
 
-            // Create and save the book
-            var book = Book(
-                title: result.title,
-                author: result.author,
-                pages: result.pages
-            )
-            MemorizeStorage.shared.saveBook(book)
-            MemorizeStorage.shared.loadThumbnails(for: &book)
+            if splitPDFBySections {
+                // Use AI to detect sections, then create one parent book with child sections
+                let detectedSections = try await pdfImportService.detectSections(from: result.pages)
 
-            isImportingPDF = false
-            pdfImportProgress = nil
-            showNewSessionForm = false
+                var childBooks: [Book] = []
+                for section in detectedSections {
+                    let sectionPages = section.pageIndices.compactMap { idx -> PageCapture? in
+                        guard idx >= 0, idx < result.pages.count else { return nil }
+                        return result.pages[idx]
+                    }
+                    guard !sectionPages.isEmpty else { continue }
 
-            // Navigate to the book
-            selectedBook = book
-            viewModel.loadBooks()
+                    var child = Book(
+                        title: result.title,
+                        author: result.author,
+                        chapter: section.title,
+                        pages: sectionPages
+                    )
+                    MemorizeStorage.shared.loadThumbnails(for: &child)
+                    childBooks.append(child)
+                }
+
+                // Create parent book with sections (no pages of its own)
+                let parentBook = Book(
+                    title: result.title,
+                    author: result.author,
+                    sections: childBooks
+                )
+                MemorizeStorage.shared.saveBook(parentBook)
+
+                isImportingPDF = false
+                pdfImportProgress = nil
+                showNewSessionForm = false
+
+                // Stay on home page so user can pick from the chapters
+                viewModel.loadBooks()
+            } else {
+                // Create a single book with all pages
+                var book = Book(
+                    title: result.title,
+                    author: result.author,
+                    pages: result.pages
+                )
+                MemorizeStorage.shared.saveBook(book)
+                MemorizeStorage.shared.loadThumbnails(for: &book)
+
+                isImportingPDF = false
+                pdfImportProgress = nil
+                showNewSessionForm = false
+
+                selectedBook = book
+                viewModel.loadBooks()
+            }
         } catch {
             isImportingPDF = false
             pdfImportProgress = nil

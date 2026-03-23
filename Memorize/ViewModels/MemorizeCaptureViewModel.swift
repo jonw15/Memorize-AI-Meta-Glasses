@@ -238,9 +238,8 @@ class MemorizeCaptureViewModel: ObservableObject {
         book.updatedAt = Date()
         currentBook = book
 
-        // Check if book already exists in storage
-        let existingBooks = storage.loadBooks()
-        if existingBooks.contains(where: { $0.id == book.id }) {
+        // Check if book already exists in storage (top-level or inside a parent's sections)
+        if storage.bookExists(book.id) {
             storage.updateBook(book)
         } else {
             let hasTitle = !book.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

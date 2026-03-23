@@ -104,7 +104,8 @@ struct MemorizeCaptureView: View {
         .fullScreenCover(isPresented: $showPostCaptureActions) {
             MemorizePostCaptureActionsView(
                 viewModel: viewModel,
-                bookTitle: displayBookTitle
+                bookTitle: displayBookTitle,
+                sectionTitle: viewModel.currentBook?.chapter.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             ) {
                 showPostCaptureActions = false
                 dismiss()
@@ -921,6 +922,7 @@ private struct TimelinePreviewEditorView: View {
 private struct MemorizePostCaptureActionsView: View {
     @ObservedObject var viewModel: MemorizeCaptureViewModel
     let bookTitle: String
+    let sectionTitle: String
     let onClose: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -979,6 +981,15 @@ private struct MemorizePostCaptureActionsView: View {
                             .lineLimit(2)
                             .padding(.horizontal, AppSpacing.md)
                             .padding(.top, AppSpacing.lg)
+
+                        if !sectionTitle.isEmpty {
+                            Text(sectionTitle)
+                                .font(AppTypography.subheadline)
+                                .foregroundColor(AppColors.memorizeAccent)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                                .padding(.horizontal, AppSpacing.md)
+                        }
 
                         interactButton
                             .padding(.horizontal, AppSpacing.md)

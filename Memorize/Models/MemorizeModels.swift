@@ -61,19 +61,21 @@ struct Book: Identifiable, Codable {
     var author: String
     var chapter: String
     var pages: [PageCapture]
+    var sections: [Book]
     let createdAt: Date
     var updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, title, author, chapter, pages, createdAt, updatedAt
+        case id, title, author, chapter, pages, sections, createdAt, updatedAt
     }
 
-    init(title: String = "", author: String = "", chapter: String = "", pages: [PageCapture] = []) {
+    init(title: String = "", author: String = "", chapter: String = "", pages: [PageCapture] = [], sections: [Book] = []) {
         self.id = UUID()
         self.title = title
         self.author = author
         self.chapter = chapter
         self.pages = pages
+        self.sections = sections
         self.createdAt = Date()
         self.updatedAt = Date()
     }
@@ -85,6 +87,7 @@ struct Book: Identifiable, Codable {
         author = try container.decode(String.self, forKey: .author)
         chapter = try container.decodeIfPresent(String.self, forKey: .chapter) ?? ""
         pages = try container.decodeIfPresent([PageCapture].self, forKey: .pages) ?? []
+        sections = try container.decodeIfPresent([Book].self, forKey: .sections) ?? []
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
@@ -96,6 +99,7 @@ struct Book: Identifiable, Codable {
         try container.encode(author, forKey: .author)
         try container.encode(chapter, forKey: .chapter)
         try container.encode(pages, forKey: .pages)
+        try container.encode(sections, forKey: .sections)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
     }
@@ -106,6 +110,14 @@ struct Book: Identifiable, Codable {
 
     var completedPages: Int {
         return pages.filter { $0.status == .completed }.count
+    }
+
+    var hasSections: Bool {
+        return !sections.isEmpty
+    }
+
+    var totalSectionPages: Int {
+        return sections.reduce(0) { $0 + $1.completedPages }
     }
 }
 
