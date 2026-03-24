@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Memorize</string>
+	<string>Aria Spark Memorize</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -55,6 +55,8 @@
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Needed to connect to Meta AI Glasses</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Aria Spark Memorize uses the camera to scan book covers and capture pages for AI-powered studying.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Aria Spark needs microphone access for real-time voice conversations with smart glasses.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

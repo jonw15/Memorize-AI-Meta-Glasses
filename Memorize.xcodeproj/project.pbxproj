@@ -80,6 +80,7 @@
 		8FD96B952E6F0F7D00F56AB3 /* MWDATMockDevice in Frameworks */ = {isa = PBXBuildFile; productRef = 8FD96B942E6F0F7D00F56AB3 /* MWDATMockDevice */; };
 		A5C50340AFD334B459151AF1 /* QuickVisionIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 568E19B82D2116C7FE3B1829 /* QuickVisionIntent.swift */; };
 		B3F7AF9C18583263BE4D96A1 /* LanguageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0080AFEB87FC4CF85E53FE97 /* LanguageManager.swift */; };
+		BS0001000100010001 /* BookSectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BS1001000100010001 /* BookSectionsView.swift */; };
 		D83E4BD577765733E71A0068 /* QuickVisionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B037E0156E90DE2314A9F47 /* QuickVisionView.swift */; };
 		E699CCA12E8150670052C240 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = E699CCA42E8150670052C240 /* MWDATCore */; };
 		E699CCA22E8150670052C240 /* MWDATMockDevice in Frameworks */ = {isa = PBXBuildFile; productRef = E699CCA52E8150670052C240 /* MWDATMockDevice */; };
@@ -92,6 +93,7 @@
 		LT0003000300030003 /* LiveTranslateViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1003000300030003 /* LiveTranslateViewModel.swift */; };
 		LT0004000400040004 /* LiveTranslateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1004000400040004 /* LiveTranslateView.swift */; };
 		LT0005000500050005 /* LiveTranslateSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LT1005000500050005 /* LiveTranslateSettingsView.swift */; };
+		MQ0001000100010001 /* MemorizeQuizView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MQ1001000100010001 /* MemorizeQuizView.swift */; };
 		MZ0001000100010001 /* MemorizeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1001000100010001 /* MemorizeModels.swift */; };
 		MZ0002000200020002 /* MemorizeStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1002000200020002 /* MemorizeStorage.swift */; };
 		MZ0003000300030003 /* MemorizeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1003000300030003 /* MemorizeService.swift */; };
@@ -99,11 +101,8 @@
 		MZ0005000500050005 /* MemorizeCaptureViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1005000500050005 /* MemorizeCaptureViewModel.swift */; };
 		MZ0006000600060006 /* MemorizeHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1006000600060006 /* MemorizeHomeView.swift */; };
 		MZ0007000700070007 /* MemorizeCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1007000700070007 /* MemorizeCaptureView.swift */; };
-		MQ0001000100010001 /* MemorizeQuizView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MQ1001000100010001 /* MemorizeQuizView.swift */; };
-		PD0001000100010001 /* PDFImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = PD1001000100010001 /* PDFImportService.swift */; };
 		PC0001000100010001 /* PodcastService.swift in Sources */ = {isa = PBXBuildFile; fileRef = PC1001000100010001 /* PodcastService.swift */; };
-		BS0001000100010001 /* BookSectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BS1001000100010001 /* BookSectionsView.swift */; };
-
+		PD0001000100010001 /* PDFImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = PD1001000100010001 /* PDFImportService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -199,6 +198,7 @@
 		8FD96B782E6F0A9800F56AB1 /* Aria.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Aria.entitlements; sourceTree = "<group>"; };
 		8FD96B792E6F0A9800F56AB1 /* AriaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AriaApp.swift; sourceTree = "<group>"; };
 		8FD96B7B2E6F0A9800F56AB1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BS1001000100010001 /* BookSectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookSectionsView.swift; sourceTree = "<group>"; };
 		C7F490219E64EC144DAF8A8C /* QuickVisionStorage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickVisionStorage.swift; sourceTree = "<group>"; };
 		CA3E36CE337855A7F17F2AC8 /* QuickVisionService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickVisionService.swift; sourceTree = "<group>"; };
 		DC72379319F7F8AAF8019018 /* LiveAIManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LiveAIManager.swift; path = Managers/LiveAIManager.swift; sourceTree = "<group>"; };
@@ -212,6 +212,7 @@
 		LT1003000300030003 /* LiveTranslateViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateViewModel.swift; sourceTree = "<group>"; };
 		LT1004000400040004 /* LiveTranslateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateView.swift; sourceTree = "<group>"; };
 		LT1005000500050005 /* LiveTranslateSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslateSettingsView.swift; sourceTree = "<group>"; };
+		MQ1001000100010001 /* MemorizeQuizView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeQuizView.swift; sourceTree = "<group>"; };
 		MZ1001000100010001 /* MemorizeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeModels.swift; sourceTree = "<group>"; };
 		MZ1002000200020002 /* MemorizeStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeStorage.swift; sourceTree = "<group>"; };
 		MZ1003000300030003 /* MemorizeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeService.swift; sourceTree = "<group>"; };
@@ -219,11 +220,8 @@
 		MZ1005000500050005 /* MemorizeCaptureViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeCaptureViewModel.swift; sourceTree = "<group>"; };
 		MZ1006000600060006 /* MemorizeHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeHomeView.swift; sourceTree = "<group>"; };
 		MZ1007000700070007 /* MemorizeCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeCaptureView.swift; sourceTree = "<group>"; };
-		MQ1001000100010001 /* MemorizeQuizView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeQuizView.swift; sourceTree = "<group>"; };
-		PD1001000100010001 /* PDFImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFImportService.swift; sourceTree = "<group>"; };
 		PC1001000100010001 /* PodcastService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodcastService.swift; sourceTree = "<group>"; };
-		BS1001000100010001 /* BookSectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookSectionsView.swift; sourceTree = "<group>"; };
-
+		PD1001000100010001 /* PDFImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFImportService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -315,7 +313,6 @@
 				MZ1003000300030003 /* MemorizeService.swift */,
 				PD1001000100010001 /* PDFImportService.swift */,
 				PC1001000100010001 /* PodcastService.swift */,
-
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -440,7 +437,7 @@
 		5A5A5A5A5A5A5A5A5A5A5A5A = {
 			isa = PBXGroup;
 			children = (
-				8FD96B7D2E6F0A9800F56AB1 /* CameraAccess */,
+				8FD96B7D2E6F0A9800F56AB1 /* Memorize */,
 				8F2A14F12DDBCEB900D4E5F2 /* Frameworks */,
 				7A7A7A7A7A7A7A7A7A7A7A7A /* Products */,
 				E699CC962E8150670052C240 /* MemorizeTests */,
@@ -463,7 +460,7 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		8FD96B7D2E6F0A9800F56AB1 /* CameraAccess */ = {
+		8FD96B7D2E6F0A9800F56AB1 /* Memorize */ = {
 			isa = PBXGroup;
 			children = (
 				4BA57A892EF8227E002EC214 /* en.lproj */,
@@ -684,7 +681,6 @@
 				MQ0001000100010001 /* MemorizeQuizView.swift in Sources */,
 				PD0001000100010001 /* PDFImportService.swift in Sources */,
 				PC0001000100010001 /* PodcastService.swift in Sources */,
-
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -740,16 +736,16 @@
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
 				INFOPLIST_FILE = Memorize/Info.plist;
-					INFOPLIST_KEY_CFBundleDisplayName = Memorize;
+				INFOPLIST_KEY_CFBundleDisplayName = Memorize;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.0.1;
-					PRODUCT_BUNDLE_IDENTIFIER = com.ariaspark.memorize;
-					PRODUCT_NAME = Memorize;
+				MARKETING_VERSION = 0.0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ariaspark.memorize;
+				PRODUCT_NAME = Memorize;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -774,16 +770,16 @@
 				DEVELOPMENT_TEAM = XGVZVJM2A6;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Memorize/Info.plist;
-					INFOPLIST_KEY_CFBundleDisplayName = Memorize;
+				INFOPLIST_KEY_CFBundleDisplayName = Memorize;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.0.1;
-					PRODUCT_BUNDLE_IDENTIFIER = com.ariaspark.memorize;
-					PRODUCT_NAME = Memorize;
+				MARKETING_VERSION = 0.0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ariaspark.memorize;
+				PRODUCT_NAME = Memorize;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -808,8 +804,8 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MARKETING_VERSION = 1.0;
-					PRODUCT_BUNDLE_IDENTIFIER = com.ariaspark.memorizeTests;
-					PRODUCT_NAME = MemorizeTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ariaspark.memorizeTests;
+				PRODUCT_NAME = MemorizeTests;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -821,7 +817,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-					TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Memorize.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Memorize";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Memorize.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Memorize";
 			};
 			name = Debug;
 		};
@@ -839,8 +835,8 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MARKETING_VERSION = 1.0;
-					PRODUCT_BUNDLE_IDENTIFIER = com.ariaspark.memorizeTests;
-					PRODUCT_NAME = MemorizeTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ariaspark.memorizeTests;
+				PRODUCT_NAME = MemorizeTests;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -851,7 +847,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-					TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Memorize.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Memorize";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Memorize.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Memorize";
 			};
 			name = Release;
 		};
