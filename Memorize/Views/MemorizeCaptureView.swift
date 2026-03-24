@@ -929,6 +929,7 @@ private struct MemorizePostCaptureActionsView: View {
     @State private var showExplainPersonaSelector = false
     @State private var showVoiceSummary = false
     @State private var showInteract = false
+    @State private var showReadAloud = false
     @State private var voiceMenuRestartTask: Task<Void, Never>?
     @StateObject private var voiceMenu = PostCaptureVoiceMenuController()
 
@@ -950,6 +951,8 @@ private struct MemorizePostCaptureActionsView: View {
                 showVoiceSummary = true
             case .podcast:
                 viewModel.startPodcast()
+            case .readAloud:
+                showReadAloud = true
             }
         }
     }
@@ -999,6 +1002,9 @@ private struct MemorizePostCaptureActionsView: View {
                             .padding(.horizontal, AppSpacing.md)
 
                         podcastButton
+                            .padding(.horizontal, AppSpacing.md)
+
+                        readAloudButton
                             .padding(.horizontal, AppSpacing.md)
 
                         Text("memorize.test_mode_prompt".localized)
@@ -1101,6 +1107,13 @@ private struct MemorizePostCaptureActionsView: View {
                 }
             )
         }
+        .fullScreenCover(isPresented: $showReadAloud) {
+            MemorizeReadAloudView(
+                pages: completedPages,
+                bookTitle: bookTitle,
+                sectionTitle: sectionTitle
+            )
+        }
         .task {
             guard !completedPages.isEmpty else { return }
             try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -1124,6 +1137,9 @@ private struct MemorizePostCaptureActionsView: View {
             if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
         }
         .onChange(of: viewModel.showPodcastPlayer) { showing in
+            if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
+        }
+        .onChange(of: showReadAloud) { showing in
             if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
         }
         .onDisappear {
@@ -1273,6 +1289,496 @@ private struct MemorizePostCaptureActionsView: View {
         }
         .disabled(viewModel.isGeneratingQuiz || completedPages.isEmpty)
         .opacity((viewModel.isGeneratingQuiz || completedPages.isEmpty) ? 0.5 : 1.0)
+    }
+
+    private var readAloudButton: some View {
+        Button {
+            showReadAloud = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.system(size: 16, weight: .semibold))
+
+                Text("memorize.read_aloud".localized)
+                    .font(AppTypography.headline)
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                LinearGradient(
+                    colors: [Color(red: 0.20, green: 0.60, blue: 0.86), Color(red: 0.14, green: 0.48, blue: 0.72)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(AppCornerRadius.md)
+        }
+        .disabled(viewModel.isGeneratingQuiz || completedPages.isEmpty)
+        .opacity((viewModel.isGeneratingQuiz || completedPages.isEmpty) ? 0.5 : 1.0)
+    }
+}
+
+// MARK: - Read Aloud View (Gemini Live)
+
+private struct MemorizeReadAloudView: View {
+    let pages: [PageCapture]
+    let bookTitle: String
+    let sectionTitle: String
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var geminiService: GeminiLiveService?
+    @State private var isConnected = false
+    @State private var errorMessage: String?
+
+    // Audio accumulation & playback tracking
+    @State private var accumulatedAudio = Data()
+    @State private var isStreaming = false       // Gemini is still sending audio
+    @State private var isStreamDone = false      // Gemini finished sending all audio
+    @State private var isPaused = false
+    @State private var hasStartedPlaying = false // First audio chunk received
+    @State private var playbackPosition: TimeInterval = 0
+    @State private var seekTarget: TimeInterval? = nil  // Non-nil while user is dragging slider
+    @State private var positionTimer: Timer?
+    /// Timestamp when playback started/resumed (used to calculate position)
+    @State private var playbackStartDate: Date?
+    /// Position offset when playback started/resumed (after seek or pause)
+    @State private var playbackStartOffset: TimeInterval = 0
+
+    // Slider range — only grows, updated by position timer to avoid per-chunk jitter
+    @State private var sliderMax: TimeInterval = 0.1
+
+    // Soundwave animation
+    @State private var barHeights: [CGFloat] = [12, 12, 12, 12, 12]
+    @State private var barTimer: Timer?
+
+    private let readAloudAccent = Color(red: 0.20, green: 0.60, blue: 0.86)
+    private let barMinHeight: CGFloat = 8
+    private let barMaxHeights: [CGFloat] = [36, 48, 40, 44, 32]
+    private let skipInterval: TimeInterval = 15
+
+    /// Bytes per second at 24kHz, 16-bit mono
+    private let bytesPerSecond: Double = 48000
+
+    private var totalDuration: TimeInterval {
+        Double(accumulatedAudio.count) / bytesPerSecond
+    }
+
+    private var displayPosition: TimeInterval {
+        seekTarget ?? playbackPosition
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: AppSpacing.md) {
+                Spacer()
+
+                // Artwork with soundwave bars
+                ZStack {
+                    Circle()
+                        .fill(readAloudAccent.opacity(0.1))
+                        .frame(width: 200, height: 200)
+
+                    Circle()
+                        .fill(readAloudAccent.opacity(0.18))
+                        .frame(width: 160, height: 160)
+
+                    Circle()
+                        .fill(readAloudAccent.opacity(0.25))
+                        .frame(width: 120, height: 120)
+
+                    // Soundwave bars
+                    HStack(spacing: 5) {
+                        ForEach(0..<5, id: \.self) { i in
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(readAloudAccent)
+                                .frame(width: 6, height: barHeights[i])
+                                .animation(.easeInOut(duration: 0.3), value: barHeights[i])
+                        }
+                    }
+                }
+
+                Text(bookTitle)
+                    .font(AppTypography.title2)
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .padding(.horizontal, AppSpacing.lg)
+
+                if !sectionTitle.isEmpty {
+                    Text(sectionTitle)
+                        .font(AppTypography.subheadline)
+                        .foregroundColor(readAloudAccent)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                }
+
+                Text("memorize.read_aloud_header".localized)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(Color.white.opacity(0.6))
+
+                // Loading indicator
+                if !hasStartedPlaying {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(0.8)
+                        Text("memorize.read_aloud_loading".localized)
+                            .font(AppTypography.caption)
+                            .foregroundColor(Color.white.opacity(0.6))
+                    }
+                    .padding(AppSpacing.md)
+                }
+
+                if let errorMessage, !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .font(AppTypography.caption)
+                        .foregroundColor(.red.opacity(0.9))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, AppSpacing.md)
+                }
+
+                Spacer()
+
+                // Playback controls
+                if hasStartedPlaying {
+                    playbackControls
+                        .padding(.horizontal, AppSpacing.md)
+                }
+
+                // Done button
+                Button {
+                    disconnectAndDismiss()
+                } label: {
+                    Text("memorize.done".localized)
+                        .font(AppTypography.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(AppCornerRadius.md)
+                }
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.bottom, AppSpacing.lg)
+            }
+            .background(AppColors.memorizeBackground.ignoresSafeArea())
+            .navigationTitle("memorize.read_aloud".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        disconnectAndDismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .task {
+            // Force-release any lingering audio session (voice menu speech recognizer)
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            setupAndConnect()
+        }
+        .onChange(of: hasStartedPlaying) { playing in
+            if playing && !isPaused {
+                playbackPosition = 0
+                playbackStartOffset = 0
+                startBarTimer()
+                startPositionTimer()
+            }
+        }
+        .onDisappear {
+            stopBarTimer()
+            stopPositionTimer()
+            geminiService?.disconnect()
+            geminiService = nil
+        }
+    }
+
+    // MARK: - Playback Controls
+
+    private var playbackControls: some View {
+        VStack(spacing: AppSpacing.sm) {
+            // Progress slider
+            VStack(spacing: 4) {
+                Slider(
+                    value: Binding(
+                        get: { min(displayPosition, sliderMax) },
+                        set: { newValue in
+                            seekTarget = newValue
+                        }
+                    ),
+                    in: 0...sliderMax,
+                    onEditingChanged: { editing in
+                        if !editing, let target = seekTarget {
+                            seek(to: target)
+                            seekTarget = nil
+                        }
+                    }
+                )
+                .accentColor(readAloudAccent)
+
+                HStack {
+                    Text(formatTime(displayPosition))
+                        .font(AppTypography.caption)
+                        .foregroundColor(.white.opacity(0.6))
+                        .monospacedDigit()
+                    Spacer()
+                    if isStreaming {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 6, height: 6)
+                            Text("memorize.read_aloud_live".localized)
+                                .font(AppTypography.caption)
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                    } else {
+                        Text(formatTime(sliderMax))
+                            .font(AppTypography.caption)
+                            .foregroundColor(.white.opacity(0.6))
+                            .monospacedDigit()
+                    }
+                }
+            }
+
+            // Transport controls
+            HStack(spacing: AppSpacing.xl) {
+                // Skip back
+                Button {
+                    skip(by: -skipInterval)
+                } label: {
+                    Image(systemName: "gobackward.15")
+                        .font(.system(size: 28, weight: .medium))
+                        .foregroundColor(.white)
+                }
+
+                // Play / Pause
+                Button {
+                    togglePlayPause()
+                } label: {
+                    Image(systemName: isPaused ? "play.circle.fill" : "pause.circle.fill")
+                        .font(.system(size: 56, weight: .medium))
+                        .foregroundColor(readAloudAccent)
+                }
+
+                // Skip forward
+                Button {
+                    skip(by: skipInterval)
+                } label: {
+                    Image(systemName: "goforward.15")
+                        .font(.system(size: 28, weight: .medium))
+                        .foregroundColor(.white)
+                }
+            }
+            .padding(.vertical, AppSpacing.sm)
+        }
+    }
+
+    // MARK: - Playback Actions
+
+    private func togglePlayPause() {
+        guard let service = geminiService else { return }
+        if isPaused {
+            service.resumePlayback()
+            isPaused = false
+            startBarTimer()
+            startPositionTimer()  // Resets playbackStartDate/Offset from current position
+        } else {
+            stopPositionTimer()   // Snapshots position before pausing
+            service.pausePlayback()
+            isPaused = true
+            stopBarTimer()
+        }
+    }
+
+    private func skip(by seconds: TimeInterval) {
+        let newPosition = max(0, min(playbackPosition + seconds, totalDuration))
+        seek(to: newPosition)
+    }
+
+    private func seek(to position: TimeInterval) {
+        guard let service = geminiService else { return }
+
+        let clampedPosition = max(0, min(position, totalDuration))
+        let byteOffset = Int(clampedPosition * bytesPerSecond)
+        // Align to 2-byte boundary (16-bit samples)
+        let alignedOffset = byteOffset & ~1
+
+        service.seekAndPlay(audioData: accumulatedAudio, fromByteOffset: alignedOffset)
+
+        playbackPosition = clampedPosition
+        isPaused = false
+        startBarTimer()
+        startPositionTimer()  // Resets from the new seek position
+    }
+
+    // MARK: - Position Tracking
+
+    private func startPositionTimer() {
+        playbackStartDate = Date()
+        playbackStartOffset = playbackPosition
+        positionTimer?.invalidate()
+        positionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            Task { @MainActor in
+                // Update slider max from accumulated audio (stable, every 0.5s)
+                let currentTotal = totalDuration
+                if currentTotal > sliderMax {
+                    sliderMax = currentTotal
+                }
+
+                guard !isPaused, seekTarget == nil, let startDate = playbackStartDate else { return }
+                let elapsed = Date().timeIntervalSince(startDate)
+                playbackPosition = playbackStartOffset + elapsed
+                // Clamp to total duration when stream is done
+                if isStreamDone && playbackPosition >= currentTotal {
+                    playbackPosition = currentTotal
+                    sliderMax = currentTotal
+                    isPaused = true
+                    playbackStartDate = nil
+                    stopBarTimer()
+                    stopPositionTimer()
+                }
+            }
+        }
+    }
+
+    private func stopPositionTimer() {
+        // Snapshot current position before stopping
+        if let startDate = playbackStartDate {
+            playbackPosition = playbackStartOffset + Date().timeIntervalSince(startDate)
+        }
+        playbackStartDate = nil
+        positionTimer?.invalidate()
+        positionTimer = nil
+    }
+
+    // MARK: - Soundwave Animation
+
+    private func startBarTimer() {
+        barTimer?.invalidate()
+        barTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { _ in
+            Task { @MainActor in
+                for i in 0..<5 {
+                    barHeights[i] = CGFloat.random(in: barMinHeight...barMaxHeights[i])
+                }
+            }
+        }
+    }
+
+    private func stopBarTimer() {
+        barTimer?.invalidate()
+        barTimer = nil
+        for i in 0..<5 { barHeights[i] = barMinHeight }
+    }
+
+    // MARK: - Helpers
+
+    private func formatTime(_ seconds: TimeInterval) -> String {
+        let mins = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        return String(format: "%d:%02d", mins, secs)
+    }
+
+    private func disconnectAndDismiss() {
+        geminiService?.disconnect()
+        geminiService = nil
+        dismiss()
+    }
+
+    // MARK: - Gemini Setup
+
+    private func setupAndConnect() {
+        let completedPages = pages.filter { $0.status == .completed }
+
+        let combinedText = completedPages
+            .enumerated()
+            .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
+            .joined(separator: "\n\n")
+
+        if combinedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            errorMessage = "No text content available. Capture some pages first."
+            return
+        }
+
+        let maxChars = 15000
+        let truncatedText = combinedText.count > maxChars
+            ? String(combinedText.prefix(maxChars)) + "\n[... text truncated ...]"
+            : combinedText
+
+        let systemPrompt = """
+        You are a professional narrator reading text aloud. Your job is to read the following text exactly as written, clearly and naturally.
+
+        ---
+        \(truncatedText)
+        ---
+
+        Guidelines:
+        1. Read the text exactly as written — do NOT summarize, paraphrase, or add commentary
+        2. Use clear, natural pacing with appropriate pauses at paragraph breaks
+        3. Pronounce words carefully and articulate clearly
+        4. Use natural intonation — not monotone, but don't be overly dramatic
+        5. If there are page breaks, pause briefly between them
+        6. Do NOT add any introduction, greeting, or closing remarks — just read the text
+        7. Begin reading immediately
+        """
+
+        let apiKey = APIProviderManager.staticLiveAIAPIKey
+
+        let service = GeminiLiveService(
+            apiKey: apiKey,
+            systemPrompt: systemPrompt,
+            includeTools: false
+        )
+        service.playbackOnly = true
+        service.isMicMuted = true
+
+        service.onConnected = { [service] in
+            Task { @MainActor in
+                isConnected = true
+                // Start recording with mic muted — keeps the audio engine's I/O cycle alive
+                // so the playback engine has a continuous render path
+                service.isMicMuted = true
+                service.startRecording()
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                service.sendTextInput("Begin reading the text now.")
+            }
+        }
+
+        // Accumulate raw PCM audio for seeking
+        // Note: onAudioDelta fires on every tiny chunk (1920 bytes = 40ms)
+        // We accumulate silently and only update UI-facing state sparingly
+        service.onAudioDelta = { (audioData: Data) in
+            Task { @MainActor in
+                accumulatedAudio.append(audioData)
+                if !hasStartedPlaying {
+                    hasStartedPlaying = true
+                    isStreaming = true
+                }
+            }
+        }
+
+        service.onTranscriptDelta = { (_: String) in }
+        service.onTranscriptDone = { (_: String) in }
+
+        service.onAudioDone = {
+            Task { @MainActor in
+                isStreaming = false
+                isStreamDone = true
+            }
+        }
+
+        service.onError = { (errorText: String) in
+            Task { @MainActor in
+                errorMessage = errorText
+            }
+        }
+
+        geminiService = service
+        service.connect()
     }
 }
 
@@ -2470,6 +2976,7 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         case popQuiz
         case voiceSummary
         case podcast
+        case readAloud
     }
 
     private let synthesizer = AVSpeechSynthesizer()
@@ -2663,6 +3170,9 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         }
         if normalized.contains("podcast") {
             return .podcast
+        }
+        if normalized.contains("read aloud") || normalized.contains("read out") || normalized.contains("read to me") || normalized.contains("text to speech") {
+            return .readAloud
         }
         return nil
     }

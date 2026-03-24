@@ -56,6 +56,12 @@ class GeminiLiveService: NSObject {
     private var isPlaybackEngineRunning = false
     private var dropIncomingAudioUntilInterrupted = false
 
+    // Streaming batch buffer — accumulates small chunks into larger ones for smooth playback
+    private var streamingBuffer = Data()
+    private var streamingFlushTimer: Timer?
+    /// Minimum bytes to accumulate before scheduling a playback buffer (~200ms at 24kHz/16-bit mono)
+    private let streamingBatchSize = 9600
+
     // Callbacks
     var onTranscriptDelta: ((String) -> Void)?
     var onTranscriptDone: ((String) -> Void)?
@@ -79,6 +85,9 @@ class GeminiLiveService: NSObject {
     private var connectWaitTask: Task<Void, Never>?
     /// When true, recording stays active (audio session alive) but audio is not sent to Gemini.
     var isMicMuted = false
+    /// When true, use `.playback` audio session instead of `.playAndRecord` + `.voiceChat`.
+    /// Avoids Voice Processing I/O overhead. Call `startRecording()` to switch to full mode.
+    var playbackOnly = false
 
     init(
         apiKey: String,
@@ -122,9 +131,18 @@ class GeminiLiveService: NSObject {
     private func configureAudioSession() {
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetoothHFP])
+            if playbackOnly {
+                // Use .playAndRecord to maintain I/O cycle (pure .playback starves the engine)
+                // Use .default mode (not .voiceChat) to skip Voice Processing I/O overhead
+                // Use .allowBluetoothHFP so audio routes to connected Bluetooth device (e.g. glasses)
+                // Use .defaultToSpeaker as fallback when no Bluetooth device is connected
+                try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
+                selectBluetoothRouteIfAvailable()
+            } else {
+                try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetoothHFP])
+                selectBluetoothRouteIfAvailable()
+            }
             try audioSession.setActive(true, options: [.notifyOthersOnDeactivation])
-            selectBluetoothRouteIfAvailable()
         } catch {
             print("⚠️ [Gemini] Audio session configuration failed: \(error)")
         }
@@ -155,7 +173,13 @@ class GeminiLiveService: NSObject {
     }
 
     private func startPlaybackEngine() {
-        guard let playbackEngine = playbackEngine, !isPlaybackEngineRunning else { return }
+        guard let playbackEngine = playbackEngine else { return }
+
+        // If engine is already running, just sync the flag
+        if playbackEngine.isRunning {
+            isPlaybackEngineRunning = true
+            return
+        }
 
         do {
             configureAudioSession()
@@ -164,6 +188,7 @@ class GeminiLiveService: NSObject {
             print("▶️ [Gemini] Playback engine started")
         } catch {
             print("❌ [Gemini] Failed to start playback engine: \(error)")
+            isPlaybackEngineRunning = false
         }
     }
 
@@ -255,6 +280,9 @@ class GeminiLiveService: NSObject {
     func disconnect() {
         print("🔌 [Gemini] Disconnecting WebSocket")
         isDisconnecting = true
+        streamingFlushTimer?.invalidate()
+        streamingFlushTimer = nil
+        streamingBuffer = Data()
         webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
         stopRecording()
@@ -415,6 +443,9 @@ Do not apologize.
         }
         guard isPlaybackEngineRunning else { return }
         print("🤚 [Gemini] Interrupting AI playback")
+        streamingFlushTimer?.invalidate()
+        streamingFlushTimer = nil
+        streamingBuffer = Data()
         playerNode?.stop()
         playerNode?.reset()
         audioBuffer = Data()
@@ -423,6 +454,58 @@ Do not apologize.
         hasStartedPlaying = false
         // Re-prime the player node so new audio can be scheduled immediately
         playerNode?.play()
+    }
+
+    // MARK: - Playback Controls (for Read Aloud / offline playback)
+
+    /// When true, playAudio will still buffer but won't call playerNode.play()
+    private var isPlaybackPaused = false
+
+    /// Pause playback without clearing buffers — incoming chunks still accumulate
+    func pausePlayback() {
+        isPlaybackPaused = true
+        playerNode?.pause()
+    }
+
+    /// Resume paused playback
+    func resumePlayback() {
+        isPlaybackPaused = false
+        if let playbackEngine = playbackEngine, !playbackEngine.isRunning {
+            startPlaybackEngine()
+        }
+        playerNode?.play()
+    }
+
+    /// Stop streaming playback and play accumulated audio from a byte offset.
+    /// `audioData` is the full accumulated PCM buffer; `fromByteOffset` is where to start.
+    func seekAndPlay(audioData: Data, fromByteOffset: Int) {
+        guard let playerNode = playerNode,
+              let playbackEngine = playbackEngine,
+              let playbackAudioFormat = playbackAudioFormat else { return }
+
+        isPlaybackPaused = false
+
+        // Stop current playback
+        playerNode.stop()
+        playerNode.reset()
+        streamingFlushTimer?.invalidate()
+        streamingFlushTimer = nil
+        streamingBuffer = Data()
+
+        let clampedOffset = max(0, min(fromByteOffset, audioData.count))
+        guard clampedOffset < audioData.count else { return }
+
+        let remaining = audioData.subdata(in: clampedOffset..<audioData.count)
+        guard !remaining.isEmpty else { return }
+
+        if !playbackEngine.isRunning {
+            startPlaybackEngine()
+        }
+
+        if let pcmBuffer = createPCMBuffer(from: remaining, format: playbackAudioFormat) {
+            playerNode.scheduleBuffer(pcmBuffer)
+            playerNode.play()
+        }
     }
 
     func suspendAudioForExternalPlayback() {
@@ -1092,27 +1175,26 @@ Do not apologize.
     // MARK: - Audio Playback
 
     private func handleAudioChunk(_ audioData: Data) {
-        print("🔊 [Gemini] Audio chunk received: \(audioData.count) bytes, playbackEnabled=\(isPlaybackEnabled), engineRunning=\(isPlaybackEngineRunning)")
         guard isPlaybackEnabled else { return }
 
         if !isCollectingAudio {
             isCollectingAudio = true
             audioBuffer = Data()
+            streamingBuffer = Data()
             audioChunkCount = 0
             hasStartedPlaying = false
 
-            if isPlaybackEngineRunning, isPlaybackEnabled {
+            if isPlaybackEngineRunning || (playbackEngine?.isRunning ?? false) {
                 stopPlaybackEngine()
                 setupPlaybackEngine()
-                startPlaybackEngine()
-                playerNode?.play()
-                print("🔄 [Gemini] Reinitialized playback engine")
+                // Don't start engine yet — playAudio() will start it when data is ready
             }
         }
 
         audioChunkCount += 1
 
         if !hasStartedPlaying {
+            // Initial buffering — wait for minChunksBeforePlay before starting
             audioBuffer.append(audioData)
 
             if audioChunkCount >= minChunksBeforePlay {
@@ -1121,12 +1203,41 @@ Do not apologize.
                 audioBuffer = Data()
             }
         } else {
-            playAudio(audioData)
+            // Streaming mode — batch small chunks into larger buffers for smooth playback
+            streamingBuffer.append(audioData)
+
+            if streamingBuffer.count >= streamingBatchSize {
+                flushStreamingBuffer()
+            } else {
+                scheduleStreamingFlush()
+            }
+        }
+    }
+
+    /// Flush accumulated streaming buffer to the player
+    private func flushStreamingBuffer() {
+        streamingFlushTimer?.invalidate()
+        streamingFlushTimer = nil
+
+        guard !streamingBuffer.isEmpty else { return }
+        let data = streamingBuffer
+        streamingBuffer = Data()
+        playAudio(data)
+    }
+
+    /// Schedule a timer to flush the streaming buffer if no more chunks arrive soon
+    private func scheduleStreamingFlush() {
+        streamingFlushTimer?.invalidate()
+        streamingFlushTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: false) { [weak self] _ in
+            self?.flushStreamingBuffer()
         }
     }
 
     private func finishAudioPlayback() {
         isCollectingAudio = false
+
+        // Flush any remaining buffered audio
+        flushStreamingBuffer()
 
         if !audioBuffer.isEmpty {
             playAudio(audioBuffer)
@@ -1140,25 +1251,32 @@ Do not apologize.
 
     private func playAudio(_ audioData: Data) {
         guard isPlaybackEnabled,
+              !audioData.isEmpty,
               let playerNode = playerNode,
+              let playbackEngine = playbackEngine,
               let playbackAudioFormat else {
-            print("🔊 [Gemini] playAudio skipped: enabled=\(isPlaybackEnabled), node=\(playerNode != nil), format=\(playbackAudioFormat != nil)")
             return
         }
-        print("🔊 [Gemini] playAudio: \(audioData.count) bytes, engineRunning=\(isPlaybackEngineRunning), nodeIsPlaying=\(playerNode.isPlaying)")
 
-        if !isPlaybackEngineRunning {
+        // Check actual engine state — it may have auto-stopped due to idle/interruption
+        if !playbackEngine.isRunning {
             startPlaybackEngine()
-            playerNode.play()
-        } else if !playerNode.isPlaying {
-            playerNode.play()
+            guard playbackEngine.isRunning else { return }
         }
+        isPlaybackEngineRunning = true
 
         guard let pcmBuffer = createPCMBuffer(from: audioData, format: playbackAudioFormat) else {
             return
         }
 
         playerNode.scheduleBuffer(pcmBuffer)
+
+        // Don't call play() if paused — buffers accumulate and will play on resume
+        guard !isPlaybackPaused else { return }
+
+        if !playerNode.isPlaying {
+            playerNode.play()
+        }
     }
 
     private func createPCMBuffer(from data: Data, format: AVAudioFormat) -> AVAudioPCMBuffer? {
