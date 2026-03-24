@@ -1853,16 +1853,44 @@ private struct MemorizePodcastPlayerView: View {
     @State private var isConnected = false
     @State private var isRecording = false
     @State private var isMuted = true
-    @State private var currentTranscript = ""
-    @State private var fullTranscript = ""
     @State private var errorMessage: String?
-    @State private var isPlaying = false
+
+    // Audio accumulation & playback tracking
+    @State private var accumulatedAudio = Data()
+    @State private var hasStartedPlaying = false
+    @State private var isStreamDone = false
+    @State private var isPaused = false
+    @State private var playbackPosition: TimeInterval = 0
+    @State private var seekTarget: TimeInterval? = nil
+    @State private var positionTimer: Timer?
+    @State private var playbackStartDate: Date?
+    @State private var playbackStartOffset: TimeInterval = 0
+    @State private var sliderMax: TimeInterval = 0.1
+
+    // Soundwave animation
     @State private var barHeights: [CGFloat] = [12, 12, 12, 12, 12]
     @State private var barTimer: Timer?
 
     private let podcastAccent = Color(red: 0.64, green: 0.21, blue: 0.83)
     private let barMinHeight: CGFloat = 8
     private let barMaxHeights: [CGFloat] = [36, 48, 40, 44, 32]
+    private let skipInterval: TimeInterval = 15
+    private let bytesPerSecond: Double = 48000
+
+    private var totalDuration: TimeInterval {
+        Double(accumulatedAudio.count) / bytesPerSecond
+    }
+
+    private var displayPosition: TimeInterval {
+        seekTarget ?? playbackPosition
+    }
+
+    private var effectiveMax: TimeInterval {
+        if isStreamDone {
+            return max(totalDuration, 0.1)
+        }
+        return max(sliderMax, 0.1)
+    }
 
     var body: some View {
         NavigationView {
@@ -1913,8 +1941,8 @@ private struct MemorizePodcastPlayerView: View {
                     .font(AppTypography.subheadline)
                     .foregroundColor(Color.white.opacity(0.6))
 
-                // Status indicator
-                if !isConnected || !isPlaying {
+                // Loading indicator
+                if !hasStartedPlaying {
                     HStack(spacing: 8) {
                         ProgressView()
                             .tint(.white)
@@ -1940,15 +1968,22 @@ private struct MemorizePodcastPlayerView: View {
 
                 Spacer()
 
+                // Playback controls
+                if hasStartedPlaying {
+                    podcastPlaybackControls
+                        .padding(.horizontal, AppSpacing.md)
+                }
+
+                // Done button
                 Button {
                     disconnectAndDismiss()
                 } label: {
-                    Text("memorize.podcast_stop".localized)
+                    Text("memorize.done".localized)
                         .font(AppTypography.headline)
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(podcastAccent)
+                        .background(Color.white.opacity(0.1))
                         .cornerRadius(AppCornerRadius.md)
                 }
                 .padding(.horizontal, AppSpacing.md)
@@ -1974,34 +2009,158 @@ private struct MemorizePodcastPlayerView: View {
             try? await Task.sleep(nanoseconds: 500_000_000)
             setupAndConnect()
         }
-        .onChange(of: isPlaying) { playing in
-            if playing {
+        .onChange(of: hasStartedPlaying) { playing in
+            if playing && !isPaused {
+                playbackPosition = 0
+                playbackStartOffset = 0
                 startBarTimer()
-            } else {
-                stopBarTimer()
+                startPositionTimer()
             }
         }
         .onDisappear {
             stopBarTimer()
+            stopPositionTimer()
             geminiService?.disconnect()
             geminiService = nil
         }
     }
 
+    // MARK: - Playback Controls
+
+    private var podcastPlaybackControls: some View {
+        VStack(spacing: AppSpacing.sm) {
+            VStack(spacing: 4) {
+                Slider(
+                    value: Binding(
+                        get: { min(displayPosition, effectiveMax) },
+                        set: { newValue in seekTarget = newValue }
+                    ),
+                    in: 0...effectiveMax,
+                    onEditingChanged: { editing in
+                        if !editing, let target = seekTarget {
+                            podcastSeek(to: target)
+                        }
+                    }
+                )
+                .accentColor(podcastAccent)
+
+                HStack {
+                    Text(formatTime(displayPosition))
+                        .font(AppTypography.caption)
+                        .foregroundColor(.white.opacity(0.6))
+                        .monospacedDigit()
+                    Spacer()
+                    Text(isStreamDone ? formatTime(totalDuration) : "--:--")
+                        .font(AppTypography.caption)
+                        .foregroundColor(.white.opacity(0.6))
+                        .monospacedDigit()
+                }
+            }
+
+            HStack(spacing: AppSpacing.xl) {
+                Button { podcastSkip(by: -skipInterval) } label: {
+                    Image(systemName: "gobackward.15")
+                        .font(.system(size: 28, weight: .medium))
+                        .foregroundColor(.white)
+                }
+
+                Button { togglePodcastPlayPause() } label: {
+                    Image(systemName: isPaused ? "play.circle.fill" : "pause.circle.fill")
+                        .font(.system(size: 56, weight: .medium))
+                        .foregroundColor(podcastAccent)
+                }
+
+                Button { podcastSkip(by: skipInterval) } label: {
+                    Image(systemName: "goforward.15")
+                        .font(.system(size: 28, weight: .medium))
+                        .foregroundColor(.white)
+                }
+            }
+            .padding(.vertical, AppSpacing.sm)
+        }
+    }
+
+    // MARK: - Playback Actions
+
+    private func togglePodcastPlayPause() {
+        guard let service = geminiService else { return }
+        if isPaused {
+            service.resumePlayback()
+            isPaused = false
+            startBarTimer()
+            startPositionTimer()
+        } else {
+            stopPositionTimer()
+            service.pausePlayback()
+            isPaused = true
+            stopBarTimer()
+        }
+    }
+
+    private func podcastSkip(by seconds: TimeInterval) {
+        let newPosition = max(0, min(playbackPosition + seconds, totalDuration))
+        podcastSeek(to: newPosition)
+    }
+
+    private func podcastSeek(to position: TimeInterval) {
+        guard let service = geminiService else { return }
+        seekTarget = nil
+        let clampedPosition = max(0, min(position, totalDuration))
+        let byteOffset = Int(clampedPosition * bytesPerSecond)
+        let alignedOffset = byteOffset & ~1
+        service.seekAndPlay(audioData: accumulatedAudio, fromByteOffset: alignedOffset)
+        playbackPosition = clampedPosition
+        isPaused = false
+        startBarTimer()
+        startPositionTimer()
+    }
+
+    // MARK: - Position Tracking
+
+    private func startPositionTimer() {
+        playbackStartDate = Date()
+        playbackStartOffset = playbackPosition
+        positionTimer?.invalidate()
+        positionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            Task { @MainActor in
+                let currentTotal = totalDuration
+                if currentTotal > sliderMax { sliderMax = currentTotal }
+                guard !isPaused, seekTarget == nil, let startDate = playbackStartDate else { return }
+                let elapsed = Date().timeIntervalSince(startDate)
+                playbackPosition = playbackStartOffset + elapsed
+                if isStreamDone && playbackPosition >= currentTotal {
+                    playbackPosition = currentTotal
+                    sliderMax = currentTotal
+                    isPaused = true
+                    playbackStartDate = nil
+                    stopBarTimer()
+                    stopPositionTimer()
+                }
+            }
+        }
+    }
+
+    private func stopPositionTimer() {
+        if let startDate = playbackStartDate {
+            playbackPosition = playbackStartOffset + Date().timeIntervalSince(startDate)
+        }
+        playbackStartDate = nil
+        positionTimer?.invalidate()
+        positionTimer = nil
+    }
+
+    // MARK: - Mic, Bars, Helpers
+
     private var microphoneButton: some View {
         Button {
             guard isConnected, let service = geminiService else { return }
             if isMuted {
-                // Unmute — allow user to interrupt and speak
                 service.interruptPlayback()
                 service.isMicMuted = false
                 isMuted = false
-                print("🎙️ [Podcast] Mic unmuted")
             } else {
-                // Mute — stop sending audio to Gemini
                 service.isMicMuted = true
                 isMuted = true
-                print("🎙️ [Podcast] Mic muted")
             }
         } label: {
             HStack(spacing: 8) {
@@ -2035,6 +2194,12 @@ private struct MemorizePodcastPlayerView: View {
         for i in 0..<5 { barHeights[i] = barMinHeight }
     }
 
+    private func formatTime(_ seconds: TimeInterval) -> String {
+        let mins = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        return String(format: "%d:%02d", mins, secs)
+    }
+
     private func disconnectAndDismiss() {
         geminiService?.disconnect()
         geminiService = nil
@@ -2042,19 +2207,17 @@ private struct MemorizePodcastPlayerView: View {
         onClose()
     }
 
+    // MARK: - Gemini Setup
+
     private func setupAndConnect() {
         let completedPages = pages.filter { $0.status == .completed }
-        print("🎙️ [Podcast] Starting setup — \(completedPages.count) completed pages, \(pages.count) total pages")
 
         let combinedText = completedPages
             .enumerated()
             .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
             .joined(separator: "\n\n")
 
-        print("🎙️ [Podcast] Combined text length: \(combinedText.count) chars")
-
         if combinedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            print("❌ [Podcast] No text content in completed pages!")
             errorMessage = "No text content available. Capture some pages first."
             return
         }
@@ -2083,13 +2246,11 @@ private struct MemorizePodcastPlayerView: View {
         7. End with a brief wrap-up summarizing the main takeaways
 
         Speak naturally as if recording a real podcast episode. Be enthusiastic but not over the top.
-        Keep the episode concise — aim for about 3-4 minutes of content.
         Do NOT mention that you are an AI. Speak as a human podcast host would.
         Begin the podcast immediately.
         """
 
         let apiKey = APIProviderManager.staticLiveAIAPIKey
-        print("🎙️ [Podcast] API key present: \(!apiKey.isEmpty) (length: \(apiKey.count))")
 
         let service = GeminiLiveService(
             apiKey: apiKey,
@@ -2099,67 +2260,42 @@ private struct MemorizePodcastPlayerView: View {
 
         service.onConnected = { [service] in
             Task { @MainActor in
-                print("🎙️ [Podcast] Connected to Gemini Live!")
                 isConnected = true
-                // Start recording with mic muted — keeps audio session alive for playback
                 service.isMicMuted = true
                 service.startRecording()
                 isRecording = true
                 isMuted = true
-                // Send a text prompt to trigger the AI to start the podcast
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 service.sendTextInput("Begin the podcast now. Start with your intro and dive into the content.")
-                print("🎙️ [Podcast] Sent trigger prompt to start podcast")
             }
         }
 
-        service.onTranscriptDelta = { (delta: String) in
+        // Accumulate raw PCM audio for seeking
+        service.onAudioDelta = { (audioData: Data) in
             Task { @MainActor in
-                let cleaned = delta.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !cleaned.isEmpty else { return }
-                if !isPlaying { isPlaying = true }
-                print("🎙️ [Podcast] Transcript delta: \(cleaned.prefix(80))...")
-                if cleaned.hasPrefix(currentTranscript) && cleaned.count > currentTranscript.count {
-                    currentTranscript = cleaned
-                } else if currentTranscript.isEmpty || !cleaned.hasPrefix(currentTranscript) {
-                    if currentTranscript.isEmpty {
-                        currentTranscript = cleaned
-                    } else {
-                        let needsSpace = !currentTranscript.hasSuffix(" ") && !cleaned.hasPrefix(" ")
-                        currentTranscript += (needsSpace ? " " : "") + cleaned
-                    }
+                accumulatedAudio.append(audioData)
+                if !hasStartedPlaying {
+                    hasStartedPlaying = true
                 }
             }
         }
 
-        service.onTranscriptDone = { (fullText: String) in
-            print("🎙️ [Podcast] Transcript done: \(fullText.prefix(80))...")
-            Task { @MainActor in
-                let trimmed = (fullText.isEmpty ? currentTranscript : fullText)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty {
-                    if !fullTranscript.isEmpty {
-                        fullTranscript += "\n\n"
-                    }
-                    fullTranscript += trimmed
-                }
-                currentTranscript = ""
-            }
-        }
+        service.onTranscriptDelta = { (_: String) in }
+        service.onTranscriptDone = { (_: String) in }
 
         service.onAudioDone = {
-            print("🎙️ [Podcast] Audio playback done")
+            Task { @MainActor in
+                isStreamDone = true
+            }
         }
 
         service.onError = { (errorText: String) in
-            print("❌ [Podcast] Error: \(errorText)")
             Task { @MainActor in
                 errorMessage = errorText
             }
         }
 
         geminiService = service
-        print("🎙️ [Podcast] Calling service.connect()...")
         service.connect()
     }
 }
