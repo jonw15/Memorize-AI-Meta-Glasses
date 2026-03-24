@@ -1345,6 +1345,13 @@ private struct MemorizeReadAloudView: View {
     /// Position offset when playback started/resumed (after seek or pause)
     @State private var playbackStartOffset: TimeInterval = 0
 
+    // Text chunking — send text in pieces to work around Gemini's ~60-90s response cap
+    @State private var textChunks: [String] = []
+    @State private var currentChunkIndex = 0
+
+    // Estimated total duration based on word count (~150 words/min speaking rate)
+    @State private var estimatedTotalDuration: TimeInterval = 0
+
     // Slider range — only grows, updated by position timer to avoid per-chunk jitter
     @State private var sliderMax: TimeInterval = 0.1
 
@@ -1366,6 +1373,14 @@ private struct MemorizeReadAloudView: View {
 
     private var displayPosition: TimeInterval {
         seekTarget ?? playbackPosition
+    }
+
+    /// Stable max for the slider — uses estimated total while streaming, actual total when done
+    private var effectiveMax: TimeInterval {
+        if isStreamDone {
+            return max(totalDuration, 0.1)
+        }
+        return max(estimatedTotalDuration, sliderMax, 0.1)
     }
 
     var body: some View {
@@ -1506,16 +1521,15 @@ private struct MemorizeReadAloudView: View {
             VStack(spacing: 4) {
                 Slider(
                     value: Binding(
-                        get: { min(displayPosition, sliderMax) },
+                        get: { min(displayPosition, effectiveMax) },
                         set: { newValue in
                             seekTarget = newValue
                         }
                     ),
-                    in: 0...sliderMax,
+                    in: 0...effectiveMax,
                     onEditingChanged: { editing in
                         if !editing, let target = seekTarget {
                             seek(to: target)
-                            seekTarget = nil
                         }
                     }
                 )
@@ -1527,21 +1541,10 @@ private struct MemorizeReadAloudView: View {
                         .foregroundColor(.white.opacity(0.6))
                         .monospacedDigit()
                     Spacer()
-                    if isStreaming {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(Color.red)
-                                .frame(width: 6, height: 6)
-                            Text("memorize.read_aloud_live".localized)
-                                .font(AppTypography.caption)
-                                .foregroundColor(.white.opacity(0.6))
-                        }
-                    } else {
-                        Text(formatTime(sliderMax))
-                            .font(AppTypography.caption)
-                            .foregroundColor(.white.opacity(0.6))
-                            .monospacedDigit()
-                    }
+                    Text(formatTime(isStreamDone ? totalDuration : estimatedTotalDuration))
+                        .font(AppTypography.caption)
+                        .foregroundColor(.white.opacity(0.6))
+                        .monospacedDigit()
                 }
             }
 
@@ -1602,6 +1605,9 @@ private struct MemorizeReadAloudView: View {
 
     private func seek(to position: TimeInterval) {
         guard let service = geminiService else { return }
+
+        // Clear seek target immediately so the position timer isn't blocked
+        seekTarget = nil
 
         let clampedPosition = max(0, min(position, totalDuration))
         let byteOffset = Int(clampedPosition * bytesPerSecond)
@@ -1683,6 +1689,14 @@ private struct MemorizeReadAloudView: View {
         return String(format: "%d:%02d", mins, secs)
     }
 
+    private func sendNextChunk(service: GeminiLiveService) {
+        guard currentChunkIndex < textChunks.count else { return }
+        let chunk = textChunks[currentChunkIndex]
+        currentChunkIndex += 1
+        print("📖 [ReadAloud] Sending chunk \(currentChunkIndex)/\(textChunks.count) (\(chunk.count) chars)")
+        service.sendTextInput("Read the following text aloud now:\n\n\(chunk)")
+    }
+
     private func disconnectAndDismiss() {
         geminiService?.disconnect()
         geminiService = nil
@@ -1690,6 +1704,42 @@ private struct MemorizeReadAloudView: View {
     }
 
     // MARK: - Gemini Setup
+
+    /// Split text into chunks at paragraph/sentence boundaries
+    private static func splitTextIntoChunks(_ text: String, maxChunkSize: Int = 2000) -> [String] {
+        var chunks: [String] = []
+        var remaining = text
+
+        while !remaining.isEmpty {
+            if remaining.count <= maxChunkSize {
+                chunks.append(remaining)
+                break
+            }
+
+            // Try to split at a paragraph break within the limit
+            let prefix = String(remaining.prefix(maxChunkSize))
+            var splitIndex: String.Index
+
+            if let paragraphBreak = prefix.range(of: "\n\n", options: .backwards) {
+                splitIndex = paragraphBreak.upperBound
+            } else if let sentenceBreak = prefix.range(of: ". ", options: .backwards) {
+                splitIndex = sentenceBreak.upperBound
+            } else {
+                // Hard split at limit
+                splitIndex = remaining.index(remaining.startIndex, offsetBy: maxChunkSize)
+            }
+
+            let chunk = String(remaining[remaining.startIndex..<splitIndex])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !chunk.isEmpty {
+                chunks.append(chunk)
+            }
+            remaining = String(remaining[splitIndex...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        return chunks
+    }
 
     private func setupAndConnect() {
         let completedPages = pages.filter { $0.status == .completed }
@@ -1704,26 +1754,26 @@ private struct MemorizeReadAloudView: View {
             return
         }
 
-        let maxChars = 15000
-        let truncatedText = combinedText.count > maxChars
-            ? String(combinedText.prefix(maxChars)) + "\n[... text truncated ...]"
-            : combinedText
+        // Split text into chunks that fit within Gemini's ~60-90s response limit
+        textChunks = Self.splitTextIntoChunks(combinedText)
+        currentChunkIndex = 0
+
+        // Estimate total duration: ~150 words per minute average speaking rate
+        let totalWordCount = combinedText.split(separator: " ").count
+        estimatedTotalDuration = Double(totalWordCount) / 150.0 * 60.0
+
+        print("📖 [ReadAloud] Split into \(textChunks.count) chunks, ~\(totalWordCount) words, est. \(Int(estimatedTotalDuration))s")
 
         let systemPrompt = """
-        You are a professional narrator reading text aloud. Your job is to read the following text exactly as written, clearly and naturally.
-
-        ---
-        \(truncatedText)
-        ---
+        You are a professional narrator reading text aloud.
 
         Guidelines:
         1. Read the text exactly as written — do NOT summarize, paraphrase, or add commentary
         2. Use clear, natural pacing with appropriate pauses at paragraph breaks
         3. Pronounce words carefully and articulate clearly
         4. Use natural intonation — not monotone, but don't be overly dramatic
-        5. If there are page breaks, pause briefly between them
-        6. Do NOT add any introduction, greeting, or closing remarks — just read the text
-        7. Begin reading immediately
+        5. Do NOT add any introduction, greeting, or closing remarks — just read the text
+        6. When you receive text, begin reading it immediately
         """
 
         let apiKey = APIProviderManager.staticLiveAIAPIKey
@@ -1739,18 +1789,15 @@ private struct MemorizeReadAloudView: View {
         service.onConnected = { [service] in
             Task { @MainActor in
                 isConnected = true
-                // Start recording with mic muted — keeps the audio engine's I/O cycle alive
-                // so the playback engine has a continuous render path
                 service.isMicMuted = true
                 service.startRecording()
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                service.sendTextInput("Begin reading the text now.")
+                // Send first chunk
+                sendNextChunk(service: service)
             }
         }
 
         // Accumulate raw PCM audio for seeking
-        // Note: onAudioDelta fires on every tiny chunk (1920 bytes = 40ms)
-        // We accumulate silently and only update UI-facing state sparingly
         service.onAudioDelta = { (audioData: Data) in
             Task { @MainActor in
                 accumulatedAudio.append(audioData)
@@ -1764,10 +1811,21 @@ private struct MemorizeReadAloudView: View {
         service.onTranscriptDelta = { (_: String) in }
         service.onTranscriptDone = { (_: String) in }
 
-        service.onAudioDone = {
+        service.onAudioDone = { [service] in
             Task { @MainActor in
-                isStreaming = false
-                isStreamDone = true
+                // Small delay to let audio finish playing
+                try? await Task.sleep(nanoseconds: 300_000_000)
+
+                if currentChunkIndex < textChunks.count {
+                    // More chunks to read
+                    print("📖 [ReadAloud] Chunk done, sending next (\(currentChunkIndex + 1)/\(textChunks.count))")
+                    sendNextChunk(service: service)
+                } else {
+                    // All chunks sent and audio done
+                    print("📖 [ReadAloud] All \(textChunks.count) chunks complete")
+                    isStreaming = false
+                    isStreamDone = true
+                }
             }
         }
 
