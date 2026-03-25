@@ -1648,6 +1648,81 @@ private struct MemorizeInfographicsView: View {
     }
 }
 
+// MARK: - Gemini Voice Picker
+
+private struct GeminiVoice: Identifiable {
+    let id: String
+    let name: String
+    let description: String
+    let icon: String
+
+    static let all: [GeminiVoice] = [
+        GeminiVoice(id: "Aoede", name: "Aoede", description: "Warm, clear female voice", icon: "person.wave.2"),
+        GeminiVoice(id: "Kore", name: "Kore", description: "Bright, friendly female voice", icon: "person.wave.2"),
+        GeminiVoice(id: "Puck", name: "Puck", description: "Energetic, youthful male voice", icon: "person.wave.2.fill"),
+        GeminiVoice(id: "Charon", name: "Charon", description: "Deep, authoritative male voice", icon: "person.wave.2.fill"),
+        GeminiVoice(id: "Fenrir", name: "Fenrir", description: "Strong, resonant male voice", icon: "person.wave.2.fill"),
+    ]
+}
+
+private struct GeminiVoicePickerView: View {
+    @Binding var selectedVoice: String
+    let accent: Color
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            List(GeminiVoice.all) { voice in
+                Button {
+                    selectedVoice = voice.id
+                    dismiss()
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: voice.icon)
+                            .font(.system(size: 20))
+                            .foregroundColor(voice.id == selectedVoice ? accent : .white.opacity(0.5))
+                            .frame(width: 32)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(voice.name)
+                                .font(AppTypography.headline)
+                                .foregroundColor(.white)
+                            Text(voice.description)
+                                .font(AppTypography.caption)
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+
+                        Spacer()
+
+                        if voice.id == selectedVoice {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(accent)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .listRowBackground(Color.white.opacity(voice.id == selectedVoice ? 0.1 : 0.0))
+            }
+            .listStyle(.plain)
+            .background(AppColors.memorizeBackground)
+            .scrollContentBackground(.hidden)
+            .navigationTitle("memorize.select_voice".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+    }
+}
+
 // MARK: - Zoomable Image View
 
 private struct ZoomableImageView: View {
@@ -1729,6 +1804,8 @@ private struct MemorizeReadAloudView: View {
     @State private var geminiService: GeminiLiveService?
     @State private var isConnected = false
     @State private var errorMessage: String?
+    @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
+    @State private var showVoicePicker = false
 
     // Audio accumulation & playback tracking
     @State private var accumulatedAudio = Data()
@@ -1887,8 +1964,25 @@ private struct MemorizeReadAloudView: View {
                             .foregroundColor(.white)
                     }
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showVoicePicker = true
+                    } label: {
+                        Image(systemName: "waveform.circle")
+                            .foregroundColor(.white)
+                    }
+                }
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .sheet(isPresented: $showVoicePicker) {
+            GeminiVoicePickerView(selectedVoice: $selectedVoice, accent: readAloudAccent)
+                .presentationDetents([.medium])
+        }
+        .onChange(of: selectedVoice) { newVoice in
+            // Reconnect with new voice if already connected
+            guard geminiService != nil else { return }
+            disconnectAndReconnect()
         }
         .task {
             // Force-release any lingering audio session (voice menu speech recognizer)
@@ -2102,6 +2196,26 @@ private struct MemorizeReadAloudView: View {
         dismiss()
     }
 
+    private func disconnectAndReconnect() {
+        // Reset all state and reconnect with new voice
+        geminiService?.disconnect()
+        geminiService = nil
+        accumulatedAudio = Data()
+        isConnected = false
+        hasStartedPlaying = false
+        isStreaming = false
+        isStreamDone = false
+        isPaused = false
+        playbackPosition = 0
+        playbackStartOffset = 0
+        playbackStartDate = nil
+        sliderMax = 0.1
+        currentChunkIndex = 0
+        stopBarTimer()
+        stopPositionTimer()
+        setupAndConnect()
+    }
+
     // MARK: - Gemini Setup
 
     /// Split text into chunks at paragraph/sentence boundaries
@@ -2184,6 +2298,7 @@ private struct MemorizeReadAloudView: View {
         )
         service.playbackOnly = true
         service.isMicMuted = true
+        service.voiceName = selectedVoice
 
         service.onConnected = { [service] in
             Task { @MainActor in
@@ -2253,6 +2368,8 @@ private struct MemorizePodcastPlayerView: View {
     @State private var isRecording = false
     @State private var isMuted = true
     @State private var errorMessage: String?
+    @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
+    @State private var showVoicePicker = false
 
     // Audio accumulation & playback tracking
     @State private var accumulatedAudio = Data()
@@ -2402,8 +2519,24 @@ private struct MemorizePodcastPlayerView: View {
                             .foregroundColor(.white)
                     }
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showVoicePicker = true
+                    } label: {
+                        Image(systemName: "waveform.circle")
+                            .foregroundColor(.white)
+                    }
+                }
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .sheet(isPresented: $showVoicePicker) {
+            GeminiVoicePickerView(selectedVoice: $selectedVoice, accent: podcastAccent)
+                .presentationDetents([.medium])
+        }
+        .onChange(of: selectedVoice) { newVoice in
+            guard geminiService != nil else { return }
+            podcastReconnectWithNewVoice()
         }
         .task {
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -2608,6 +2741,23 @@ private struct MemorizePodcastPlayerView: View {
         onClose()
     }
 
+    private func podcastReconnectWithNewVoice() {
+        geminiService?.disconnect()
+        geminiService = nil
+        accumulatedAudio = Data()
+        isConnected = false
+        hasStartedPlaying = false
+        isStreamDone = false
+        isPaused = false
+        playbackPosition = 0
+        playbackStartOffset = 0
+        playbackStartDate = nil
+        sliderMax = 0.1
+        stopBarTimer()
+        stopPositionTimer()
+        setupAndConnect()
+    }
+
     // MARK: - Gemini Setup
 
     private func setupAndConnect() {
@@ -2667,6 +2817,7 @@ private struct MemorizePodcastPlayerView: View {
             systemPrompt: systemPrompt,
             includeTools: false
         )
+        service.voiceName = selectedVoice
 
         service.onConnected = { [service] in
             Task { @MainActor in
@@ -3149,6 +3300,8 @@ private struct MemorizeExplainView: View {
     @State private var errorMessage: String?
     @State private var isMuted = false
     @State private var loadingPulse = false
+    @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
+    @State private var showVoicePicker = false
     private let explainAccent = Color(red: 0.94, green: 0.55, blue: 0.24)
 
     var body: some View {
@@ -3243,8 +3396,20 @@ private struct MemorizeExplainView: View {
                             .foregroundColor(.white)
                     }
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showVoicePicker = true
+                    } label: {
+                        Image(systemName: "waveform.circle")
+                            .foregroundColor(.white)
+                    }
+                }
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .sheet(isPresented: $showVoicePicker) {
+            GeminiVoicePickerView(selectedVoice: $selectedVoice, accent: explainAccent)
+                .presentationDetents([.medium])
         }
         .onAppear {
             loadingPulse = false
@@ -3331,6 +3496,7 @@ private struct MemorizeExplainView: View {
             systemPrompt: systemPrompt,
             includeTools: false
         )
+        service.voiceName = selectedVoice
 
         service.onConnected = { [service] in
             Task { @MainActor in
@@ -4060,6 +4226,8 @@ private struct MemorizeInteractView: View {
     @State private var isAIThinking = false
     @State private var errorMessage: String?
     @State private var isMuted = true
+    @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
+    @State private var showVoicePicker = false
 
     private let interactAccent = Color(red: 0.15, green: 0.72, blue: 0.52)
 
@@ -4123,8 +4291,20 @@ private struct MemorizeInteractView: View {
                             .foregroundColor(.white)
                     }
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showVoicePicker = true
+                    } label: {
+                        Image(systemName: "waveform.circle")
+                            .foregroundColor(.white)
+                    }
+                }
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .sheet(isPresented: $showVoicePicker) {
+            GeminiVoicePickerView(selectedVoice: $selectedVoice, accent: interactAccent)
+                .presentationDetents([.medium])
         }
         .task {
             guard geminiService == nil else { return }
@@ -4178,6 +4358,7 @@ private struct MemorizeInteractView: View {
             systemPrompt: systemPrompt,
             includeTools: false
         )
+        service.voiceName = selectedVoice
 
         service.onConnected = { [service] in
             Task { @MainActor in

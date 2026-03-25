@@ -509,6 +509,7 @@
 "memorize.podcast_stop" = "停止播客";
 "memorize.podcast_mute" = "静音麦克风";
 "memorize.podcast_unmute" = "取消静音";
+"memorize.select_voice" = "选择语音";
 "memorize.infographics" = "信息图";
 "memorize.infographics_generating" = "正在生成信息图...";
 "memorize.infographics_generating_more" = "正在生成更多...";

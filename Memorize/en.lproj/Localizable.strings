@@ -508,6 +508,7 @@
 "memorize.podcast_stop" = "Stop Podcast";
 "memorize.podcast_mute" = "Mute Mic";
 "memorize.podcast_unmute" = "Unmute Mic";
+"memorize.select_voice" = "Select Voice";
 "memorize.infographics" = "Infographics";
 "memorize.infographics_generating" = "Generating infographics...";
 "memorize.infographics_generating_more" = "Generating more...";

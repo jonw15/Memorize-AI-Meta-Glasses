@@ -1,4 +1,4 @@
-/*
+happ/*
  * Gemini Live WebSocket Service
  * Provides real-time audio chat with Google Gemini AI
  * Uses Gemini Live model for real-time audio conversation
@@ -88,6 +88,8 @@ class GeminiLiveService: NSObject {
     /// When true, use `.playback` audio session instead of `.playAndRecord` + `.voiceChat`.
     /// Avoids Voice Processing I/O overhead. Call `startRecording()` to switch to full mode.
     var playbackOnly = false
+    /// Gemini voice name used in session config. Set before calling connect().
+    var voiceName: String = "Aoede"
 
     init(
         apiKey: String,
@@ -326,7 +328,7 @@ Do not apologize.
                 "speech_config": [
                     "voice_config": [
                         "prebuilt_voice_config": [
-                            "voice_name": "Aoede"  // Gemini voice options: Aoede, Charon, Fenrir, Kore, Puck
+                            "voice_name": voiceName  // Gemini voice options: Aoede, Charon, Fenrir, Kore, Puck
                         ]
                     ]
                 ]
