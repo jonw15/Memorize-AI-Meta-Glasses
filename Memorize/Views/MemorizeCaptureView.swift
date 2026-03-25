@@ -1867,6 +1867,8 @@ private struct MemorizePodcastPlayerView: View {
     @State private var playbackStartOffset: TimeInterval = 0
     @State private var sliderMax: TimeInterval = 0.1
 
+    @State private var estimatedTotalDuration: TimeInterval = 0
+
     // Soundwave animation
     @State private var barHeights: [CGFloat] = [12, 12, 12, 12, 12]
     @State private var barTimer: Timer?
@@ -1889,7 +1891,7 @@ private struct MemorizePodcastPlayerView: View {
         if isStreamDone {
             return max(totalDuration, 0.1)
         }
-        return max(sliderMax, 0.1)
+        return max(estimatedTotalDuration, sliderMax, 0.1)
     }
 
     var body: some View {
@@ -2050,7 +2052,7 @@ private struct MemorizePodcastPlayerView: View {
                         .foregroundColor(.white.opacity(0.6))
                         .monospacedDigit()
                     Spacer()
-                    Text(isStreamDone ? formatTime(totalDuration) : "--:--")
+                    Text(formatTime(isStreamDone ? totalDuration : estimatedTotalDuration))
                         .font(AppTypography.caption)
                         .foregroundColor(.white.opacity(0.6))
                         .monospacedDigit()
@@ -2222,10 +2224,19 @@ private struct MemorizePodcastPlayerView: View {
             return
         }
 
+        // Scale podcast duration by page count: 2 min per page, minimum 4 min
+        let pageCount = completedPages.count
+        let targetMinutes = max(4, pageCount * 2)
+        estimatedTotalDuration = Double(targetMinutes) * 60.0
+
         let maxChars = 15000
         let truncatedText = combinedText.count > maxChars
             ? String(combinedText.prefix(maxChars)) + "\n[... text truncated ...]"
             : combinedText
+
+        // Track how many continuation prompts we've sent
+        var continuationCount = 0
+        let maxContinuations = max(1, targetMinutes / 2)  // ~2 min per response from Gemini
 
         let systemPrompt = """
         You are the host of an engaging educational podcast called "Deep Dive". You have a warm, enthusiastic personality.
@@ -2246,8 +2257,8 @@ private struct MemorizePodcastPlayerView: View {
         7. End with a brief wrap-up summarizing the main takeaways
 
         Speak naturally as if recording a real podcast episode. Be enthusiastic but not over the top.
+        The episode should be about \(targetMinutes) minutes long. Cover the material thoroughly.
         Do NOT mention that you are an AI. Speak as a human podcast host would.
-        Begin the podcast immediately.
         """
 
         let apiKey = APIProviderManager.staticLiveAIAPIKey
@@ -2266,7 +2277,7 @@ private struct MemorizePodcastPlayerView: View {
                 isRecording = true
                 isMuted = true
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                service.sendTextInput("Begin the podcast now. Start with your intro and dive into the content.")
+                service.sendTextInput("Begin the podcast now. Start with your intro and dive deep into the content. You have \(targetMinutes) minutes.")
             }
         }
 
@@ -2283,9 +2294,21 @@ private struct MemorizePodcastPlayerView: View {
         service.onTranscriptDelta = { (_: String) in }
         service.onTranscriptDone = { (_: String) in }
 
-        service.onAudioDone = {
+        service.onAudioDone = { [service] in
             Task { @MainActor in
-                isStreamDone = true
+                continuationCount += 1
+                let elapsedMinutes = totalDuration / 60.0
+
+                if elapsedMinutes < Double(targetMinutes) - 0.5 && continuationCount < maxContinuations {
+                    // Not enough content yet — ask Gemini to continue
+                    let remainingMinutes = Int(Double(targetMinutes) - elapsedMinutes)
+                    print("🎙️ [Podcast] \(String(format: "%.1f", elapsedMinutes))min elapsed, target \(targetMinutes)min — requesting continuation")
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    service.sendTextInput("Continue the podcast. You still have about \(remainingMinutes) minutes. Keep discussing the material — go deeper into the details, share more insights, and cover points you haven't addressed yet. Do NOT wrap up or say goodbye yet.")
+                } else {
+                    print("🎙️ [Podcast] Done — \(String(format: "%.1f", elapsedMinutes))min total")
+                    isStreamDone = true
+                }
             }
         }
 
