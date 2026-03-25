@@ -1148,7 +1148,8 @@ private struct MemorizePostCaptureActionsView: View {
         }
         .task {
             guard !completedPages.isEmpty else { return }
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            // Wait for the page transition to finish before the AI speaks
+            try? await Task.sleep(nanoseconds: 2_300_000_000)
             startVoiceMenu()
         }
         .onChange(of: showExplainPersonaSelector) { showing in
