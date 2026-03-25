@@ -3439,6 +3439,12 @@ private struct MemorizeExplainView: View {
             viewModel.explanationErrorMessage = nil
             loadingPulse = false
         }
+        .onChange(of: selectedVoice) { _ in
+            guard geminiService != nil else { return }
+            let text = viewModel.explanationText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return }
+            explainReconnectWithNewVoice(summaryText: text)
+        }
     }
 
     private func disconnectAndDismiss() {
@@ -3448,10 +3454,22 @@ private struct MemorizeExplainView: View {
         onClose()
     }
 
+    private func explainReconnectWithNewVoice(summaryText: String) {
+        geminiService?.disconnect()
+        geminiService = nil
+        isConnected = false
+        isRecording = false
+        messages = []
+        currentAIText = ""
+        currentUserText = ""
+        isAIThinking = false
+        errorMessage = nil
+        setupAndConnect(summaryText: summaryText)
+    }
+
     // MARK: - Setup
 
     private func setupAndConnect(summaryText: String) {
-        guard geminiService == nil else { return }
 
         let completedPages = pages.filter { $0.status == .completed }
         let combinedText = completedPages
@@ -4310,12 +4328,29 @@ private struct MemorizeInteractView: View {
             guard geminiService == nil else { return }
             setupAndConnect()
         }
+        .onChange(of: selectedVoice) { _ in
+            guard geminiService != nil else { return }
+            reconnectWithNewVoice()
+        }
     }
 
     private func disconnectAndDismiss() {
         geminiService?.disconnect()
         geminiService = nil
         dismiss()
+    }
+
+    private func reconnectWithNewVoice() {
+        geminiService?.disconnect()
+        geminiService = nil
+        isConnected = false
+        isRecording = false
+        messages = []
+        currentAIText = ""
+        currentUserText = ""
+        isAIThinking = false
+        errorMessage = nil
+        setupAndConnect()
     }
 
     // MARK: - Setup

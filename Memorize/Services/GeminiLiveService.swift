@@ -1,4 +1,4 @@
-happ/*
+/*
  * Gemini Live WebSocket Service
  * Provides real-time audio chat with Google Gemini AI
  * Uses Gemini Live model for real-time audio conversation
