@@ -501,13 +501,16 @@
 "memorize.interact_connecting" = "Connecting...";
 "memorize.interact_placeholder" = "Ask me anything about the text you captured.";
 "memorize.podcast" = "Podcast";
-"memorize.voice_menu_prompt" = "You can say: conversation, summary, podcast, read aloud, pop quiz, or voice summary.";
+"memorize.voice_menu_prompt" = "You can say: conversation, summary, podcast, read aloud, infographics, pop quiz, or voice summary.";
 "memorize.podcast_header" = "AI-Generated Podcast";
 "memorize.podcast_listening" = "Starting podcast...";
 "memorize.podcast_loading" = "Podcast loading...";
 "memorize.podcast_stop" = "Stop Podcast";
 "memorize.podcast_mute" = "Mute Mic";
 "memorize.podcast_unmute" = "Unmute Mic";
+"memorize.infographics" = "Infographics";
+"memorize.infographics_generating" = "Generating infographics...";
+"memorize.infographics_generating_more" = "Generating more...";
 "memorize.read_aloud" = "Read Aloud";
 "memorize.read_aloud_header" = "AI-Powered Text Reading";
 "memorize.read_aloud_loading" = "Connecting...";

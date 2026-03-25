@@ -941,6 +941,7 @@ private struct MemorizePostCaptureActionsView: View {
     @State private var showVoiceSummary = false
     @State private var showInteract = false
     @State private var showReadAloud = false
+    @State private var showInfographics = false
     @State private var voiceMenuRestartTask: Task<Void, Never>?
     @StateObject private var voiceMenu = PostCaptureVoiceMenuController()
 
@@ -951,7 +952,7 @@ private struct MemorizePostCaptureActionsView: View {
     /// True when buttons should be disabled — before voice menu speaks or while a feature is active
     private var isButtonsDisabled: Bool {
         !voiceMenu.hasSpoken ||
-        showInteract || showExplainPersonaSelector || showVoiceSummary || showReadAloud ||
+        showInteract || showExplainPersonaSelector || showVoiceSummary || showReadAloud || showInfographics ||
         viewModel.showExplain || viewModel.showQuiz || viewModel.showPodcastPlayer ||
         viewModel.isGeneratingQuiz || viewModel.isGeneratingExplanation
     }
@@ -972,6 +973,8 @@ private struct MemorizePostCaptureActionsView: View {
                 viewModel.startPodcast()
             case .readAloud:
                 showReadAloud = true
+            case .infographics:
+                showInfographics = true
             }
         }
     }
@@ -1024,6 +1027,9 @@ private struct MemorizePostCaptureActionsView: View {
                             .padding(.horizontal, AppSpacing.md)
 
                         readAloudButton
+                            .padding(.horizontal, AppSpacing.md)
+
+                        infographicsButton
                             .padding(.horizontal, AppSpacing.md)
 
                         Text("memorize.test_mode_prompt".localized)
@@ -1133,6 +1139,13 @@ private struct MemorizePostCaptureActionsView: View {
                 sectionTitle: sectionTitle
             )
         }
+        .fullScreenCover(isPresented: $showInfographics) {
+            MemorizeInfographicsView(
+                pages: completedPages,
+                bookTitle: bookTitle,
+                sectionTitle: sectionTitle
+            )
+        }
         .task {
             guard !completedPages.isEmpty else { return }
             try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -1159,6 +1172,9 @@ private struct MemorizePostCaptureActionsView: View {
             if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
         }
         .onChange(of: showReadAloud) { showing in
+            if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
+        }
+        .onChange(of: showInfographics) { showing in
             if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
         }
         .onDisappear {
@@ -1335,6 +1351,369 @@ private struct MemorizePostCaptureActionsView: View {
         }
         .disabled(isButtonsDisabled || completedPages.isEmpty)
         .opacity((isButtonsDisabled || completedPages.isEmpty) ? 0.5 : 1.0)
+    }
+
+    private var infographicsButton: some View {
+        Button {
+            showInfographics = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "chart.bar.doc.horizontal.fill")
+                    .font(.system(size: 16, weight: .semibold))
+
+                Text("memorize.infographics".localized)
+                    .font(AppTypography.headline)
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                LinearGradient(
+                    colors: [Color(red: 0.93, green: 0.35, blue: 0.47), Color(red: 0.80, green: 0.22, blue: 0.35)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(AppCornerRadius.md)
+        }
+        .disabled(isButtonsDisabled || completedPages.isEmpty)
+        .opacity((isButtonsDisabled || completedPages.isEmpty) ? 0.5 : 1.0)
+    }
+}
+
+// MARK: - Infographics View (Gemini Image Generation)
+
+private struct MemorizeInfographicsView: View {
+    let pages: [PageCapture]
+    let bookTitle: String
+    let sectionTitle: String
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var infographics: [UIImage] = []
+    @State private var isGenerating = false
+    @State private var errorMessage: String?
+    @State private var progress: Int = 0
+    @State private var totalToGenerate: Int = 0
+
+    private let infographicsAccent = Color(red: 0.93, green: 0.35, blue: 0.47)
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                if isGenerating && infographics.isEmpty {
+                    // Loading state
+                    Spacer()
+                    VStack(spacing: AppSpacing.md) {
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(1.5)
+                        Text("memorize.infographics_generating".localized)
+                            .font(AppTypography.headline)
+                            .foregroundColor(.white)
+                        if totalToGenerate > 0 {
+                            Text("\(progress)/\(totalToGenerate)")
+                                .font(AppTypography.caption)
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                    }
+                    Spacer()
+                } else if infographics.isEmpty && !isGenerating {
+                    // Error or empty state
+                    Spacer()
+                    VStack(spacing: AppSpacing.md) {
+                        Image(systemName: "chart.bar.doc.horizontal")
+                            .font(.system(size: 48))
+                            .foregroundColor(.white.opacity(0.3))
+                        if let errorMessage {
+                            Text(errorMessage)
+                                .font(AppTypography.body)
+                                .foregroundColor(.white.opacity(0.7))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, AppSpacing.lg)
+                        }
+                    }
+                    Spacer()
+                } else {
+                    // Infographics scroll view
+                    ScrollView {
+                        LazyVStack(spacing: AppSpacing.md) {
+                            ForEach(Array(infographics.enumerated()), id: \.offset) { index, image in
+                                ZoomableImageView(image: image, accent: infographicsAccent)
+                                    .padding(.horizontal, AppSpacing.md)
+                            }
+
+                            if isGenerating {
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                        .tint(.white)
+                                        .scaleEffect(0.8)
+                                    Text("memorize.infographics_generating_more".localized)
+                                        .font(AppTypography.caption)
+                                        .foregroundColor(.white.opacity(0.6))
+                                }
+                                .padding(AppSpacing.md)
+                            }
+                        }
+                        .padding(.vertical, AppSpacing.md)
+                    }
+                }
+
+                // Done button
+                Button {
+                    dismiss()
+                } label: {
+                    Text("memorize.done".localized)
+                        .font(AppTypography.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(AppCornerRadius.md)
+                }
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.bottom, AppSpacing.lg)
+            }
+            .background(AppColors.memorizeBackground.ignoresSafeArea())
+            .navigationTitle("memorize.infographics".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .task {
+            await generateInfographics()
+        }
+    }
+
+    private func generateInfographics() async {
+        let completedPages = pages.filter { $0.status == .completed }
+
+        guard !completedPages.isEmpty else {
+            errorMessage = "No text content available."
+            return
+        }
+
+        // Scale infographic count by page count:
+        // 1-5 pages → 1-2, 6-10 → 2-3, 11-20 → 3-6, 20-40 → 5-10
+        let pageCount = completedPages.count
+        let infographicCount: Int
+        switch pageCount {
+        case 1...2:   infographicCount = 1
+        case 3...5:   infographicCount = 2
+        case 6...7:   infographicCount = 2
+        case 8...10:  infographicCount = 3
+        case 11...14: infographicCount = 3
+        case 15...17: infographicCount = 4
+        case 18...20: infographicCount = 5
+        case 21...25: infographicCount = 6
+        case 26...30: infographicCount = 7
+        case 31...35: infographicCount = 8
+        case 36...40: infographicCount = 9
+        default:      infographicCount = max(10, pageCount / 4)
+        }
+        let pagesPerChunk = max(1, Int(ceil(Double(pageCount) / Double(infographicCount))))
+        let sections = groupPagesByChunk(completedPages, pagesPerChunk: pagesPerChunk)
+        totalToGenerate = sections.count
+        isGenerating = true
+
+        let apiKey = APIProviderManager.staticLiveAIAPIKey
+        guard !apiKey.isEmpty else {
+            errorMessage = "API key not configured."
+            isGenerating = false
+            return
+        }
+
+        for (index, sectionText) in sections.enumerated() {
+            progress = index + 1
+
+            let prompt = """
+            Create a visually striking infographic image in portrait orientation (9:16 aspect ratio) for mobile viewing.
+
+            Topic: \(bookTitle)\(sectionTitle.isEmpty ? "" : " — \(sectionTitle)")
+
+            Content to visualize (section \(index + 1) of \(sections.count)):
+            \(sectionText)
+
+            Design requirements:
+            - Portrait/vertical layout optimized for mobile phone screens
+            - Bold, clear typography with key facts and figures highlighted
+            - Use icons, charts, diagrams, or illustrations to represent concepts visually
+            - Professional color scheme with good contrast for readability
+            - Organize information in a clear visual hierarchy
+            - Include a section title or heading at the top
+            - Make it educational and visually engaging
+            """
+
+            if let image = await callGeminiImageGeneration(prompt: prompt, apiKey: apiKey) {
+                infographics.append(image)
+            }
+        }
+
+        isGenerating = false
+
+        if infographics.isEmpty {
+            errorMessage = "Could not generate infographics. Please try again."
+        }
+    }
+
+    /// Group pages into chunks of N pages each, returning combined text per chunk
+    private func groupPagesByChunk(_ pages: [PageCapture], pagesPerChunk: Int) -> [String] {
+        var sections: [String] = []
+        let chunkSize = max(1, pagesPerChunk)
+
+        for startIndex in stride(from: 0, to: pages.count, by: chunkSize) {
+            let endIndex = min(startIndex + chunkSize, pages.count)
+            let chunk = pages[startIndex..<endIndex]
+            let text = chunk
+                .map { $0.extractedText }
+                .joined(separator: "\n\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                sections.append(text)
+            }
+        }
+
+        return sections
+    }
+
+    private func callGeminiImageGeneration(prompt: String, apiKey: String) async -> UIImage? {
+        let model = "gemini-3.1-flash-image-preview"
+        let urlString = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
+
+        guard let url = URL(string: urlString) else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = [
+            "contents": [
+                [
+                    "parts": [
+                        ["text": prompt]
+                    ]
+                ]
+            ],
+            "generationConfig": [
+                "responseModalities": ["TEXT", "IMAGE"]
+            ]
+        ]
+
+        guard let bodyData = try? JSONSerialization.data(withJSONObject: body) else { return nil }
+        request.httpBody = bodyData
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                print("❌ [Infographics] HTTP error: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+                return nil
+            }
+
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let candidates = json["candidates"] as? [[String: Any]],
+                  let firstCandidate = candidates.first,
+                  let content = firstCandidate["content"] as? [String: Any],
+                  let parts = content["parts"] as? [[String: Any]] else {
+                print("❌ [Infographics] Failed to parse response")
+                return nil
+            }
+
+            // Find the image part in the response
+            for part in parts {
+                if let inlineData = part["inlineData"] as? [String: Any],
+                   let base64String = inlineData["data"] as? String,
+                   let imageData = Data(base64Encoded: base64String),
+                   let image = UIImage(data: imageData) {
+                    print("✅ [Infographics] Generated image: \(image.size)")
+                    return image
+                }
+            }
+
+            print("⚠️ [Infographics] No image in response")
+            return nil
+        } catch {
+            print("❌ [Infographics] Network error: \(error.localizedDescription)")
+            return nil
+        }
+    }
+}
+
+// MARK: - Zoomable Image View
+
+private struct ZoomableImageView: View {
+    let image: UIImage
+    let accent: Color
+
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    private var isZoomed: Bool { scale > 1.05 }
+
+    var body: some View {
+        Image(uiImage: image)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .cornerRadius(AppCornerRadius.md)
+            .scaleEffect(scale)
+            .offset(offset)
+            .gesture(pinchGesture)
+            .gesture(isZoomed ? dragGesture : nil)
+            .onTapGesture(count: 2) {
+                withAnimation(.spring(response: 0.3)) {
+                    if isZoomed {
+                        scale = 1.0
+                        lastScale = 1.0
+                        offset = .zero
+                        lastOffset = .zero
+                    } else {
+                        scale = 2.5
+                        lastScale = 2.5
+                    }
+                }
+            }
+    }
+
+    private var pinchGesture: some Gesture {
+        MagnificationGesture()
+            .onChanged { value in
+                scale = lastScale * value
+            }
+            .onEnded { _ in
+                lastScale = scale
+                if scale < 1.0 {
+                    withAnimation(.spring(response: 0.3)) {
+                        scale = 1.0
+                        lastScale = 1.0
+                        offset = .zero
+                        lastOffset = .zero
+                    }
+                }
+            }
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                offset = CGSize(
+                    width: lastOffset.width + value.translation.width,
+                    height: lastOffset.height + value.translation.height
+                )
+            }
+            .onEnded { _ in
+                lastOffset = offset
+            }
     }
 }
 
@@ -3213,6 +3592,7 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         case voiceSummary
         case podcast
         case readAloud
+        case infographics
     }
 
     private let synthesizer = AVSpeechSynthesizer()
@@ -3418,6 +3798,9 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         }
         if normalized.contains("read aloud") || normalized.contains("read out") || normalized.contains("read to me") || normalized.contains("text to speech") {
             return .readAloud
+        }
+        if normalized.contains("infographic") || normalized.contains("info graphic") || normalized.contains("visual") {
+            return .infographics
         }
         return nil
     }

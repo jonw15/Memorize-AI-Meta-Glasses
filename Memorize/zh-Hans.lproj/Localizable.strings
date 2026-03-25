@@ -502,13 +502,16 @@
 "memorize.interact_connecting" = "连接中...";
 "memorize.interact_placeholder" = "问我任何关于你拍摄文本的问题。";
 "memorize.podcast" = "播客";
-"memorize.voice_menu_prompt" = "你可以说：对话、总结、播客、朗读、小测验 或 语音摘要。";
+"memorize.voice_menu_prompt" = "你可以说：对话、总结、播客、朗读、信息图、小测验 或 语音摘要。";
 "memorize.podcast_header" = "AI 生成播客";
 "memorize.podcast_listening" = "正在启动播客...";
 "memorize.podcast_loading" = "播客加载中...";
 "memorize.podcast_stop" = "停止播客";
 "memorize.podcast_mute" = "静音麦克风";
 "memorize.podcast_unmute" = "取消静音";
+"memorize.infographics" = "信息图";
+"memorize.infographics_generating" = "正在生成信息图...";
+"memorize.infographics_generating_more" = "正在生成更多...";
 "memorize.read_aloud" = "朗读";
 "memorize.read_aloud_header" = "AI 朗读文本";
 "memorize.read_aloud_loading" = "连接中...";
