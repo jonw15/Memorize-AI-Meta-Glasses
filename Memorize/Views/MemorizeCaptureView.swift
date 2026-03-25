@@ -458,6 +458,8 @@ struct MemorizeCaptureView: View {
     // MARK: - Done Button
 
     private var isDoneReadingEnabled: Bool {
+        // Don't enable until intro announcer finishes speaking
+        guard introAnnouncer.hasSpoken else { return false }
         guard !viewModel.pages.isEmpty else { return true }
         guard !viewModel.isProcessing else { return false }
 
@@ -662,6 +664,7 @@ private final class CaptureVoiceCommandController: NSObject, ObservableObject {
 
 @MainActor
 private final class CaptureIntroAnnouncer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+    @Published var hasSpoken = false
     private let synthesizer = AVSpeechSynthesizer()
     private var onFinish: (() -> Void)?
 
@@ -697,9 +700,17 @@ private final class CaptureIntroAnnouncer: NSObject, ObservableObject, AVSpeechS
         onFinish = nil
     }
 
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {
+        Task { @MainActor [weak self] in
+            guard let self, !hasSpoken else { return }
+            hasSpoken = true
+        }
+    }
+
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor [weak self] in
             guard let self else { return }
+            hasSpoken = true
             // Brief delay so the last word fully renders through the audio output
             try? await Task.sleep(nanoseconds: 600_000_000)
             let callback = onFinish
@@ -937,6 +948,14 @@ private struct MemorizePostCaptureActionsView: View {
         viewModel.pages.filter { $0.status == .completed }
     }
 
+    /// True when buttons should be disabled — before voice menu speaks or while a feature is active
+    private var isButtonsDisabled: Bool {
+        !voiceMenu.hasSpoken ||
+        showInteract || showExplainPersonaSelector || showVoiceSummary || showReadAloud ||
+        viewModel.showExplain || viewModel.showQuiz || viewModel.showPodcastPlayer ||
+        viewModel.isGeneratingQuiz || viewModel.isGeneratingExplanation
+    }
+
     private func startVoiceMenu() {
         guard !completedPages.isEmpty else { return }
         voiceMenu.askAndListen { command in
@@ -1171,8 +1190,8 @@ private struct MemorizePostCaptureActionsView: View {
             )
             .cornerRadius(AppCornerRadius.md)
         }
-        .disabled(viewModel.isGeneratingQuiz || completedPages.isEmpty)
-        .opacity((viewModel.isGeneratingQuiz || completedPages.isEmpty) ? 0.5 : 1.0)
+        .disabled(isButtonsDisabled || completedPages.isEmpty)
+        .opacity((isButtonsDisabled || completedPages.isEmpty) ? 0.5 : 1.0)
     }
 
     private var explainButton: some View {
@@ -1198,8 +1217,8 @@ private struct MemorizePostCaptureActionsView: View {
             )
             .cornerRadius(AppCornerRadius.md)
         }
-        .disabled(viewModel.isGeneratingQuiz || completedPages.isEmpty || viewModel.isGeneratingExplanation)
-        .opacity((viewModel.isGeneratingQuiz || completedPages.isEmpty || viewModel.isGeneratingExplanation) ? 0.5 : 1.0)
+        .disabled(isButtonsDisabled || completedPages.isEmpty)
+        .opacity((isButtonsDisabled || completedPages.isEmpty) ? 0.5 : 1.0)
     }
 
     private var popQuizButton: some View {
@@ -1233,8 +1252,8 @@ private struct MemorizePostCaptureActionsView: View {
             )
             .cornerRadius(AppCornerRadius.md)
         }
-        .disabled(viewModel.isGeneratingQuiz || completedPages.isEmpty)
-        .opacity((viewModel.isGeneratingQuiz || completedPages.isEmpty) ? 0.5 : 1.0)
+        .disabled(isButtonsDisabled || completedPages.isEmpty)
+        .opacity((isButtonsDisabled || completedPages.isEmpty) ? 0.5 : 1.0)
     }
 
     private var voiceSummaryButton: some View {
@@ -1260,8 +1279,8 @@ private struct MemorizePostCaptureActionsView: View {
             )
             .cornerRadius(AppCornerRadius.md)
         }
-        .disabled(viewModel.isGeneratingQuiz || completedPages.isEmpty)
-        .opacity((viewModel.isGeneratingQuiz || completedPages.isEmpty) ? 0.5 : 1.0)
+        .disabled(isButtonsDisabled || completedPages.isEmpty)
+        .opacity((isButtonsDisabled || completedPages.isEmpty) ? 0.5 : 1.0)
     }
 
     private var podcastButton: some View {
@@ -1287,8 +1306,8 @@ private struct MemorizePostCaptureActionsView: View {
             )
             .cornerRadius(AppCornerRadius.md)
         }
-        .disabled(viewModel.isGeneratingQuiz || completedPages.isEmpty)
-        .opacity((viewModel.isGeneratingQuiz || completedPages.isEmpty) ? 0.5 : 1.0)
+        .disabled(isButtonsDisabled || completedPages.isEmpty)
+        .opacity((isButtonsDisabled || completedPages.isEmpty) ? 0.5 : 1.0)
     }
 
     private var readAloudButton: some View {
@@ -1314,8 +1333,8 @@ private struct MemorizePostCaptureActionsView: View {
             )
             .cornerRadius(AppCornerRadius.md)
         }
-        .disabled(viewModel.isGeneratingQuiz || completedPages.isEmpty)
-        .opacity((viewModel.isGeneratingQuiz || completedPages.isEmpty) ? 0.5 : 1.0)
+        .disabled(isButtonsDisabled || completedPages.isEmpty)
+        .opacity((isButtonsDisabled || completedPages.isEmpty) ? 0.5 : 1.0)
     }
 }
 
@@ -3202,6 +3221,7 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var onCommand: ((MenuCommand) -> Void)?
+    @Published var hasSpoken = false
     private var hasTriggered = false
     private var shouldListen = false
     private var restartTask: Task<Void, Never>?
@@ -3241,9 +3261,17 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         synthesizer.speak(utterance)
     }
 
-    // AVSpeechSynthesizerDelegate — start listening after TTS finishes
+    // AVSpeechSynthesizerDelegate — enable buttons as soon as first word is spoken
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            if !hasSpoken { hasSpoken = true }
+        }
+    }
+
+    // Start listening after TTS finishes
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor in
+            hasSpoken = true
             guard shouldListen, !hasTriggered else { return }
             // Small delay to let audio session transition
             try? await Task.sleep(nanoseconds: 300_000_000)
