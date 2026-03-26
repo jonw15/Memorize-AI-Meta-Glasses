@@ -1816,6 +1816,8 @@ private struct MemorizeReadAloudView: View {
     @State private var playbackPosition: TimeInterval = 0
     @State private var seekTarget: TimeInterval? = nil  // Non-nil while user is dragging slider
     @State private var positionTimer: Timer?
+    @State private var isSeeking = false
+    @State private var seekDebounceTask: Task<Void, Never>?
     /// Timestamp when playback started/resumed (used to calculate position)
     @State private var playbackStartDate: Date?
     /// Position offset when playback started/resumed (after seek or pause)
@@ -1968,7 +1970,7 @@ private struct MemorizeReadAloudView: View {
                     Button {
                         showVoicePicker = true
                     } label: {
-                        Image(systemName: "waveform.circle")
+                        Image(systemName: "person.crop.circle")
                             .foregroundColor(.white)
                     }
                 }
@@ -2010,37 +2012,6 @@ private struct MemorizeReadAloudView: View {
 
     private var playbackControls: some View {
         VStack(spacing: AppSpacing.sm) {
-            // Progress slider
-            VStack(spacing: 4) {
-                Slider(
-                    value: Binding(
-                        get: { min(displayPosition, effectiveMax) },
-                        set: { newValue in
-                            seekTarget = newValue
-                        }
-                    ),
-                    in: 0...effectiveMax,
-                    onEditingChanged: { editing in
-                        if !editing, let target = seekTarget {
-                            seek(to: target)
-                        }
-                    }
-                )
-                .accentColor(readAloudAccent)
-
-                HStack {
-                    Text(formatTime(displayPosition))
-                        .font(AppTypography.caption)
-                        .foregroundColor(.white.opacity(0.6))
-                        .monospacedDigit()
-                    Spacer()
-                    Text(formatTime(isStreamDone ? totalDuration : estimatedTotalDuration))
-                        .font(AppTypography.caption)
-                        .foregroundColor(.white.opacity(0.6))
-                        .monospacedDigit()
-                }
-            }
-
             // Transport controls
             HStack(spacing: AppSpacing.xl) {
                 // Skip back
@@ -2099,20 +2070,27 @@ private struct MemorizeReadAloudView: View {
     private func seek(to position: TimeInterval) {
         guard let service = geminiService else { return }
 
-        // Clear seek target immediately so the position timer isn't blocked
         seekTarget = nil
+        isSeeking = true
 
-        let clampedPosition = max(0, min(position, totalDuration))
+        let availableDuration = totalDuration
+        let clampedPosition = max(0, min(position, availableDuration))
         let byteOffset = Int(clampedPosition * bytesPerSecond)
-        // Align to 2-byte boundary (16-bit samples)
         let alignedOffset = byteOffset & ~1
 
-        service.seekAndPlay(audioData: accumulatedAudio, fromByteOffset: alignedOffset)
+        if alignedOffset < accumulatedAudio.count {
+            service.seekAndPlay(audioData: accumulatedAudio, fromByteOffset: alignedOffset)
+        }
 
         playbackPosition = clampedPosition
         isPaused = false
         startBarTimer()
-        startPositionTimer()  // Resets from the new seek position
+        startPositionTimer()
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            isSeeking = false
+        }
     }
 
     // MARK: - Position Tracking
@@ -2123,17 +2101,16 @@ private struct MemorizeReadAloudView: View {
         positionTimer?.invalidate()
         positionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
             Task { @MainActor in
-                // Update slider max from accumulated audio (stable, every 0.5s)
                 let currentTotal = totalDuration
                 if currentTotal > sliderMax {
                     sliderMax = currentTotal
                 }
 
-                guard !isPaused, seekTarget == nil, let startDate = playbackStartDate else { return }
+                guard !isPaused, let startDate = playbackStartDate else { return }
+                if seekTarget != nil { return }
                 let elapsed = Date().timeIntervalSince(startDate)
                 playbackPosition = playbackStartOffset + elapsed
-                // Clamp to total duration when stream is done
-                if isStreamDone && playbackPosition >= currentTotal {
+                if isStreamDone && !isSeeking && playbackPosition >= currentTotal {
                     playbackPosition = currentTotal
                     sliderMax = currentTotal
                     isPaused = true
@@ -2378,10 +2355,14 @@ private struct MemorizePodcastPlayerView: View {
     @State private var isPaused = false
     @State private var playbackPosition: TimeInterval = 0
     @State private var seekTarget: TimeInterval? = nil
+    @State private var scrubPosition: TimeInterval = 0
+    @State private var isScrubbing = false
     @State private var positionTimer: Timer?
     @State private var playbackStartDate: Date?
     @State private var playbackStartOffset: TimeInterval = 0
     @State private var sliderMax: TimeInterval = 0.1
+    @State private var isSeeking = false
+    @State private var seekDebounceTask: Task<Void, Never>?
 
     @State private var estimatedTotalDuration: TimeInterval = 0
 
@@ -2400,14 +2381,11 @@ private struct MemorizePodcastPlayerView: View {
     }
 
     private var displayPosition: TimeInterval {
-        seekTarget ?? playbackPosition
+        isScrubbing ? scrubPosition : (seekTarget ?? playbackPosition)
     }
 
     private var effectiveMax: TimeInterval {
-        if isStreamDone {
-            return max(totalDuration, 0.1)
-        }
-        return max(estimatedTotalDuration, sliderMax, 0.1)
+        return max(estimatedTotalDuration, totalDuration, 0.1)
     }
 
     var body: some View {
@@ -2523,7 +2501,7 @@ private struct MemorizePodcastPlayerView: View {
                     Button {
                         showVoicePicker = true
                     } label: {
-                        Image(systemName: "waveform.circle")
+                        Image(systemName: "person.crop.circle")
                             .foregroundColor(.white)
                     }
                 }
@@ -2546,10 +2524,15 @@ private struct MemorizePodcastPlayerView: View {
         .onChange(of: hasStartedPlaying) { playing in
             if playing && !isPaused {
                 playbackPosition = 0
+                scrubPosition = 0
                 playbackStartOffset = 0
                 startBarTimer()
                 startPositionTimer()
             }
+        }
+        .onChange(of: playbackPosition) { newPosition in
+            guard !isScrubbing else { return }
+            scrubPosition = min(newPosition, effectiveMax)
         }
         .onDisappear {
             stopBarTimer()
@@ -2563,34 +2546,6 @@ private struct MemorizePodcastPlayerView: View {
 
     private var podcastPlaybackControls: some View {
         VStack(spacing: AppSpacing.sm) {
-            VStack(spacing: 4) {
-                Slider(
-                    value: Binding(
-                        get: { min(displayPosition, effectiveMax) },
-                        set: { newValue in seekTarget = newValue }
-                    ),
-                    in: 0...effectiveMax,
-                    onEditingChanged: { editing in
-                        if !editing, let target = seekTarget {
-                            podcastSeek(to: target)
-                        }
-                    }
-                )
-                .accentColor(podcastAccent)
-
-                HStack {
-                    Text(formatTime(displayPosition))
-                        .font(AppTypography.caption)
-                        .foregroundColor(.white.opacity(0.6))
-                        .monospacedDigit()
-                    Spacer()
-                    Text(formatTime(isStreamDone ? totalDuration : estimatedTotalDuration))
-                        .font(AppTypography.caption)
-                        .foregroundColor(.white.opacity(0.6))
-                        .monospacedDigit()
-                }
-            }
-
             HStack(spacing: AppSpacing.xl) {
                 Button { podcastSkip(by: -skipInterval) } label: {
                     Image(systemName: "gobackward.15")
@@ -2639,14 +2594,33 @@ private struct MemorizePodcastPlayerView: View {
     private func podcastSeek(to position: TimeInterval) {
         guard let service = geminiService else { return }
         seekTarget = nil
-        let clampedPosition = max(0, min(position, totalDuration))
+        isSeeking = true
+
+        // Clamp to what we actually have
+        let availableDuration = totalDuration
+        let clampedPosition = max(0, min(position, availableDuration))
         let byteOffset = Int(clampedPosition * bytesPerSecond)
         let alignedOffset = byteOffset & ~1
-        service.seekAndPlay(audioData: accumulatedAudio, fromByteOffset: alignedOffset)
+
+        // Only seek if there's audio ahead of the seek point
+        if alignedOffset < accumulatedAudio.count {
+            service.seekAndPlay(audioData: accumulatedAudio, fromByteOffset: alignedOffset)
+        } else {
+            // Seeked to the very end; resume playback so new audio can play.
+            service.resumePlayback()
+        }
+        // If seeking to or past the live edge, streaming will resume naturally
+
         playbackPosition = clampedPosition
+        scrubPosition = clampedPosition
         isPaused = false
         startBarTimer()
         startPositionTimer()
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            isSeeking = false
+        }
     }
 
     // MARK: - Position Tracking
@@ -2659,17 +2633,30 @@ private struct MemorizePodcastPlayerView: View {
             Task { @MainActor in
                 let currentTotal = totalDuration
                 if currentTotal > sliderMax { sliderMax = currentTotal }
-                guard !isPaused, seekTarget == nil, let startDate = playbackStartDate else { return }
+                guard !isPaused, let startDate = playbackStartDate else { return }
+                // Don't update position while user is dragging the slider
+                if seekTarget != nil { return }
+                
                 let elapsed = Date().timeIntervalSince(startDate)
-                playbackPosition = playbackStartOffset + elapsed
-                if isStreamDone && playbackPosition >= currentTotal {
-                    playbackPosition = currentTotal
-                    sliderMax = currentTotal
-                    isPaused = true
-                    playbackStartDate = nil
-                    stopBarTimer()
-                    stopPositionTimer()
+                var newPos = playbackStartOffset + elapsed
+                
+                if newPos >= currentTotal {
+                    newPos = currentTotal
+                    // Shift base to prevent jumping ahead when more audio arrives
+                    playbackStartOffset = currentTotal
+                    playbackStartDate = Date()
+                    
+                    if isStreamDone && !isSeeking {
+                        playbackPosition = currentTotal
+                        sliderMax = currentTotal
+                        isPaused = true
+                        playbackStartDate = nil
+                        stopBarTimer()
+                        stopPositionTimer()
+                        return
+                    }
                 }
+                playbackPosition = newPos
             }
         }
     }
@@ -2689,10 +2676,12 @@ private struct MemorizePodcastPlayerView: View {
         Button {
             guard isConnected, let service = geminiService else { return }
             if isMuted {
+                // Unmute — let user speak/ask questions
                 service.interruptPlayback()
                 service.isMicMuted = false
                 isMuted = false
             } else {
+                // Re-mute
                 service.isMicMuted = true
                 isMuted = true
             }
@@ -2750,6 +2739,8 @@ private struct MemorizePodcastPlayerView: View {
         isStreamDone = false
         isPaused = false
         playbackPosition = 0
+        scrubPosition = 0
+        isScrubbing = false
         playbackStartOffset = 0
         playbackStartDate = nil
         sliderMax = 0.1
@@ -2834,9 +2825,20 @@ private struct MemorizePodcastPlayerView: View {
         // Accumulate raw PCM audio for seeking
         service.onAudioDelta = { (audioData: Data) in
             Task { @MainActor in
+                let wasAtEnd = playbackPosition >= totalDuration - 0.1
                 accumulatedAudio.append(audioData)
+                
                 if !hasStartedPlaying {
                     hasStartedPlaying = true
+                }
+                if isStreamDone { // Un-mark done since more audio arrived
+                    isStreamDone = false
+                }
+                if isPaused && wasAtEnd {
+                    // Auto-resume if it stalled waiting for chunks
+                    isPaused = false
+                    startBarTimer()
+                    startPositionTimer()
                 }
             }
         }
@@ -3400,7 +3402,7 @@ private struct MemorizeExplainView: View {
                     Button {
                         showVoicePicker = true
                     } label: {
-                        Image(systemName: "waveform.circle")
+                        Image(systemName: "person.crop.circle")
                             .foregroundColor(.white)
                     }
                 }
@@ -4313,7 +4315,7 @@ private struct MemorizeInteractView: View {
                     Button {
                         showVoicePicker = true
                     } label: {
-                        Image(systemName: "waveform.circle")
+                        Image(systemName: "person.crop.circle")
                             .foregroundColor(.white)
                     }
                 }
