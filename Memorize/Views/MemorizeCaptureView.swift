@@ -7,6 +7,67 @@ import SwiftUI
 import Speech
 import AVFoundation
 
+private func normalizeMemorizeLiveText(_ text: String) -> String {
+    text
+        .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+private func clippedMemorizeLiveText(_ text: String, maxChars: Int) -> String {
+    let normalized = normalizeMemorizeLiveText(text)
+    guard !normalized.isEmpty else { return "" }
+    guard normalized.count > maxChars else { return normalized }
+
+    let endIndex = normalized.index(normalized.startIndex, offsetBy: maxChars)
+    var clipped = String(normalized[..<endIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+
+    if let sentenceEnd = clipped.lastIndex(where: { ".!?".contains($0) }),
+       clipped.distance(from: clipped.startIndex, to: sentenceEnd) > maxChars / 2 {
+        clipped = String(clipped[...sentenceEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    return clipped + " ..."
+}
+
+private func buildMemorizeLiveSourceContext(
+    from pages: [PageCapture],
+    maxPages: Int,
+    maxCharsPerPage: Int,
+    maxTotalChars: Int
+) -> String {
+    let completedPages = pages.filter { $0.status == .completed }
+    guard !completedPages.isEmpty else { return "" }
+
+    let selectedPages: [PageCapture]
+    if completedPages.count <= maxPages {
+        selectedPages = completedPages
+    } else {
+        let leadingCount = max(1, maxPages / 2)
+        let trailingCount = max(1, maxPages - leadingCount)
+        selectedPages = Array(completedPages.prefix(leadingCount)) + Array(completedPages.suffix(trailingCount))
+    }
+
+    let sections = selectedPages.compactMap { page -> String? in
+        let excerpt = clippedMemorizeLiveText(page.extractedText, maxChars: maxCharsPerPage)
+        guard !excerpt.isEmpty else { return nil }
+        return "--- Page \(page.pageNumber) ---\n\(excerpt)"
+    }
+
+    guard !sections.isEmpty else { return "" }
+
+    var context = sections.joined(separator: "\n\n")
+    if completedPages.count > selectedPages.count {
+        context += "\n\n[Reference notes condensed from \(completedPages.count) pages.]"
+    }
+
+    if context.count > maxTotalChars {
+        context = clippedMemorizeLiveText(context, maxChars: maxTotalChars)
+        context += "\n[... additional context omitted ...]"
+    }
+
+    return context
+}
+
 struct MemorizeCaptureView: View {
     @ObservedObject var streamViewModel: StreamSessionViewModel
     let book: Book?
@@ -2233,7 +2294,6 @@ private struct MemorizeReadAloudView: View {
 
     private func setupAndConnect() {
         let completedPages = pages.filter { $0.status == .completed }
-
         let combinedText = completedPages
             .enumerated()
             .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
@@ -2753,13 +2813,14 @@ private struct MemorizePodcastPlayerView: View {
 
     private func setupAndConnect() {
         let completedPages = pages.filter { $0.status == .completed }
+        let sourceContext = buildMemorizeLiveSourceContext(
+            from: completedPages,
+            maxPages: 10,
+            maxCharsPerPage: 520,
+            maxTotalChars: 7200
+        )
 
-        let combinedText = completedPages
-            .enumerated()
-            .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
-            .joined(separator: "\n\n")
-
-        if combinedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if sourceContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             errorMessage = "No text content available. Capture some pages first."
             return
         }
@@ -2768,11 +2829,6 @@ private struct MemorizePodcastPlayerView: View {
         let pageCount = completedPages.count
         let targetMinutes = max(4, pageCount * 2)
         estimatedTotalDuration = Double(targetMinutes) * 60.0
-
-        let maxChars = 15000
-        let truncatedText = combinedText.count > maxChars
-            ? String(combinedText.prefix(maxChars)) + "\n[... text truncated ...]"
-            : combinedText
 
         // Track how many continuation prompts we've sent
         var continuationCount = 0
@@ -2784,7 +2840,7 @@ private struct MemorizePodcastPlayerView: View {
         Your task: Create a compelling podcast episode discussing the following reading material from "\(bookTitle)"\(sectionTitle.isEmpty ? "" : " — section: \(sectionTitle)").
 
         ---
-        \(truncatedText)
+        \(sourceContext)
         ---
 
         Guidelines for your podcast:
@@ -2800,6 +2856,8 @@ private struct MemorizePodcastPlayerView: View {
         The episode should be about \(targetMinutes) minutes long. Cover the material thoroughly.
         Do NOT mention that you are an AI. Speak as a human podcast host would.
         """
+
+        print("⚡️ [MemorizePodcast] Live context chars: \(sourceContext.count)")
 
         let apiKey = APIProviderManager.staticLiveAIAPIKey
 
@@ -3472,43 +3530,41 @@ private struct MemorizeExplainView: View {
     // MARK: - Setup
 
     private func setupAndConnect(summaryText: String) {
-
-        let completedPages = pages.filter { $0.status == .completed }
-        let combinedText = completedPages
-            .enumerated()
-            .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
-            .joined(separator: "\n\n")
-
-        let maxChars = 15000
-        let truncatedText = combinedText.count > maxChars
-            ? String(combinedText.prefix(maxChars)) + "\n[... text truncated ...]"
-            : combinedText
-
+        let sourceContext = buildMemorizeLiveSourceContext(
+            from: pages,
+            maxPages: 6,
+            maxCharsPerPage: 300,
+            maxTotalChars: 3200
+        )
+        let compactSummary = clippedMemorizeLiveText(summaryText, maxChars: 1800)
         let personaInstruction = viewModel.explanationPersona.promptInstruction
 
         let systemPrompt = """
         You are a friendly reading tutor summarizing a book for a student. Explain as if the student is \(personaInstruction)
 
-        The student has read the following text from "\(bookTitle)"\(sectionTitle.isEmpty ? "" : " — section: \(sectionTitle)"):
+        The student has read the following reference notes from "\(bookTitle)"\(sectionTitle.isEmpty ? "" : " — section: \(sectionTitle)"):
 
         ---
-        \(truncatedText)
+        \(sourceContext)
         ---
 
         Here is a written summary that was prepared:
 
         ---
-        \(summaryText)
+        \(compactSummary)
         ---
 
         Your task:
         1. First, read the summary aloud to the student in a clear, engaging way. Use the persona style described above.
         2. After reading the summary, pause briefly and invite the student to ask questions — for example: "Do you have any questions about what we just covered?"
         3. Then answer any follow-up questions the student asks, drawing from the original text and the summary.
+        4. If the student asks for a quick recap, answer in 1-2 short sentences first.
 
         Keep your responses concise and conversational. Speak clearly and at a pace suitable for learning.
         Do not apologize. Do not mention that you are an AI unless asked.
         """
+
+        print("⚡️ [MemorizeExplain] Live context chars: \(sourceContext.count), summary chars: \(compactSummary.count)")
 
         let apiKey = APIProviderManager.staticLiveAIAPIKey
         let service = GeminiLiveService(
@@ -4358,23 +4414,18 @@ private struct MemorizeInteractView: View {
     // MARK: - Setup
 
     private func setupAndConnect() {
-        let completedPages = pages.filter { $0.status == .completed }
-        let combinedText = completedPages
-            .enumerated()
-            .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
-            .joined(separator: "\n\n")
-
-        // Truncate if too long (keep under ~15k chars for system prompt)
-        let maxChars = 15000
-        let truncatedText = combinedText.count > maxChars
-            ? String(combinedText.prefix(maxChars)) + "\n[... text truncated ...]"
-            : combinedText
+        let sourceContext = buildMemorizeLiveSourceContext(
+            from: pages,
+            maxPages: 8,
+            maxCharsPerPage: 340,
+            maxTotalChars: 4200
+        )
 
         let systemPrompt = """
-        You are a friendly, knowledgeable reading tutor. The student has just read the following text from "\(bookTitle)"\(sectionTitle.isEmpty ? "" : " — section: \(sectionTitle)"):
+        You are a friendly, knowledgeable reading tutor. The student has just read the following condensed notes from "\(bookTitle)"\(sectionTitle.isEmpty ? "" : " — section: \(sectionTitle)"):
 
         ---
-        \(truncatedText)
+        \(sourceContext)
         ---
 
         Help the student understand what they read. You can:
@@ -4383,11 +4434,15 @@ private struct MemorizeInteractView: View {
         - Ask comprehension questions to test understanding
         - Summarize key points when asked
         - Connect ideas in the text to broader knowledge
+        - Give very short recap answers when the student asks for a summary of what you just said
 
-        Keep your responses concise and conversational. Speak clearly and at a pace suitable for learning.
+        Keep your responses concise and conversational. For simple recap questions, answer in 1-2 sentences before adding detail.
+        Speak clearly and at a pace suitable for learning.
         Do not apologize. Do not mention that you are an AI unless asked.
         Start by briefly greeting the student and asking what they'd like to discuss about the reading.
         """
+
+        print("⚡️ [MemorizeConversation] Live context chars: \(sourceContext.count)")
 
         let apiKey = APIProviderManager.staticLiveAIAPIKey
         let service = GeminiLiveService(

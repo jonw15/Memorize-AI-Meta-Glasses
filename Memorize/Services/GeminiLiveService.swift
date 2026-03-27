@@ -52,6 +52,8 @@ class GeminiLiveService: NSObject {
     private var isCollectingAudio = false
     private var audioChunkCount = 0
     private let minChunksBeforePlay: Int
+    private let streamingBatchSize: Int
+    private let streamingFlushDelay: TimeInterval
     private var hasStartedPlaying = false
     private var isPlaybackEngineRunning = false
     private var dropIncomingAudioUntilInterrupted = false
@@ -59,8 +61,11 @@ class GeminiLiveService: NSObject {
     // Streaming batch buffer — accumulates small chunks into larger ones for smooth playback
     private var streamingBuffer = Data()
     private var streamingFlushTimer: Timer?
-    /// Minimum bytes to accumulate before scheduling a playback buffer (~200ms at 24kHz/16-bit mono)
-    private let streamingBatchSize = 9600
+    /// Response timing instrumentation to help tune perceived latency.
+    private var responseTimingStart: Date?
+    private var responseTimingReason: String?
+    private var hasLoggedFirstTranscriptDelta = false
+    private var hasLoggedFirstAudioDelta = false
 
     // Callbacks
     var onTranscriptDelta: ((String) -> Void)?
@@ -96,13 +101,17 @@ class GeminiLiveService: NSObject {
         model: String? = nil,
         systemPrompt: String? = nil,
         includeTools: Bool = true,
-        minChunksBeforePlay: Int = 2
+        minChunksBeforePlay: Int = 1,
+        streamingBatchSize: Int = 4800,
+        streamingFlushDelay: TimeInterval = 0.04
     ) {
         self.apiKey = apiKey
         self.model = model ?? APIProviderManager.staticLiveAIDefaultModel
         self.customSystemPrompt = systemPrompt
         self.includeTools = includeTools
         self.minChunksBeforePlay = max(1, minChunksBeforePlay)
+        self.streamingBatchSize = max(2400, streamingBatchSize)
+        self.streamingFlushDelay = max(0.02, streamingFlushDelay)
         super.init()
         setupAudioEngine()
     }
@@ -145,6 +154,14 @@ class GeminiLiveService: NSObject {
                 selectBluetoothRouteIfAvailable()
             }
             try audioSession.setActive(true, options: [.notifyOthersOnDeactivation])
+
+            // Prompt Voice Isolation if not already selected — suppresses other people's voices
+            if AVCaptureDevice.preferredMicrophoneMode != .voiceIsolation {
+                print("🎤 [Gemini] Voice Isolation not active (current: \(AVCaptureDevice.preferredMicrophoneMode.rawValue)), prompting user")
+                AVCaptureDevice.showSystemUserInterface(.microphoneModes)
+            } else {
+                print("🎤 [Gemini] Voice Isolation already active")
+            }
         } catch {
             print("⚠️ [Gemini] Audio session configuration failed: \(error)")
         }
@@ -769,6 +786,8 @@ Do not apologize.
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
+        beginResponseTiming(reason: "text_prompt")
+
         let message: [String: Any] = [
             "client_content": [
                 "turns": [
@@ -921,6 +940,7 @@ Do not apologize.
 
         // Prefer explicit speech transcription when available.
         if let text = extractTranscript(from: content, containerKeys: ["outputTranscription", "output_transcription", "outputAudioTranscription", "output_audio_transcription"]) {
+            noteFirstAssistantTranscriptDelta()
             print("💬 [Gemini] AI text: \(text)")
             onTranscriptDelta?(text)
             hasOutputTranscription = true
@@ -938,6 +958,7 @@ Do not apologize.
                 if !hasOutputTranscription, let text = part["text"] as? String {
                     let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !cleaned.isEmpty, !isLikelyInternalObservationText(cleaned) {
+                        noteFirstAssistantTranscriptDelta()
                         print("💬 [Gemini] AI response fallback text: \(cleaned)")
                         onTranscriptDelta?(cleaned)
                     }
@@ -952,6 +973,7 @@ Do not apologize.
                     if dropIncomingAudioUntilInterrupted {
                         continue
                     }
+                    noteFirstAssistantAudioDelta()
                     onAudioDelta?(audioData)
                     handleAudioChunk(audioData)
                 }
@@ -964,6 +986,7 @@ Do not apologize.
             dropIncomingAudioUntilInterrupted = false
             finishAudioPlayback()
             onTranscriptDone?("")
+            finishResponseTiming(status: "turn_complete")
         }
 
         // Check for interrupted flag
@@ -972,6 +995,7 @@ Do not apologize.
             dropIncomingAudioUntilInterrupted = false
             stopPlaybackEngine()
             setupPlaybackEngine()
+            finishResponseTiming(status: "interrupted")
         }
 
         // Handle input transcription (user speech)
@@ -980,6 +1004,7 @@ Do not apologize.
             if let container = content[key] as? [String: Any] {
                 for textKey in ["text", "transcript"] {
                     if let raw = container[textKey] as? String, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        beginResponseTiming(reason: "voice_input")
                         print("👤 [Gemini] User said: \(raw)")
                         onUserTranscript?(raw)
                         break
@@ -1010,6 +1035,47 @@ Do not apologize.
             }
         }
         return nil
+    }
+
+    private func beginResponseTiming(reason: String) {
+        if reason == "voice_input", !hasLoggedFirstTranscriptDelta, !hasLoggedFirstAudioDelta {
+            responseTimingStart = Date()
+            responseTimingReason = reason
+            return
+        }
+
+        guard responseTimingStart == nil else { return }
+        responseTimingStart = Date()
+        responseTimingReason = reason
+        hasLoggedFirstTranscriptDelta = false
+        hasLoggedFirstAudioDelta = false
+    }
+
+    private func noteFirstAssistantTranscriptDelta() {
+        guard let start = responseTimingStart, !hasLoggedFirstTranscriptDelta else { return }
+        hasLoggedFirstTranscriptDelta = true
+        let elapsed = Date().timeIntervalSince(start)
+        let reason = responseTimingReason ?? "unknown"
+        print("⏱️ [Gemini] First assistant transcript delta after \(String(format: "%.2f", elapsed))s (\(reason))")
+    }
+
+    private func noteFirstAssistantAudioDelta() {
+        guard let start = responseTimingStart, !hasLoggedFirstAudioDelta else { return }
+        hasLoggedFirstAudioDelta = true
+        let elapsed = Date().timeIntervalSince(start)
+        let reason = responseTimingReason ?? "unknown"
+        print("⏱️ [Gemini] First assistant audio chunk after \(String(format: "%.2f", elapsed))s (\(reason))")
+    }
+
+    private func finishResponseTiming(status: String) {
+        guard let start = responseTimingStart else { return }
+        let elapsed = Date().timeIntervalSince(start)
+        let reason = responseTimingReason ?? "unknown"
+        print("⏱️ [Gemini] Response timing finished in \(String(format: "%.2f", elapsed))s (\(reason), \(status))")
+        responseTimingStart = nil
+        responseTimingReason = nil
+        hasLoggedFirstTranscriptDelta = false
+        hasLoggedFirstAudioDelta = false
     }
 
     // MARK: - Tool Calls
@@ -1230,7 +1296,7 @@ Do not apologize.
     /// Schedule a timer to flush the streaming buffer if no more chunks arrive soon
     private func scheduleStreamingFlush() {
         streamingFlushTimer?.invalidate()
-        streamingFlushTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: false) { [weak self] _ in
+        streamingFlushTimer = Timer.scheduledTimer(withTimeInterval: streamingFlushDelay, repeats: false) { [weak self] _ in
             self?.flushStreamingBuffer()
         }
     }
