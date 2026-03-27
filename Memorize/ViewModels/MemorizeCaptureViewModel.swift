@@ -10,6 +10,11 @@ import AudioToolbox
 import Combine
 import Photos
 
+enum PodcastMode {
+    case play        // Scrub bar, mic muted, no interaction
+    case interactive // No scrub bar, mic active, user can interrupt
+}
+
 @MainActor
 class MemorizeCaptureViewModel: ObservableObject {
     @Published var pages: [PageCapture] = []
@@ -28,6 +33,8 @@ class MemorizeCaptureViewModel: ObservableObject {
     @Published var explanationErrorMessage: String?
     @Published var podcastErrorMessage: String?
     @Published var showPodcastPlayer: Bool = false
+    @Published var podcastMode: PodcastMode = .interactive
+    @Published var showPodcastModePicker: Bool = false
 
     private let storage = MemorizeStorage.shared
     private let memorizeService = MemorizeService()
@@ -311,6 +318,12 @@ class MemorizeCaptureViewModel: ObservableObject {
             return
         }
         podcastErrorMessage = nil
+        showPodcastModePicker = true
+    }
+
+    func startPodcastWithMode(_ mode: PodcastMode) {
+        podcastMode = mode
+        showPodcastModePicker = false
         showPodcastPlayer = true
     }
 

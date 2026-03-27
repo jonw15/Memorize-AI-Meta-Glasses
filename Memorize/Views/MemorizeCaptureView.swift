@@ -1003,6 +1003,7 @@ private struct MemorizePostCaptureActionsView: View {
     @State private var showInteract = false
     @State private var showReadAloud = false
     @State private var showInfographics = false
+    @State private var showPodcastModePicker = false
     @State private var voiceMenuRestartTask: Task<Void, Never>?
     @StateObject private var voiceMenu = PostCaptureVoiceMenuController()
 
@@ -1014,7 +1015,7 @@ private struct MemorizePostCaptureActionsView: View {
     private var isButtonsDisabled: Bool {
         !voiceMenu.hasSpoken ||
         showInteract || showExplainPersonaSelector || showVoiceSummary || showReadAloud || showInfographics ||
-        viewModel.showExplain || viewModel.showQuiz || viewModel.showPodcastPlayer ||
+        viewModel.showExplain || viewModel.showQuiz || viewModel.showPodcastPlayer || viewModel.showPodcastModePicker ||
         viewModel.isGeneratingQuiz || viewModel.isGeneratingExplanation
     }
 
@@ -1188,10 +1189,17 @@ private struct MemorizePostCaptureActionsView: View {
                 pages: completedPages,
                 bookTitle: bookTitle,
                 sectionTitle: sectionTitle,
+                mode: viewModel.podcastMode,
                 onClose: {
                     viewModel.showPodcastPlayer = false
                 }
             )
+        }
+        .sheet(isPresented: $viewModel.showPodcastModePicker) {
+            PodcastModePickerView { mode in
+                viewModel.startPodcastWithMode(mode)
+            }
+            .presentationDetents([.height(280)])
         }
         .fullScreenCover(isPresented: $showReadAloud) {
             MemorizeReadAloudView(
@@ -1229,6 +1237,9 @@ private struct MemorizePostCaptureActionsView: View {
         }
         .onChange(of: viewModel.showQuiz) { showing in
             if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
+        }
+        .onChange(of: viewModel.showPodcastModePicker) { showing in
+            if showing { voiceMenu.stop() } else if !viewModel.showPodcastPlayer { restartVoiceMenuAfterDelay() }
         }
         .onChange(of: viewModel.showPodcastPlayer) { showing in
             if showing { voiceMenu.stop() } else { restartVoiceMenuAfterDelay() }
@@ -2391,12 +2402,84 @@ private struct MemorizeReadAloudView: View {
     }
 }
 
+// MARK: - Podcast Mode Picker
+
+private struct PodcastModePickerView: View {
+    let onSelect: (PodcastMode) -> Void
+    @Environment(\.dismiss) private var dismiss
+    private let podcastAccent = Color(red: 0.64, green: 0.21, blue: 0.83)
+
+    var body: some View {
+        VStack(spacing: AppSpacing.lg) {
+            Text("Podcast Mode")
+                .font(AppTypography.title2)
+                .foregroundColor(.white)
+                .padding(.top, AppSpacing.lg)
+
+            VStack(spacing: AppSpacing.md) {
+                Button {
+                    onSelect(.play)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 28))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Play")
+                                .font(AppTypography.headline)
+                            Text("Listen with playback controls")
+                                .font(AppTypography.caption)
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                    .foregroundColor(.white)
+                    .padding(AppSpacing.md)
+                    .background(podcastAccent.opacity(0.25))
+                    .cornerRadius(AppCornerRadius.md)
+                }
+
+                Button {
+                    onSelect(.interactive)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "mic.circle.fill")
+                            .font(.system(size: 28))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Interactive")
+                                .font(AppTypography.headline)
+                            Text("Interrupt and talk to the host")
+                                .font(AppTypography.caption)
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                    .foregroundColor(.white)
+                    .padding(AppSpacing.md)
+                    .background(podcastAccent.opacity(0.25))
+                    .cornerRadius(AppCornerRadius.md)
+                }
+            }
+            .padding(.horizontal, AppSpacing.md)
+
+            Spacer()
+        }
+        .background(AppColors.memorizeBackground.ignoresSafeArea())
+    }
+}
+
 // MARK: - Podcast Player View (Gemini Live)
 
 private struct MemorizePodcastPlayerView: View {
     let pages: [PageCapture]
     let bookTitle: String
     let sectionTitle: String
+    let mode: PodcastMode
     let onClose: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -2518,14 +2601,14 @@ private struct MemorizePodcastPlayerView: View {
                         .padding(.horizontal, AppSpacing.md)
                 }
 
-                if isConnected {
+                if isConnected && mode == .interactive {
                     microphoneButton
                 }
 
                 Spacer()
 
-                // Playback controls
-                if hasStartedPlaying {
+                // Playback controls (scrub bar only in Play mode)
+                if hasStartedPlaying && mode == .play {
                     podcastPlaybackControls
                         .padding(.horizontal, AppSpacing.md)
                 }
@@ -2871,10 +2954,11 @@ private struct MemorizePodcastPlayerView: View {
         service.onConnected = { [service] in
             Task { @MainActor in
                 isConnected = true
-                service.isMicMuted = true
+                let micMuted = mode == .play
+                service.isMicMuted = micMuted
                 service.startRecording()
                 isRecording = true
-                isMuted = true
+                isMuted = micMuted
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 service.sendTextInput("Begin the podcast now. Start with your intro and dive deep into the content. You have \(targetMinutes) minutes.")
             }
