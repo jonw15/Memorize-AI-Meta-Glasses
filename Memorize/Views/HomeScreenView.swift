@@ -21,134 +21,43 @@ struct HomeScreenView: View {
   var forceProjectIntroOnly: Bool = false
   var onNewProject: ((ProjectContextSnapshot) -> Void)? = nil
   @State private var showConnectionSuccess = false
+  @State private var showConnectPage = false
 
   var body: some View {
     ZStack {
-      // Gradient background
-      LinearGradient(
-        colors: [
-          AppColors.primary.opacity(0.15),
-          AppColors.secondary.opacity(0.15),
-          Color.white
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-      )
-      .edgesIgnoringSafeArea(.all)
+      AppColors.memorizeBackground
+        .edgesIgnoringSafeArea(.all)
 
-      VStack(spacing: AppSpacing.xl) {
-        Spacer()
-
-        // Aria Logo
-        VStack(spacing: AppSpacing.md) {
-          Image(.cameraAccessIcon)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(width: 100)
-            .shadow(color: AppShadow.medium(), radius: 10, x: 0, y: 5)
-
-          Text("Aria")
-            .font(AppTypography.largeTitle)
-            .foregroundColor(AppColors.textPrimary)
-
-          Text("Rayban Meta Assistant")
-            .font(AppTypography.callout)
-            .foregroundColor(AppColors.textSecondary)
-        }
-
-        // Features
-        VStack(spacing: AppSpacing.md) {
-          FeatureTipView(
-            icon: "video.fill",
-            title: "Live Video",
-            text: "Record video directly from the glasses perspective, capturing what you see and hear"
-          )
-          FeatureTipView(
-            icon: "brain.head.profile",
-            title: "AI Chat",
-            text: "Real-time AI assistant, providing smart help anytime, anywhere"
-          )
-          FeatureTipView(
-            icon: "waveform",
-            title: "Open Audio",
-            text: "Keep your ears open to the world around you while receiving notifications"
-          )
-        }
-
-        Spacer()
-
-        // Connection Button
-        VStack(spacing: AppSpacing.md) {
-          Text("You will be redirected to the Meta AI app to confirm connection")
-            .font(AppTypography.footnote)
-            .foregroundColor(AppColors.textSecondary)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, AppSpacing.lg)
-
-          Button {
-            if forceProjectIntroOnly {
-              onNewProject?(ProjectContextSnapshot(instructions: [], tools: [], parts: [], videos: []))
-            } else {
-              Task { await viewModel.connectGlasses() }
-            }
-          } label: {
-            HStack(spacing: AppSpacing.sm) {
-              if viewModel.registrationState == .registering {
-                ProgressView()
-                  .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                Text("Connecting...")
-              } else {
-                Image(systemName: "eye.circle.fill")
-                  .font(.title3)
-                Text("Connect Ray-Ban Meta")
-              }
-            }
-            .font(AppTypography.headline)
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, AppSpacing.md)
-            .background(
-              LinearGradient(
-                colors: [AppColors.primary, AppColors.secondary],
-                startPoint: .leading,
-                endPoint: .trailing
-              )
-            )
-            .cornerRadius(AppCornerRadius.lg)
-            .shadow(color: AppShadow.medium(), radius: 8, x: 0, y: 4)
-          }
-          .disabled(viewModel.registrationState == .registering)
-          .padding(.horizontal, AppSpacing.lg)
-        }
-        .padding(.bottom, AppSpacing.xl)
+      if showConnectPage {
+        connectGlassesPage
+      } else {
+        welcomePage
       }
-      .padding(.vertical, AppSpacing.xl)
 
       // Connection Success Toast
       if showConnectionSuccess {
         VStack {
           Spacer()
 
-          HStack(spacing: AppSpacing.md) {
+          HStack(spacing: 12) {
             Image(systemName: "checkmark.circle.fill")
               .font(.title2)
               .foregroundColor(.green)
 
-            VStack(alignment: .leading, spacing: AppSpacing.xs) {
+            VStack(alignment: .leading, spacing: 2) {
               Text("Connected Successfully")
                 .font(AppTypography.headline)
                 .foregroundColor(.white)
-              Text("Entering Aria...")
+              Text("Entering Recall...")
                 .font(AppTypography.caption)
-                .foregroundColor(.white.opacity(0.9))
+                .foregroundColor(Color.white.opacity(0.7))
             }
 
             Spacer()
           }
           .padding(AppSpacing.md)
-          .background(Color.black.opacity(0.85))
+          .background(AppColors.memorizeCard)
           .cornerRadius(AppCornerRadius.lg)
-          .shadow(color: AppShadow.large(), radius: 15, x: 0, y: 8)
           .padding(AppSpacing.lg)
           .transition(.move(edge: .bottom).combined(with: .opacity))
         }
@@ -159,8 +68,6 @@ struct HomeScreenView: View {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
           showConnectionSuccess = true
         }
-
-        // Auto dismiss after 1.5 seconds
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
           withAnimation {
             showConnectionSuccess = false
@@ -170,9 +77,170 @@ struct HomeScreenView: View {
     }
   }
 
+  // MARK: - Welcome Page
+
+  private var welcomePage: some View {
+    VStack(spacing: 0) {
+      Spacer()
+
+      // Logo & Title
+      VStack(spacing: AppSpacing.sm) {
+        Image(systemName: "brain.head.profile.fill")
+          .font(.system(size: 52))
+          .foregroundColor(AppColors.memorizeAccent)
+          .padding(.bottom, AppSpacing.sm)
+
+        Text("Recall")
+          .font(.system(size: 38, weight: .bold))
+          .foregroundColor(.white)
+
+        Text("AI-Powered Study Assistant")
+          .font(AppTypography.subheadline)
+          .foregroundColor(Color.white.opacity(0.5))
+      }
+      .padding(.bottom, AppSpacing.xl)
+
+      // Features
+      VStack(spacing: AppSpacing.sm) {
+        featureRow(icon: "camera.fill", title: "Capture Anything", text: "Snap pages with your glasses or phone camera")
+        featureRow(icon: "sparkles", title: "AI Study Tools", text: "Podcasts, quizzes, summaries, and conversations")
+        featureRow(icon: "doc.on.doc.fill", title: "Multiple Sources", text: "PDFs, notes, and photos — all in one project")
+      }
+      .padding(.horizontal, AppSpacing.md)
+
+      Spacer()
+
+      // "Do you have glasses?" section
+      VStack(spacing: AppSpacing.sm) {
+        Text("Do you have Ray-Ban Meta glasses?")
+          .font(AppTypography.subheadline)
+          .foregroundColor(Color.white.opacity(0.6))
+
+        Button {
+          withAnimation { showConnectPage = true }
+        } label: {
+          HStack(spacing: 8) {
+            Image(systemName: "eyeglasses")
+              .font(.title3)
+            Text("Yes, connect my glasses")
+          }
+          .font(AppTypography.headline)
+          .foregroundColor(.white)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 16)
+          .background(AppColors.memorizeAccent)
+          .cornerRadius(AppCornerRadius.lg)
+        }
+        .padding(.horizontal, AppSpacing.lg)
+
+        Button {
+          if forceProjectIntroOnly {
+            onNewProject?(ProjectContextSnapshot(instructions: [], tools: [], parts: [], videos: []))
+          } else {
+            // Skip glasses — mark as registered so app proceeds
+            viewModel.skipRegistration()
+          }
+        } label: {
+          Text("No, use phone camera only")
+            .font(AppTypography.subheadline)
+            .foregroundColor(Color.white.opacity(0.5))
+            .padding(.vertical, 12)
+        }
+      }
+      .padding(.bottom, AppSpacing.xl)
+    }
+  }
+
+  // MARK: - Connect Glasses Page
+
+  private var connectGlassesPage: some View {
+    VStack(spacing: 0) {
+      Spacer()
+
+      VStack(spacing: AppSpacing.md) {
+        Image(systemName: "eyeglasses")
+          .font(.system(size: 52))
+          .foregroundColor(AppColors.memorizeAccent)
+
+        Text("Connect Ray-Ban Meta")
+          .font(.system(size: 28, weight: .bold))
+          .foregroundColor(.white)
+
+        Text("Make sure your glasses are in developer mode and nearby")
+          .font(AppTypography.subheadline)
+          .foregroundColor(Color.white.opacity(0.5))
+          .multilineTextAlignment(.center)
+          .padding(.horizontal, AppSpacing.xl)
+      }
+
+      Spacer()
+
+      VStack(spacing: AppSpacing.md) {
+        Button {
+          Task { await viewModel.connectGlasses() }
+        } label: {
+          HStack(spacing: AppSpacing.sm) {
+            if viewModel.registrationState == .registering {
+              ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+              Text("Connecting...")
+            } else {
+              Image(systemName: "link.circle.fill")
+                .font(.title3)
+              Text("Connect Now")
+            }
+          }
+          .font(AppTypography.headline)
+          .foregroundColor(.white)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 16)
+          .background(AppColors.memorizeAccent)
+          .cornerRadius(AppCornerRadius.lg)
+        }
+        .disabled(viewModel.registrationState == .registering)
+        .padding(.horizontal, AppSpacing.lg)
+
+        Button {
+          withAnimation { showConnectPage = false }
+        } label: {
+          Text("Back")
+            .font(AppTypography.subheadline)
+            .foregroundColor(Color.white.opacity(0.5))
+            .padding(.vertical, 12)
+        }
+      }
+      .padding(.bottom, AppSpacing.xl)
+    }
+  }
+
+  private func featureRow(icon: String, title: String, text: String) -> some View {
+    HStack(spacing: 14) {
+      Image(systemName: icon)
+        .font(.system(size: 18))
+        .foregroundColor(AppColors.memorizeAccent)
+        .frame(width: 40, height: 40)
+        .background(AppColors.memorizeAccent.opacity(0.15))
+        .clipShape(Circle())
+
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title)
+          .font(AppTypography.subheadline)
+          .foregroundColor(.white)
+        Text(text)
+          .font(AppTypography.caption)
+          .foregroundColor(Color.white.opacity(0.5))
+      }
+
+      Spacer()
+    }
+    .padding(AppSpacing.sm)
+    .background(AppColors.memorizeCard)
+    .cornerRadius(AppCornerRadius.md)
+  }
+
 }
 
-// MARK: - Feature Tip View
+// MARK: - Feature Tip View (kept for backward compatibility)
 
 struct FeatureTipView: View {
   let icon: String
@@ -181,30 +249,21 @@ struct FeatureTipView: View {
 
   var body: some View {
     HStack(alignment: .top, spacing: AppSpacing.md) {
-      ZStack {
-        Circle()
-          .fill(
-            LinearGradient(
-              colors: [AppColors.primary.opacity(0.2), AppColors.secondary.opacity(0.2)],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
-          .frame(width: 48, height: 48)
-
-        Image(systemName: icon)
-          .font(.title3)
-          .foregroundColor(AppColors.primary)
-      }
+      Image(systemName: icon)
+        .font(.title3)
+        .foregroundColor(AppColors.memorizeAccent)
+        .frame(width: 48, height: 48)
+        .background(AppColors.memorizeAccent.opacity(0.15))
+        .clipShape(Circle())
 
       VStack(alignment: .leading, spacing: AppSpacing.xs) {
         Text(title)
           .font(AppTypography.headline)
-          .foregroundColor(AppColors.textPrimary)
+          .foregroundColor(.white)
 
         Text(text)
           .font(AppTypography.subheadline)
-          .foregroundColor(AppColors.textSecondary)
+          .foregroundColor(Color.white.opacity(0.5))
           .fixedSize(horizontal: false, vertical: true)
       }
 

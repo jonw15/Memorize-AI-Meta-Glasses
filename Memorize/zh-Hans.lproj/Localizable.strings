@@ -424,16 +424,16 @@
 "livechat.start" = "开始";
 "livechat.scanning" = "扫码加入";
 
-// MARK: - Memorize 记忆学习
-"tab.memorize" = "记忆";
-"memorize.title" = "记忆学习";
+// MARK: - Recall 回忆学习
+"tab.memorize" = "Recall";
+"memorize.title" = "Recall";
 "memorize.currently_reading" = "正在阅读";
 "memorize.existing_projects" = "已有项目";
-"memorize.add_to_library" = "添加到书架";
+"memorize.add_to_library" = "拍摄、上传、学习任何内容。";
 "memorize.add_new_book" = "添加新书";
-"memorize.new_session" = "新建学习会话";
-"memorize.enter_book_details" = "输入书籍信息后开始学习（书名必填）";
-"memorize.book_name_field" = "书名";
+"memorize.new_session" = "新建项目";
+"memorize.enter_book_details" = "输入项目标题";
+"memorize.book_name_field" = "项目名称";
 "memorize.title_field" = "书名";
 "memorize.author_field" = "作者";
 "memorize.chapter_field" = "章节";
@@ -445,9 +445,9 @@
 "memorize.cover_capture_take_photo" = "开始 3 秒倒计时";
 "memorize.cover_capture_cancel_countdown" = "取消倒计时";
 "memorize.cover_capture_processing" = "正在识别封面...";
-"memorize.start_session" = "开始学习";
+"memorize.start_session" = "创建项目";
 "memorize.disconnect_glasses" = "断开连接";
-"memorize.delete_session_title" = "删除学习会话？";
+"memorize.delete_session_title" = "删除项目？";
 "memorize.delete_session_message" = "确定要删除“%@”吗？此操作无法撤销。";
 "memorize.delete_session_confirm" = "删除";
 "memorize.cancel" = "取消";

@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Aria Spark Memorize</string>
+	<string>Recall</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Aria</string>
+	<string>Recall</string>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
@@ -56,15 +56,15 @@
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Needed to connect to Meta AI Glasses</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Aria Spark Memorize uses the camera to scan book covers and capture pages for AI-powered studying.</string>
+	<string>Recall uses the camera to scan book covers and capture pages for AI-powered studying.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Aria Spark needs microphone access for real-time voice conversations with smart glasses.</string>
+	<string>Recall needs microphone access for real-time voice conversations and AI study tools.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Aria Spark uses speech recognition so you can summarize what you read and get AI feedback.</string>
+	<string>Recall uses speech recognition so you can summarize what you read and get AI feedback.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Aria Spark needs photo library access to save photos captured from smart glasses.</string>
+	<string>Recall needs photo library access to save photos captured from smart glasses.</string>
 	<key>NSSiriUsageDescription</key>
-	<string>Aria Spark needs Siri access to support voice shortcuts for Quick Vision.</string>
+	<string>Recall needs Siri access to support voice shortcuts.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -96,6 +96,13 @@ class MemorizeCaptureViewModel: ObservableObject {
     func startCountdown() {
         guard !isCountingDown, !isGeneratingQuiz else { return }
 
+        // Phone camera: capture immediately, no countdown needed
+        if captureDevice == .phone {
+            AudioServicesPlaySystemSound(1108)
+            captureAndQueue()
+            return
+        }
+
         isCountingDown = true
         countdownValue = 3
 

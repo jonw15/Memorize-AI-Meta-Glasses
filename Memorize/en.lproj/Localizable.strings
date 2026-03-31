@@ -423,16 +423,16 @@
 "livechat.start" = "Start";
 "livechat.scanning" = "Scan to join";
 
-// MARK: - Memorize
-"tab.memorize" = "Memorize";
-"memorize.title" = "Memorize";
+// MARK: - Recall
+"tab.memorize" = "Recall";
+"memorize.title" = "Recall";
 "memorize.currently_reading" = "Currently Reading";
 "memorize.existing_projects" = "Existing Projects";
-"memorize.add_to_library" = "Add to Library";
+"memorize.add_to_library" = "Capture, upload, and study anything.";
 "memorize.add_new_book" = "Add New Book";
-"memorize.new_session" = "New Session";
-"memorize.enter_book_details" = "Enter book details (Book Name is required)";
-"memorize.book_name_field" = "Book Name";
+"memorize.new_session" = "New Project";
+"memorize.enter_book_details" = "Enter a title for your project";
+"memorize.book_name_field" = "Project Name";
 "memorize.title_field" = "Title";
 "memorize.author_field" = "Author";
 "memorize.chapter_field" = "Chapter";
@@ -444,9 +444,9 @@
 "memorize.cover_capture_take_photo" = "Start 3s Countdown";
 "memorize.cover_capture_cancel_countdown" = "Cancel Countdown";
 "memorize.cover_capture_processing" = "Analyzing cover...";
-"memorize.start_session" = "Add Book";
+"memorize.start_session" = "Create Project";
 "memorize.disconnect_glasses" = "Disconnect";
-"memorize.delete_session_title" = "Delete Session?";
+"memorize.delete_session_title" = "Delete Project?";
 "memorize.delete_session_message" = "Are you sure you want to delete \"%@\"? This cannot be undone.";
 "memorize.delete_session_confirm" = "Delete";
 "memorize.cancel" = "Cancel";

@@ -115,16 +115,18 @@ struct MemorizeCaptureView: View {
                 // Camera button
                 captureButton
 
-                // 3S Delay indicator
-                delayIndicator
-                    .padding(.top, AppSpacing.md)
+                // 3S Delay indicator (glasses only)
+                if viewModel.captureDevice == .glasses {
+                    delayIndicator
+                        .padding(.top, AppSpacing.md)
 
-                Text("Say \"take a photo\" or \"done reading\"")
-                    .font(AppTypography.caption)
-                    .foregroundColor(Color.white.opacity(0.55))
-                    .multilineTextAlignment(.center)
-                    .padding(.top, AppSpacing.sm)
-                    .padding(.horizontal, AppSpacing.md)
+                    Text("Say \"take a photo\" or \"done reading\"")
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.55))
+                        .multilineTextAlignment(.center)
+                        .padding(.top, AppSpacing.sm)
+                        .padding(.horizontal, AppSpacing.md)
+                }
 
                 Spacer()
 
@@ -170,7 +172,7 @@ struct MemorizeCaptureView: View {
         .fullScreenCover(isPresented: $showPostCaptureActions) {
             MemorizePostCaptureActionsView(
                 viewModel: viewModel,
-                bookTitle: displayBookTitle,
+                bookTitle: displayBookTitle ?? "",
                 sectionTitle: viewModel.currentBook?.chapter.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             ) {
                 showPostCaptureActions = false
@@ -323,12 +325,14 @@ struct MemorizeCaptureView: View {
                 .font(AppTypography.title)
                 .foregroundColor(.white)
 
-            Text(displayBookTitle)
-                .font(AppTypography.headline)
-                .foregroundColor(AppColors.memorizeAccent)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .padding(.horizontal, AppSpacing.md)
+            if let title = displayBookTitle {
+                Text(title)
+                    .font(AppTypography.headline)
+                    .foregroundColor(AppColors.memorizeAccent)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .padding(.horizontal, AppSpacing.md)
+            }
 
             Text("memorize.capture_subtitle".localized)
                 .font(AppTypography.subheadline)
@@ -338,9 +342,9 @@ struct MemorizeCaptureView: View {
         .padding(.top, AppSpacing.lg)
     }
 
-    private var displayBookTitle: String {
+    private var displayBookTitle: String? {
         let title = viewModel.currentBook?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return title.isEmpty ? "memorize.unknown_book".localized : title
+        return title.isEmpty ? nil : title
     }
 
     // MARK: - Countdown Overlay
@@ -425,6 +429,7 @@ struct MemorizeCaptureView: View {
                                     Text(device == .glasses ? "memorize.device_glasses_desc".localized : "memorize.device_phone_desc".localized)
                                         .font(AppTypography.caption)
                                         .foregroundColor(Color.white.opacity(0.5))
+                                        .multilineTextAlignment(.leading)
                                 }
 
                                 Spacer()
@@ -637,9 +642,9 @@ struct MemorizeCaptureView: View {
             Task {
                 await streamViewModel.stopSession()
             }
-            showPostCaptureActions = true
+            dismiss()
         } label: {
-            Text("memorize.done_reading".localized)
+            Text("memorize.done".localized)
                 .font(AppTypography.headline)
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)

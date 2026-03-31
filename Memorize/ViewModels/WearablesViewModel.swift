@@ -110,6 +110,11 @@ class WearablesViewModel: ObservableObject {
     }
   }
 
+  /// Skip glasses registration — allows phone-only users to proceed
+  func skipRegistration() {
+    registrationState = .registered
+  }
+
   func disconnectGlasses() async {
     do {
       try await wearables.startUnregistration()

@@ -51,16 +51,31 @@ struct SourcesTabView: View {
                                 detail: "\(viewModel.book.completedPages) pages",
                                 onDelete: nil
                             )
+                            .onTapGesture {
+                                showCameraCapture = true
+                            }
                         }
 
                         // New-style sources
                         ForEach(viewModel.book.sources) { source in
-                            sourceRow(
-                                icon: source.iconName,
-                                name: source.name,
-                                detail: sourceDetail(source),
-                                onDelete: { pendingDeleteSource = source }
-                            )
+                            if source.sourceType == .camera {
+                                sourceRow(
+                                    icon: source.iconName,
+                                    name: source.name,
+                                    detail: sourceDetail(source),
+                                    onDelete: { pendingDeleteSource = source }
+                                )
+                                .onTapGesture {
+                                    showCameraCapture = true
+                                }
+                            } else {
+                                sourceRow(
+                                    icon: source.iconName,
+                                    name: source.name,
+                                    detail: sourceDetail(source),
+                                    onDelete: { pendingDeleteSource = source }
+                                )
+                            }
                         }
                     }
 
