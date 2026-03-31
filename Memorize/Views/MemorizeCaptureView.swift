@@ -2607,10 +2607,11 @@ private struct MemorizePodcastPlayerView: View {
 
                 Spacer()
 
-                // Playback controls (scrub bar only in Play mode)
+                // Playback controls (play/pause + skip, Play mode only)
                 if hasStartedPlaying && mode == .play {
                     podcastPlaybackControls
                         .padding(.horizontal, AppSpacing.md)
+                        .padding(.bottom, AppSpacing.xl)
                 }
 
                 // Done button
@@ -2730,7 +2731,8 @@ private struct MemorizePodcastPlayerView: View {
     }
 
     private func podcastSkip(by seconds: TimeInterval) {
-        let newPosition = max(0, min(playbackPosition + seconds, totalDuration))
+        let current = isScrubbing ? scrubPosition : playbackPosition
+        let newPosition = max(0, min(current + seconds, totalDuration))
         podcastSeek(to: newPosition)
     }
 
@@ -2776,7 +2778,7 @@ private struct MemorizePodcastPlayerView: View {
             Task { @MainActor in
                 let currentTotal = totalDuration
                 if currentTotal > sliderMax { sliderMax = currentTotal }
-                guard !isPaused, let startDate = playbackStartDate else { return }
+                guard !isPaused, !isScrubbing, let startDate = playbackStartDate else { return }
                 // Don't update position while user is dragging the slider
                 if seekTarget != nil { return }
                 
@@ -2969,7 +2971,7 @@ private struct MemorizePodcastPlayerView: View {
             Task { @MainActor in
                 let wasAtEnd = playbackPosition >= totalDuration - 0.1
                 accumulatedAudio.append(audioData)
-                
+
                 if !hasStartedPlaying {
                     hasStartedPlaying = true
                 }
