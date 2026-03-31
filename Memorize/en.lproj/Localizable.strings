@@ -555,3 +555,7 @@
 "memorize.voice_summary_subtitle" = "Practice explaining in your own words";
 "memorize.podcast_hand_raise" = "Ask";
 "memorize.podcast_resume" = "Resume";
+"memorize.select_device" = "Choose Capture Device";
+"memorize.select_device_desc" = "Select which camera to use for capturing pages";
+"memorize.device_glasses_desc" = "Capture through connected Ray-Ban Meta glasses";
+"memorize.device_phone_desc" = "Use your iPhone's built-in camera";

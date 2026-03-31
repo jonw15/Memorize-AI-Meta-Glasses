@@ -9,10 +9,23 @@ import AVFoundation
 import AudioToolbox
 import Combine
 import Photos
+import AVKit
 
 enum PodcastMode {
     case play        // Scrub bar, mic muted, no interaction
     case interactive // No scrub bar, mic active, user can interrupt
+}
+
+enum CaptureDevice: String, CaseIterable {
+    case glasses = "Ray-Ban Meta"
+    case phone = "iPhone Camera"
+
+    var iconName: String {
+        switch self {
+        case .glasses: return "eyeglasses"
+        case .phone: return "iphone"
+        }
+    }
 }
 
 @MainActor
@@ -35,6 +48,9 @@ class MemorizeCaptureViewModel: ObservableObject {
     @Published var showPodcastPlayer: Bool = false
     @Published var podcastMode: PodcastMode = .interactive
     @Published var showPodcastModePicker: Bool = false
+    @Published var captureDevice: CaptureDevice = .glasses
+    @Published var showDevicePicker: Bool = false
+    @Published var showPhoneCamera: Bool = false
 
     private let storage = MemorizeStorage.shared
     private let memorizeService = MemorizeService()
@@ -49,8 +65,13 @@ class MemorizeCaptureViewModel: ObservableObject {
     private var hasPhotoObserver: Bool = false
     private var cancellables = Set<AnyCancellable>()
 
-    // Reference to stream view model for photo capture
+    // Reference to stream view model for glasses photo capture
     weak var streamViewModel: StreamSessionViewModel?
+
+    // Phone camera capture session
+    let phoneCaptureSession = AVCaptureSession()
+    private let phonePhotoOutput = AVCapturePhotoOutput()
+    private var phoneCaptureDelegate: PhoneCaptureDelegate?
 
     // MARK: - Initialize with existing book
 
@@ -114,6 +135,11 @@ class MemorizeCaptureViewModel: ObservableObject {
     // MARK: - Photo Capture & OCR
 
     private func captureAndQueue() {
+        if captureDevice == .phone {
+            captureFromPhone()
+            return
+        }
+
         guard let streamVM = streamViewModel else {
             print("❌ [Memorize] No stream view model")
             return
@@ -131,6 +157,79 @@ class MemorizeCaptureViewModel: ObservableObject {
 
         // Capture photo from glasses
         streamVM.capturePhoto()
+    }
+
+    // MARK: - Phone Camera
+
+    func setupPhoneCamera() {
+        guard phoneCaptureSession.inputs.isEmpty else { return }
+        phoneCaptureSession.beginConfiguration()
+        phoneCaptureSession.sessionPreset = .photo
+
+        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+              let input = try? AVCaptureDeviceInput(device: camera) else {
+            print("❌ [Memorize] Failed to access phone camera")
+            phoneCaptureSession.commitConfiguration()
+            return
+        }
+
+        if phoneCaptureSession.canAddInput(input) {
+            phoneCaptureSession.addInput(input)
+        }
+        if phoneCaptureSession.canAddOutput(phonePhotoOutput) {
+            phoneCaptureSession.addOutput(phonePhotoOutput)
+        }
+
+        phoneCaptureSession.commitConfiguration()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            self?.phoneCaptureSession.startRunning()
+            print("📱 [Memorize] Phone camera session started")
+        }
+    }
+
+    func stopPhoneCamera() {
+        guard phoneCaptureSession.isRunning else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            self?.phoneCaptureSession.stopRunning()
+            print("📱 [Memorize] Phone camera session stopped")
+        }
+    }
+
+    private func captureFromPhone() {
+        let pageNumber = (pages.map(\.pageNumber).max() ?? 0) + 1
+        let page = PageCapture(pageNumber: pageNumber, status: .capturing)
+        pages.append(page)
+        updateProgress(for: page.id, to: 0.08)
+        saveProgress()
+
+        let delegate = PhoneCaptureDelegate { [weak self] image in
+            Task { @MainActor in
+                guard let self, let image else {
+                    print("❌ [Memorize] Phone capture failed")
+                    return
+                }
+                self.queuedCaptures.append((pageId: page.id, image: image))
+                self.processNextQueuedCapture()
+            }
+        }
+        phoneCaptureDelegate = delegate
+
+        let settings = AVCapturePhotoSettings()
+        phonePhotoOutput.capturePhoto(with: settings, delegate: delegate)
+        print("📱 [Memorize] Phone photo capture triggered")
+    }
+
+    /// Handle a photo captured from the phone's camera (used by fullscreen picker fallback)
+    func handlePhoneCameraCapture(_ image: UIImage) {
+        let pageNumber = (pages.map(\.pageNumber).max() ?? 0) + 1
+        let page = PageCapture(pageNumber: pageNumber, status: .capturing)
+        pages.append(page)
+        updateProgress(for: page.id, to: 0.08)
+        saveProgress()
+
+        queuedCaptures.append((pageId: page.id, image: image))
+        processNextQueuedCapture()
     }
 
     private func ensurePhotoObserver() {
@@ -581,5 +680,33 @@ class MemorizeCaptureViewModel: ObservableObject {
             task.cancel()
         }
         cancellables.removeAll()
+        let session = phoneCaptureSession
+        DispatchQueue.global(qos: .userInitiated).async {
+            if session.isRunning { session.stopRunning() }
+        }
+    }
+}
+
+// MARK: - Phone Camera Photo Delegate
+
+class PhoneCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+    private let completion: (UIImage?) -> Void
+
+    init(completion: @escaping (UIImage?) -> Void) {
+        self.completion = completion
+    }
+
+    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        if let error {
+            print("❌ [PhoneCapture] Error: \(error)")
+            completion(nil)
+            return
+        }
+        guard let data = photo.fileDataRepresentation(),
+              let image = UIImage(data: data) else {
+            completion(nil)
+            return
+        }
+        completion(image)
     }
 }

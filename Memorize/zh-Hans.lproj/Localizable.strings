@@ -556,3 +556,7 @@
 "memorize.voice_summary_subtitle" = "用自己的话练习复述";
 "memorize.podcast_hand_raise" = "提问";
 "memorize.podcast_resume" = "继续";
+"memorize.select_device" = "选择拍摄设备";
+"memorize.select_device_desc" = "选择用于拍摄页面的相机";
+"memorize.device_glasses_desc" = "通过已连接的 Ray-Ban Meta 眼镜拍摄";
+"memorize.device_phone_desc" = "使用 iPhone 内置相机";

@@ -78,6 +78,7 @@ struct MemorizeCaptureView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedThumbnail: TimelineThumbnailPreview?
     @State private var showPostCaptureActions = false
+    @State private var hasSelectedDevice = false
     @State private var didPlayIntroInstruction = false
     @State private var introSequenceTask: Task<Void, Never>?
     private let processingAccent = Color(red: 0.34, green: 0.86, blue: 1.0)
@@ -92,6 +93,9 @@ struct MemorizeCaptureView: View {
 
     var body: some View {
         NavigationView {
+            if !hasSelectedDevice {
+                deviceSelectionScreen
+            } else {
             VStack(spacing: 0) {
                 // Header
                 headerSection
@@ -149,6 +153,7 @@ struct MemorizeCaptureView: View {
                 }
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
+            } // end else (hasSelectedDevice)
         }
         .fullScreenCover(item: $selectedThumbnail) { preview in
             TimelinePreviewEditorView(
@@ -170,6 +175,14 @@ struct MemorizeCaptureView: View {
             ) {
                 showPostCaptureActions = false
                 dismiss()
+            }
+        }
+        .fullScreenCover(isPresented: $viewModel.showPhoneCamera) {
+            PhoneCameraView { image in
+                viewModel.showPhoneCamera = false
+                if let image {
+                    viewModel.handlePhoneCameraCapture(image)
+                }
             }
         }
         .onAppear {
@@ -206,6 +219,11 @@ struct MemorizeCaptureView: View {
                 if !showPostCaptureActions && selectedThumbnail == nil {
                     captureVoiceController.resumeListening()
                 }
+            }
+        }
+        .onChange(of: hasSelectedDevice) { selected in
+            if selected && viewModel.captureDevice == .phone {
+                viewModel.setupPhoneCamera()
             }
         }
         .onChange(of: showPostCaptureActions) { isPresented in
@@ -261,7 +279,11 @@ struct MemorizeCaptureView: View {
 
     private var cameraPreview: some View {
         ZStack {
-            if let videoFrame = streamViewModel.currentVideoFrame {
+            if viewModel.captureDevice == .phone {
+                PhoneCameraPreviewView(session: viewModel.phoneCaptureSession)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 300)
+            } else if let videoFrame = streamViewModel.currentVideoFrame {
                 Image(uiImage: videoFrame)
                     .resizable()
                     .aspectRatio(videoFrame.size, contentMode: .fit)
@@ -342,12 +364,10 @@ struct MemorizeCaptureView: View {
             }
         } label: {
             ZStack {
-                // Outer ring
                 Circle()
                     .stroke(AppColors.memorizeAccent.opacity(0.3), lineWidth: 4)
                     .frame(width: 100, height: 100)
 
-                // Inner filled circle
                 Circle()
                     .fill(
                         viewModel.isCountingDown
@@ -356,7 +376,6 @@ struct MemorizeCaptureView: View {
                     )
                     .frame(width: 80, height: 80)
 
-                // Icon
                 Image(systemName: viewModel.isCountingDown ? "stop.fill" : "camera.fill")
                     .font(.system(size: 28))
                     .foregroundColor(.white)
@@ -364,6 +383,80 @@ struct MemorizeCaptureView: View {
         }
         .disabled(viewModel.isGeneratingQuiz)
         .opacity(viewModel.isGeneratingQuiz ? 0.5 : 1.0)
+    }
+
+    // MARK: - Device Selection Screen
+
+    private var deviceSelectionScreen: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            VStack(spacing: AppSpacing.lg) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 40))
+                    .foregroundColor(AppColors.memorizeAccent)
+
+                Text("memorize.select_device".localized)
+                    .font(AppTypography.title2)
+                    .foregroundColor(.white)
+
+                Text("memorize.select_device_desc".localized)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(Color.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, AppSpacing.xl)
+
+                VStack(spacing: AppSpacing.sm) {
+                    ForEach(CaptureDevice.allCases, id: \.self) { device in
+                        Button {
+                            viewModel.captureDevice = device
+                            hasSelectedDevice = true
+                        } label: {
+                            HStack(spacing: 16) {
+                                Image(systemName: device.iconName)
+                                    .font(.system(size: 24))
+                                    .frame(width: 44, height: 44)
+                                    .background(AppColors.memorizeAccent.opacity(0.15))
+                                    .clipShape(Circle())
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(device.rawValue)
+                                        .font(AppTypography.headline)
+                                    Text(device == .glasses ? "memorize.device_glasses_desc".localized : "memorize.device_phone_desc".localized)
+                                        .font(AppTypography.caption)
+                                        .foregroundColor(Color.white.opacity(0.5))
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(Color.white.opacity(0.3))
+                            }
+                            .foregroundColor(.white)
+                            .padding(AppSpacing.md)
+                            .background(AppColors.memorizeCard)
+                            .cornerRadius(AppCornerRadius.lg)
+                        }
+                    }
+                }
+                .padding(.horizontal, AppSpacing.md)
+            }
+
+            Spacer()
+        }
+        .background(AppColors.memorizeBackground.ignoresSafeArea())
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .toolbarColorScheme(.dark, for: .navigationBar)
     }
 
     // MARK: - Delay Indicator
@@ -4733,5 +4826,118 @@ struct MemorizeInteractView: View {
         }
         .disabled(!isConnected)
         .opacity(!isConnected ? 0.5 : 1.0)
+    }
+}
+
+// MARK: - Capture Device Picker
+
+struct CaptureDevicePickerView: View {
+    @Binding var selectedDevice: CaptureDevice
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: AppSpacing.md) {
+            Text("memorize.select_device".localized)
+                .font(AppTypography.headline)
+                .foregroundColor(.white)
+                .padding(.top, AppSpacing.md)
+
+            ForEach(CaptureDevice.allCases, id: \.self) { device in
+                Button {
+                    selectedDevice = device
+                    dismiss()
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: device.iconName)
+                            .font(.system(size: 22))
+                            .frame(width: 36)
+
+                        Text(device.rawValue)
+                            .font(AppTypography.subheadline)
+
+                        Spacer()
+
+                        if device == selectedDevice {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(AppColors.memorizeAccent)
+                        }
+                    }
+                    .foregroundColor(.white)
+                    .padding(AppSpacing.sm)
+                    .background(device == selectedDevice ? AppColors.memorizeAccent.opacity(0.2) : Color.white.opacity(0.08))
+                    .cornerRadius(AppCornerRadius.md)
+                }
+            }
+            .padding(.horizontal, AppSpacing.md)
+
+            Spacer()
+        }
+        .background(AppColors.memorizeBackground.ignoresSafeArea())
+    }
+}
+
+// MARK: - Phone Camera View
+
+struct PhoneCameraView: UIViewControllerRepresentable {
+    let onCapture: (UIImage?) -> Void
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onCapture: onCapture)
+    }
+
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let onCapture: (UIImage?) -> Void
+
+        init(onCapture: @escaping (UIImage?) -> Void) {
+            self.onCapture = onCapture
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            let image = info[.originalImage] as? UIImage
+            onCapture(image)
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            onCapture(nil)
+        }
+    }
+}
+
+// MARK: - Phone Camera Live Preview
+
+struct PhoneCameraPreviewView: UIViewRepresentable {
+    let session: AVCaptureSession
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
+        previewLayer.videoGravity = .resizeAspectFill
+        previewLayer.frame = view.bounds
+        view.layer.addSublayer(previewLayer)
+        context.coordinator.previewLayer = previewLayer
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            context.coordinator.previewLayer?.frame = uiView.bounds
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    class Coordinator {
+        var previewLayer: AVCaptureVideoPreviewLayer?
     }
 }
