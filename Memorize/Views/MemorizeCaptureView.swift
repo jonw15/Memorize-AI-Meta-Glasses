@@ -991,7 +991,7 @@ private struct TimelinePreviewEditorView: View {
     }
 }
 
-private struct MemorizePostCaptureActionsView: View {
+struct MemorizePostCaptureActionsView: View {
     @ObservedObject var viewModel: MemorizeCaptureViewModel
     let bookTitle: String
     let sectionTitle: String
@@ -1456,7 +1456,7 @@ private struct MemorizePostCaptureActionsView: View {
 
 // MARK: - Infographics View (Gemini Image Generation)
 
-private struct MemorizeInfographicsView: View {
+struct MemorizeInfographicsView: View {
     let pages: [PageCapture]
     let bookTitle: String
     let sectionTitle: String
@@ -1722,7 +1722,7 @@ private struct MemorizeInfographicsView: View {
 
 // MARK: - Gemini Voice Picker
 
-private struct GeminiVoice: Identifiable {
+struct GeminiVoice: Identifiable {
     let id: String
     let name: String
     let description: String
@@ -1737,7 +1737,7 @@ private struct GeminiVoice: Identifiable {
     ]
 }
 
-private struct GeminiVoicePickerView: View {
+struct GeminiVoicePickerView: View {
     @Binding var selectedVoice: String
     let accent: Color
     @Environment(\.dismiss) private var dismiss
@@ -1797,7 +1797,7 @@ private struct GeminiVoicePickerView: View {
 
 // MARK: - Zoomable Image View
 
-private struct ZoomableImageView: View {
+struct ZoomableImageView: View {
     let image: UIImage
     let accent: Color
 
@@ -1867,7 +1867,7 @@ private struct ZoomableImageView: View {
 
 // MARK: - Read Aloud View (Gemini Live)
 
-private struct MemorizeReadAloudView: View {
+struct MemorizeReadAloudView: View {
     let pages: [PageCapture]
     let bookTitle: String
     let sectionTitle: String
@@ -2404,7 +2404,7 @@ private struct MemorizeReadAloudView: View {
 
 // MARK: - Podcast Mode Picker
 
-private struct PodcastModePickerView: View {
+struct PodcastModePickerView: View {
     let onSelect: (PodcastMode) -> Void
     @Environment(\.dismiss) private var dismiss
     private let podcastAccent = Color(red: 0.64, green: 0.21, blue: 0.83)
@@ -2475,7 +2475,7 @@ private struct PodcastModePickerView: View {
 
 // MARK: - Podcast Player View (Gemini Live)
 
-private struct MemorizePodcastPlayerView: View {
+struct MemorizePodcastPlayerView: View {
     let pages: [PageCapture]
     let bookTitle: String
     let sectionTitle: String
@@ -3019,7 +3019,7 @@ private struct MemorizePodcastPlayerView: View {
     }
 }
 
-private struct ProcessingBarIndicator: View {
+struct ProcessingBarIndicator: View {
     let accent: Color
     let progress: Double
 
@@ -3158,7 +3158,7 @@ private final class VoiceSummarySpeechRecognizer: NSObject, ObservableObject {
     }
 }
 
-private struct MemorizeVoiceSummaryView: View {
+struct MemorizeVoiceSummaryView: View {
     let pages: [PageCapture]
     let bookTitle: String
     let sectionTitle: String
@@ -3428,7 +3428,7 @@ private struct MemorizeVoiceSummaryView: View {
     }
 }
 
-private struct MemorizeExplainView: View {
+struct MemorizeExplainView: View {
     @ObservedObject var viewModel: MemorizeCaptureViewModel
     let bookTitle: String
     let sectionTitle: String
@@ -3904,7 +3904,7 @@ private struct MemorizeExplainView: View {
 
 // MARK: - Memorize Interact View (Gemini Live Voice)
 
-private struct MemorizeInteractMessage: Identifiable {
+struct MemorizeInteractMessage: Identifiable {
     let id = UUID()
     let isUser: Bool
     let text: String
@@ -4138,7 +4138,7 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
 
 // MARK: - Explain Persona Picker with Voice
 
-private struct ExplainPersonaPickerView: View {
+struct ExplainPersonaPickerView: View {
     let onSelect: (MemorizeExplainPersona) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -4355,7 +4355,7 @@ private final class ExplainPersonaVoiceListener: ObservableObject {
     }
 }
 
-private struct ThinkingDotsView: View {
+struct ThinkingDotsView: View {
     @State private var dotCount = 0
     private let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
 
@@ -4373,7 +4373,7 @@ private struct ThinkingDotsView: View {
     }
 }
 
-private struct MemorizeInteractView: View {
+struct MemorizeInteractView: View {
     let pages: [PageCapture]
     let bookTitle: String
     let sectionTitle: String

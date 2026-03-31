@@ -19,6 +19,7 @@ struct MemorizeHomeView: View {
     @State private var newSessionDetent: PresentationDetent = .medium
     @State private var selectedBook: Book?
     @State private var selectedParentBook: Book?
+    @State private var selectedProjectBook: Book?
     @State private var pendingDeleteBook: Book?
     @State private var newSessionTitle: String = ""
     @State private var newSessionAuthor: String = ""
@@ -43,25 +44,48 @@ struct MemorizeHomeView: View {
     private let pdfImportService = PDFImportService()
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: AppSpacing.lg) {
-                homeHeaderSection
+        VStack(spacing: 0) {
+            homeHeaderSection
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.top, AppSpacing.sm)
 
-                // Add to Library Section (top)
-                addBookSection
-
-                // Existing Projects Section (scrollable panel)
-                if !viewModel.books.isEmpty {
-                    existingProjectsSection
+                // Project list
+                if viewModel.books.isEmpty {
+                    Spacer()
+                    VStack(spacing: AppSpacing.md) {
+                        Image(systemName: "book.closed")
+                            .font(.system(size: 40))
+                            .foregroundColor(Color.white.opacity(0.3))
+                        Text("memorize.no_projects".localized)
+                            .font(AppTypography.subheadline)
+                            .foregroundColor(Color.white.opacity(0.5))
+                    }
+                    Spacer()
                 } else {
-                    Spacer(minLength: 40)
+                    ScrollView {
+                        VStack(spacing: AppSpacing.sm) {
+                            ForEach(viewModel.books) { book in
+                                compactProjectCard(book: book)
+                                    .onTapGesture {
+                                        if book.hasSections {
+                                            selectedParentBook = book
+                                        } else {
+                                            selectedProjectBook = book
+                                        }
+                                    }
+                            }
+                        }
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.top, AppSpacing.md)
+                    }
                 }
+
+                // Bottom action bar
+                bottomActionBar
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.bottom, AppSpacing.lg)
             }
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.top, AppSpacing.md)
-            .background(AppColors.memorizeBackground.ignoresSafeArea())
-            .toolbarColorScheme(.dark, for: .navigationBar)
-        }
+        .background(AppColors.memorizeBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
             viewModel.loadBooks()
@@ -135,6 +159,21 @@ struct MemorizeHomeView: View {
                 parentBook: parentBook,
                 streamViewModel: streamViewModel
             )
+        }
+        .fullScreenCover(item: $selectedProjectBook, onDismiss: {
+            viewModel.loadBooks()
+        }) { book in
+            ProjectDetailView(
+                book: book,
+                streamViewModel: streamViewModel
+            )
+        }
+        .onChange(of: selectedProjectBook?.id) { id in
+            if id != nil {
+                homeVoice.suspendListening()
+            } else {
+                homeVoice.resumeListening()
+            }
         }
         .sheet(isPresented: $showNewSessionForm) {
             newSessionSheet
@@ -370,6 +409,120 @@ struct MemorizeHomeView: View {
                         .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [8, 6]))
                         .foregroundColor(Color.white.opacity(0.15))
                 )
+            }
+        }
+    }
+
+    // MARK: - Compact Project Card
+
+    private func compactProjectCard(book: Book) -> some View {
+        HStack(spacing: 12) {
+            // AI-assigned icon
+            Text(book.icon.isEmpty ? "\u{1F4D6}" : book.icon)
+                .font(.system(size: 28))
+                .frame(width: 44, height: 44)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(AppCornerRadius.sm)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(book.title.isEmpty ? "memorize.untitled".localized : book.title)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+
+                HStack(spacing: 4) {
+                    Text("\(book.sourceCount) \(book.sourceCount == 1 ? "source" : "sources")")
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.5))
+                    Text("·")
+                        .foregroundColor(Color.white.opacity(0.3))
+                    Text(formatDate(book.updatedAt))
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.5))
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, AppSpacing.md)
+        .padding(.vertical, AppSpacing.sm)
+        .background(AppColors.memorizeCard)
+        .cornerRadius(AppCornerRadius.lg)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppCornerRadius.lg)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
+        .contextMenu {
+            Button(role: .destructive) {
+                pendingDeleteBook = book
+            } label: {
+                Label("memorize.delete_session_confirm".localized, systemImage: "trash")
+            }
+        }
+    }
+
+    private func projectEmoji(for book: Book) -> String {
+        if book.sources.contains(where: { $0.sourceType == .pdf }) { return "\u{1F4D5}" } // red book
+        if book.hasSections { return "\u{1F4DA}" } // books
+        if !book.pages.isEmpty { return "\u{1F4F7}" } // camera
+        return "\u{1F4D3}" // notebook
+    }
+
+    private func statusIcon(for book: Book) -> String {
+        let hasContent = !book.allPages.filter({ $0.status == .completed }).isEmpty
+        return hasContent ? "play.fill" : "pencil"
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter.string(from: date)
+    }
+
+    // MARK: - Bottom Action Bar
+
+    private var bottomActionBar: some View {
+        HStack(spacing: AppSpacing.md) {
+            // Camera quick-add
+            Button {
+                // Open camera capture, then user picks project
+                selectedBook = Book()
+            } label: {
+                Image(systemName: "camera")
+                    .font(.system(size: 18))
+                    .foregroundColor(.white)
+                    .padding(14)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: AppCornerRadius.md))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppCornerRadius.md)
+                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    )
+            }
+
+            // Create New
+            Button {
+                newSessionTitle = ""
+                newSessionAuthor = ""
+                newSessionChapter = ""
+                autoFillErrorMessage = nil
+                isWaitingForCoverSnapshot = false
+                coverSnapshotTimeoutTask?.cancel()
+                coverSnapshotTimeoutTask = nil
+                newSessionDetent = .medium
+                showNewSessionForm = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("memorize.create_new".localized)
+                        .font(AppTypography.subheadline)
+                }
+                .foregroundColor(.black)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 14)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: AppCornerRadius.lg))
             }
         }
     }

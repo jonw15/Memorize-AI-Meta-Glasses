@@ -145,6 +145,27 @@ struct MemorizeService {
         return parseBookInfo(from: result)
     }
 
+    // MARK: - Generate Icon Emoji
+
+    func generateIconEmoji(for title: String) async throws -> String {
+        let prompt = """
+        Pick exactly ONE emoji that best represents this book or document title.
+
+        Title: \(title)
+
+        Respond with ONLY the single emoji character, nothing else. No text, no spaces, no quotes.
+        Choose something creative and specific to the subject matter, not generic book emojis.
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        let emoji = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Take only the first character cluster (emoji) in case the model returns more
+        if let first = emoji.first {
+            return String(first)
+        }
+        return "\u{1F4D6}" // fallback: open book
+    }
+
     // MARK: - Generate Quiz
 
     func generateQuiz(from pages: [PageCapture]) async throws -> [QuizQuestion] {

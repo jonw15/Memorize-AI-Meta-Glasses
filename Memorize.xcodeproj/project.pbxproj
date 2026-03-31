@@ -103,6 +103,12 @@
 		MZ0007000700070007 /* MemorizeCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MZ1007000700070007 /* MemorizeCaptureView.swift */; };
 		PC0001000100010001 /* PodcastService.swift in Sources */ = {isa = PBXBuildFile; fileRef = PC1001000100010001 /* PodcastService.swift */; };
 		PD0001000100010001 /* PDFImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = PD1001000100010001 /* PDFImportService.swift */; };
+		PJ0001000100010001 /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PJ1001000100010001 /* ProjectDetailView.swift */; };
+		PJ0002000200020002 /* SourcesTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PJ1002000200020002 /* SourcesTabView.swift */; };
+		PJ0003000300030003 /* StudyTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PJ1003000300030003 /* StudyTabView.swift */; };
+		PJ0004000400040004 /* AddSourceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = PJ1004000400040004 /* AddSourceSheet.swift */; };
+		PJ0005000500050005 /* TextNoteEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PJ1005000500050005 /* TextNoteEditorView.swift */; };
+		PJ0006000600060006 /* ProjectDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = PJ1006000600060006 /* ProjectDetailViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -222,6 +228,12 @@
 		MZ1007000700070007 /* MemorizeCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorizeCaptureView.swift; sourceTree = "<group>"; };
 		PC1001000100010001 /* PodcastService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodcastService.swift; sourceTree = "<group>"; };
 		PD1001000100010001 /* PDFImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFImportService.swift; sourceTree = "<group>"; };
+		PJ1001000100010001 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
+		PJ1002000200020002 /* SourcesTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcesTabView.swift; sourceTree = "<group>"; };
+		PJ1003000300030003 /* StudyTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyTabView.swift; sourceTree = "<group>"; };
+		PJ1004000400040004 /* AddSourceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddSourceSheet.swift; sourceTree = "<group>"; };
+		PJ1005000500050005 /* TextNoteEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextNoteEditorView.swift; sourceTree = "<group>"; };
+		PJ1006000600060006 /* ProjectDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -359,6 +371,7 @@
 				LT1003000300030003 /* LiveTranslateViewModel.swift */,
 				MZ1004000400040004 /* MemorizeHomeViewModel.swift */,
 				MZ1005000500050005 /* MemorizeCaptureViewModel.swift */,
+				PJ1006000600060006 /* ProjectDetailViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -422,6 +435,11 @@
 				MZ1007000700070007 /* MemorizeCaptureView.swift */,
 				BS1001000100010001 /* BookSectionsView.swift */,
 				MQ1001000100010001 /* MemorizeQuizView.swift */,
+				PJ1001000100010001 /* ProjectDetailView.swift */,
+				PJ1002000200020002 /* SourcesTabView.swift */,
+				PJ1003000300030003 /* StudyTabView.swift */,
+				PJ1004000400040004 /* AddSourceSheet.swift */,
+				PJ1005000500050005 /* TextNoteEditorView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -681,6 +699,12 @@
 				MQ0001000100010001 /* MemorizeQuizView.swift in Sources */,
 				PD0001000100010001 /* PDFImportService.swift in Sources */,
 				PC0001000100010001 /* PodcastService.swift in Sources */,
+				PJ0001000100010001 /* ProjectDetailView.swift in Sources */,
+				PJ0002000200020002 /* SourcesTabView.swift in Sources */,
+				PJ0003000300030003 /* StudyTabView.swift in Sources */,
+				PJ0004000400040004 /* AddSourceSheet.swift in Sources */,
+				PJ0005000500050005 /* TextNoteEditorView.swift in Sources */,
+				PJ0006000600060006 /* ProjectDetailViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -53,6 +53,48 @@ struct PageCapture: Identifiable, Codable {
     }
 }
 
+// MARK: - Source Type
+
+enum SourceType: String, Codable {
+    case camera
+    case pdf
+    case textNote
+    case file
+}
+
+// MARK: - Source
+
+struct Source: Identifiable, Codable {
+    let id: UUID
+    var name: String
+    var sourceType: SourceType
+    var pages: [PageCapture]
+    let createdAt: Date
+    var updatedAt: Date
+
+    init(name: String, sourceType: SourceType, pages: [PageCapture] = []) {
+        self.id = UUID()
+        self.name = name
+        self.sourceType = sourceType
+        self.pages = pages
+        self.createdAt = Date()
+        self.updatedAt = Date()
+    }
+
+    var completedPages: Int {
+        pages.filter { $0.status == .completed }.count
+    }
+
+    var iconName: String {
+        switch sourceType {
+        case .camera: return "camera.fill"
+        case .pdf: return "doc.fill"
+        case .textNote: return "note.text"
+        case .file: return "doc.text.fill"
+        }
+    }
+}
+
 // MARK: - Book
 
 struct Book: Identifiable, Codable {
@@ -60,22 +102,26 @@ struct Book: Identifiable, Codable {
     var title: String
     var author: String
     var chapter: String
+    var icon: String  // AI-assigned emoji
     var pages: [PageCapture]
     var sections: [Book]
+    var sources: [Source]
     let createdAt: Date
     var updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, title, author, chapter, pages, sections, createdAt, updatedAt
+        case id, title, author, chapter, icon, pages, sections, sources, createdAt, updatedAt
     }
 
-    init(title: String = "", author: String = "", chapter: String = "", pages: [PageCapture] = [], sections: [Book] = []) {
+    init(title: String = "", author: String = "", chapter: String = "", icon: String = "", pages: [PageCapture] = [], sections: [Book] = [], sources: [Source] = []) {
         self.id = UUID()
         self.title = title
         self.author = author
         self.chapter = chapter
+        self.icon = icon
         self.pages = pages
         self.sections = sections
+        self.sources = sources
         self.createdAt = Date()
         self.updatedAt = Date()
     }
@@ -86,8 +132,10 @@ struct Book: Identifiable, Codable {
         title = try container.decode(String.self, forKey: .title)
         author = try container.decode(String.self, forKey: .author)
         chapter = try container.decodeIfPresent(String.self, forKey: .chapter) ?? ""
+        icon = try container.decodeIfPresent(String.self, forKey: .icon) ?? ""
         pages = try container.decodeIfPresent([PageCapture].self, forKey: .pages) ?? []
         sections = try container.decodeIfPresent([Book].self, forKey: .sections) ?? []
+        sources = try container.decodeIfPresent([Source].self, forKey: .sources) ?? []
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
@@ -98,10 +146,23 @@ struct Book: Identifiable, Codable {
         try container.encode(title, forKey: .title)
         try container.encode(author, forKey: .author)
         try container.encode(chapter, forKey: .chapter)
+        try container.encode(icon, forKey: .icon)
         try container.encode(pages, forKey: .pages)
         try container.encode(sections, forKey: .sections)
+        try container.encode(sources, forKey: .sources)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
+    }
+
+    /// All content pages from legacy pages + all sources, for study actions
+    var allPages: [PageCapture] {
+        pages + sources.flatMap(\.pages)
+    }
+
+    var sourceCount: Int {
+        var count = sources.count
+        if !pages.isEmpty { count += 1 } // Legacy camera pages count as one source
+        return max(count, 0)
     }
 
     var currentPage: Int {

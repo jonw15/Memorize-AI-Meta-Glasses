@@ -88,11 +88,16 @@ class MemorizeStorage {
     // MARK: - Delete Book
 
     func deleteBook(_ id: UUID) {
-        // Delete thumbnail files for this book's pages (and section pages)
+        // Delete thumbnail files for this book's pages, sources, and section pages
         let books = loadBooks()
         if let book = books.first(where: { $0.id == id }) {
             for page in book.pages {
                 deleteThumbnail(for: page.id)
+            }
+            for source in book.sources {
+                for page in source.pages {
+                    deleteThumbnail(for: page.id)
+                }
             }
             for section in book.sections {
                 for page in section.pages {
@@ -126,7 +131,7 @@ class MemorizeStorage {
         try? fileManager.removeItem(at: url)
     }
 
-    /// Load thumbnails from disk into a book's pages
+    /// Load thumbnails from disk into a book's pages and source pages
     func loadThumbnails(for book: inout Book) {
         var validPages: [PageCapture] = []
         for var page in book.pages {
@@ -138,5 +143,15 @@ class MemorizeStorage {
             }
         }
         book.pages = validPages
+
+        // Also load thumbnails for source pages (camera/PDF sources have thumbnails)
+        for i in book.sources.indices {
+            for j in book.sources[i].pages.indices {
+                let pageId = book.sources[i].pages[j].id
+                if let data = loadThumbnail(for: pageId) {
+                    book.sources[i].pages[j].thumbnailData = data
+                }
+            }
+        }
     }
 }
