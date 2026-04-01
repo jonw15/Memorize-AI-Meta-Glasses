@@ -36,24 +36,7 @@ struct MainAppView: View {
   var body: some View {
     Group {
       if viewModel.registrationState == .registered || viewModel.hasMockDevice {
-        if showLaunchIntro {
-          HomeScreenView(
-            viewModel: viewModel,
-            forceProjectIntroOnly: true,
-            onNewProject: { context in
-              restoreProjectContext = context
-              showLaunchIntro = false
-
-              if PermissionsManager.shared.checkAllPermissions() {
-                hasCheckedPermissions = true
-                shouldAutoLaunchLiveAI = true
-              } else {
-                hasCheckedPermissions = false
-              }
-            }
-          )
-        } else {
-          // Registered/connected device
+          // Registered/connected device — go straight to main app
           if !hasCheckedPermissions {
             // First launch, request permissions
             PermissionsRequestView { _ in
@@ -72,7 +55,6 @@ struct MainAppView: View {
                 quickVisionManager.setStreamViewModel(streamViewModel)
               }
           }
-        }
       } else {
         // Not registered - show registration/onboarding flow
         HomeScreenView(viewModel: viewModel)

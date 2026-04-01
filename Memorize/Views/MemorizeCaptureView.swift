@@ -147,6 +147,9 @@ struct MemorizeCaptureView: View {
                         introAnnouncer.stop()
                         captureVoiceController.stopListening()
                         viewModel.finishSession()
+                        Task {
+                            await streamViewModel.stopSession()
+                        }
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
@@ -192,27 +195,7 @@ struct MemorizeCaptureView: View {
             viewModel.loadBook(book)
             // Release any audio session held by previous voice controllers
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            introSequenceTask?.cancel()
-            introSequenceTask = Task {
-                // Brief delay to let previous audio sessions fully release
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                await streamViewModel.handleStartStreaming()
-
-                if !didPlayIntroInstruction {
-                    didPlayIntroInstruction = true
-                    captureVoiceController.suspendListening()
-
-                    // Let startup/system announcement finish before intro guidance.
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
-                    guard !Task.isCancelled else { return }
-
-                    introAnnouncer.speak("Say take a photo to capture a page, or say done reading when you are finished") {
-                        startCaptureVoiceCommands()
-                    }
-                } else {
-                    startCaptureVoiceCommands()
-                }
-            }
+            // Don't start streaming yet — wait for device selection
         }
         .onChange(of: viewModel.isCountingDown) { isCountingDown in
             if isCountingDown {
@@ -224,8 +207,28 @@ struct MemorizeCaptureView: View {
             }
         }
         .onChange(of: hasSelectedDevice) { selected in
-            if selected && viewModel.captureDevice == .phone {
+            guard selected else { return }
+            if viewModel.captureDevice == .phone {
                 viewModel.setupPhoneCamera()
+            } else {
+                // Glasses selected — start streaming
+                introSequenceTask?.cancel()
+                introSequenceTask = Task {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    await streamViewModel.handleStartStreaming()
+
+                    if !didPlayIntroInstruction {
+                        didPlayIntroInstruction = true
+                        captureVoiceController.suspendListening()
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        guard !Task.isCancelled else { return }
+                        introAnnouncer.speak("Say take a photo to capture a page, or say done reading when you are finished") {
+                            startCaptureVoiceCommands()
+                        }
+                    } else {
+                        startCaptureVoiceCommands()
+                    }
+                }
             }
         }
         .onChange(of: showPostCaptureActions) { isPresented in
@@ -247,6 +250,10 @@ struct MemorizeCaptureView: View {
             introSequenceTask = nil
             introAnnouncer.stop()
             captureVoiceController.stopListening()
+            viewModel.stopPhoneCamera()
+            Task {
+                await streamViewModel.stopSession()
+            }
         }
     }
 
