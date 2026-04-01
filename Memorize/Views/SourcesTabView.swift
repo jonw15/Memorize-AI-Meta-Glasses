@@ -15,6 +15,7 @@ struct SourcesTabView: View {
     @State private var showTextNoteEditor = false
     @State private var showCameraCapture = false
     @State private var pendingDeleteSource: Source?
+    @State private var viewingSource: Source?
     @State private var pendingAction: PendingSourceAction?
 
     private enum PendingSourceAction {
@@ -79,6 +80,9 @@ struct SourcesTabView: View {
                                     detail: sourceDetail(source),
                                     onDelete: { pendingDeleteSource = source }
                                 )
+                                .onTapGesture {
+                                    viewingSource = source
+                                }
                             }
                         }
                     }
@@ -193,6 +197,9 @@ struct SourcesTabView: View {
                 secondaryButton: .cancel()
             )
         }
+        .fullScreenCover(item: $viewingSource) { source in
+            SourceTextView(source: source)
+        }
         .onAppear {
             // Auto-open add source sheet only for brand-new empty projects (no title, no sources)
             if !didAutoShowAddSource
@@ -254,6 +261,67 @@ struct SourcesTabView: View {
         }
     }
 
+}
+
+// MARK: - Source Text View
+
+struct SourceTextView: View {
+    let source: Source
+    @Environment(\.dismiss) private var dismiss
+
+    private var allText: String {
+        source.pages
+            .filter { $0.status == .completed }
+            .map { $0.extractedText }
+            .joined(separator: "\n\n")
+    }
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppSpacing.md) {
+                    // Source info
+                    HStack(spacing: 10) {
+                        Image(systemName: source.iconName)
+                            .font(.system(size: 16))
+                            .foregroundColor(AppColors.memorizeAccent)
+                        Text(source.sourceType == .pdf ? "\(source.pages.count) pages" : "")
+                            .font(AppTypography.caption)
+                            .foregroundColor(Color.white.opacity(0.5))
+                    }
+                    .padding(.bottom, AppSpacing.xs)
+
+                    if allText.isEmpty {
+                        Text("No text content available")
+                            .font(AppTypography.subheadline)
+                            .foregroundColor(Color.white.opacity(0.4))
+                            .padding(.top, AppSpacing.xl)
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Text(allText)
+                            .font(AppTypography.body)
+                            .foregroundColor(.white)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(AppSpacing.md)
+            }
+            .background(AppColors.memorizeBackground.ignoresSafeArea())
+            .navigationTitle(source.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+    }
 }
 
 // Make Source conform to Identifiable for alert binding

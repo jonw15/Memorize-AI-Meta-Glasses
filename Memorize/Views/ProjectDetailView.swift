@@ -14,9 +14,10 @@ struct ProjectDetailView: View {
     @State private var selectedTab: ProjectTab = .sources
     @State private var showRenameAlert = false
     @State private var renameText = ""
+    @State private var showTutor = false
 
     enum ProjectTab {
-        case sources, study
+        case sources, tutor, study
     }
 
     init(book: Book, streamViewModel: StreamSessionViewModel) {
@@ -30,6 +31,9 @@ struct ProjectDetailView: View {
                 // Content
                 switch selectedTab {
                 case .sources:
+                    SourcesTabView(viewModel: viewModel, streamViewModel: streamViewModel)
+                case .tutor:
+                    // Handled by fullScreenCover below
                     SourcesTabView(viewModel: viewModel, streamViewModel: streamViewModel)
                 case .study:
                     StudyTabView(viewModel: viewModel)
@@ -99,6 +103,9 @@ struct ProjectDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+        .fullScreenCover(isPresented: $showTutor) {
+            TutorTabView(viewModel: viewModel)
+        }
     }
 
     private func importFile(from url: URL) {
@@ -119,6 +126,21 @@ struct ProjectDetailView: View {
     private var bottomTabBar: some View {
         HStack {
             tabButton(tab: .sources, icon: "doc.on.doc.fill", label: "memorize.sources".localized)
+
+            // Tutor button opens fullscreen
+            Button {
+                showTutor = true
+            } label: {
+                VStack(spacing: 4) {
+                    Image(systemName: "graduationcap.fill")
+                        .font(.system(size: 20))
+                    Text("Tutor")
+                        .font(AppTypography.caption)
+                }
+                .foregroundColor(Color.white.opacity(0.5))
+                .frame(maxWidth: .infinity)
+            }
+
             tabButton(tab: .study, icon: "sparkles", label: "memorize.study".localized)
         }
         .padding(.top, 8)

@@ -13,7 +13,7 @@ private func normalizeMemorizeLiveText(_ text: String) -> String {
         .trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
-private func clippedMemorizeLiveText(_ text: String, maxChars: Int) -> String {
+func clippedMemorizeLiveText(_ text: String, maxChars: Int) -> String {
     let normalized = normalizeMemorizeLiveText(text)
     guard !normalized.isEmpty else { return "" }
     guard normalized.count > maxChars else { return normalized }
@@ -29,7 +29,7 @@ private func clippedMemorizeLiveText(_ text: String, maxChars: Int) -> String {
     return clipped + " ..."
 }
 
-private func buildMemorizeLiveSourceContext(
+func buildMemorizeLiveSourceContext(
     from pages: [PageCapture],
     maxPages: Int,
     maxCharsPerPage: Int,
