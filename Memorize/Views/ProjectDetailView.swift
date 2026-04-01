@@ -82,12 +82,11 @@ struct ProjectDetailView: View {
         ) { result in
             switch result {
             case .success(let urls):
-                if let url = urls.first {
-                    if url.pathExtension.lowercased() == "pdf" {
-                        Task { await viewModel.importPDF(from: url) }
-                    } else {
-                        importFile(from: url)
-                    }
+                guard let url = urls.first else { return }
+                if url.pathExtension.lowercased() == "pdf" {
+                    Task { await viewModel.importPDF(from: url) }
+                } else {
+                    importFile(from: url)
                 }
             case .failure(let error):
                 viewModel.pdfImportError = error.localizedDescription

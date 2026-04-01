@@ -535,13 +535,13 @@
 "memorize.study_prompt" = "Choose how you want to study:";
 "memorize.create_new" = "Create New";
 "memorize.source_camera" = "Camera";
-"memorize.source_camera_desc" = "Take photos of pages with glasses";
+"memorize.source_camera_desc" = "Capture photos with your device";
 "memorize.source_pdf" = "PDF";
 "memorize.source_pdf_desc" = "Import a PDF document";
 "memorize.source_text_note" = "Text Note";
 "memorize.source_text_note_desc" = "Type or paste your notes";
 "memorize.source_file" = "File";
-"memorize.source_file_desc" = "Import a text file";
+"memorize.source_file_desc" = "Import a PDF or text file";
 "memorize.note_title_placeholder" = "Note title (optional)";
 "memorize.note_text_placeholder" = "Type or paste your notes here...";
 "memorize.save_note" = "Save Note";

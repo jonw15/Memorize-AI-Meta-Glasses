@@ -18,7 +18,7 @@ struct SourcesTabView: View {
     @State private var pendingAction: PendingSourceAction?
 
     private enum PendingSourceAction {
-        case pdf, textNote, camera, file
+        case textNote, camera, file
     }
 
     var body: some View {
@@ -143,10 +143,6 @@ struct SourcesTabView: View {
         }
         .sheet(isPresented: $showAddSourceSheet) {
             AddSourceSheet(
-                onPDF: {
-                    showAddSourceSheet = false
-                    pendingAction = .pdf
-                },
                 onTextNote: {
                     showAddSourceSheet = false
                     pendingAction = .textNote
@@ -167,14 +163,9 @@ struct SourcesTabView: View {
                 pendingAction = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     switch action {
-                    case .pdf:
-                        viewModel.filePickerMode = .pdf
-                        viewModel.showFilePicker = true
                     case .textNote: showTextNoteEditor = true
                     case .camera: showCameraCapture = true
-                    case .file:
-                        viewModel.filePickerMode = .textFile
-                        viewModel.showFilePicker = true
+                    case .file: viewModel.showFilePicker = true
                     }
                 }
             }

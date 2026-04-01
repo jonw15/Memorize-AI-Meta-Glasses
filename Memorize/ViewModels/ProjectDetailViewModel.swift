@@ -12,11 +12,6 @@ class ProjectDetailViewModel: ObservableObject {
     @Published var pdfImportProgress: PDFImportService.PDFImportProgress?
     @Published var pdfImportError: String?
     @Published var showFilePicker = false
-    @Published var filePickerMode: FilePickerMode = .pdf
-
-    enum FilePickerMode {
-        case pdf, textFile
-    }
 
     // Study action state
     @Published var quizQuestions: [QuizQuestion] = []

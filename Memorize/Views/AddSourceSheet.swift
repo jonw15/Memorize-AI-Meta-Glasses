@@ -6,7 +6,6 @@
 import SwiftUI
 
 struct AddSourceSheet: View {
-    let onPDF: () -> Void
     let onTextNote: () -> Void
     let onCamera: () -> Void
     let onFile: () -> Void
@@ -26,16 +25,12 @@ struct AddSourceSheet: View {
                         onCamera()
                     }
 
-                    sourceOption(icon: "doc.fill", title: "memorize.source_pdf".localized, subtitle: "memorize.source_pdf_desc".localized) {
-                        onPDF()
+                    sourceOption(icon: "doc.text.fill", title: "memorize.source_file".localized, subtitle: "memorize.source_file_desc".localized) {
+                        onFile()
                     }
 
                     sourceOption(icon: "note.text", title: "memorize.source_text_note".localized, subtitle: "memorize.source_text_note_desc".localized) {
                         onTextNote()
-                    }
-
-                    sourceOption(icon: "doc.text.fill", title: "memorize.source_file".localized, subtitle: "memorize.source_file_desc".localized) {
-                        onFile()
                     }
                 }
                 .padding(.horizontal, AppSpacing.md)
