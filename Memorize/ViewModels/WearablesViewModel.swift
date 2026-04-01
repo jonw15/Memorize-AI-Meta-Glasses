@@ -41,6 +41,10 @@ class WearablesViewModel: ObservableObject {
     self.hasMockDevice = false
     self.registrationState = wearables.registrationState
 
+    Task {
+      await setupDeviceStream()
+    }
+
     registrationTask = Task {
       for await registrationState in wearables.registrationStateStream() {
         let previousState = self.registrationState

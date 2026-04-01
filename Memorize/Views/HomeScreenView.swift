@@ -23,6 +23,10 @@ struct HomeScreenView: View {
   @State private var showConnectionSuccess = false
   @State private var showConnectPage = false
 
+  private var hasDetectedGlasses: Bool {
+    !viewModel.devices.isEmpty || viewModel.hasMockDevice
+  }
+
   var body: some View {
     ZStack {
       AppColors.memorizeBackground
@@ -112,17 +116,38 @@ struct HomeScreenView: View {
 
       // "Do you have glasses?" section
       VStack(spacing: AppSpacing.sm) {
+        if hasDetectedGlasses {
+          HStack(spacing: 8) {
+            Circle()
+              .fill(Color.green)
+              .frame(width: 8, height: 8)
+            Text("Ray-Ban Meta glasses detected nearby")
+              .font(AppTypography.caption)
+              .foregroundColor(Color.green.opacity(0.95))
+          }
+        }
+
         Text("Do you have Ray-Ban Meta glasses?")
           .font(AppTypography.subheadline)
           .foregroundColor(Color.white.opacity(0.6))
 
         Button {
-          withAnimation { showConnectPage = true }
+          if hasDetectedGlasses {
+            Task { await viewModel.connectGlasses() }
+          } else {
+            withAnimation { showConnectPage = true }
+          }
         } label: {
           HStack(spacing: 8) {
             Image(systemName: "eyeglasses")
               .font(.title3)
-            Text("Yes, connect my glasses")
+            if viewModel.registrationState == .registering {
+              ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+              Text("Connecting...")
+            } else {
+              Text(hasDetectedGlasses ? "Connect Ray-Ban Meta" : "Yes, connect my glasses")
+            }
           }
           .font(AppTypography.headline)
           .foregroundColor(.white)
@@ -131,7 +156,19 @@ struct HomeScreenView: View {
           .background(AppColors.memorizeAccent)
           .cornerRadius(AppCornerRadius.lg)
         }
+        .disabled(viewModel.registrationState == .registering)
         .padding(.horizontal, AppSpacing.lg)
+
+        if hasDetectedGlasses {
+          Button {
+            withAnimation { showConnectPage = true }
+          } label: {
+            Text("Connection help")
+              .font(AppTypography.subheadline)
+              .foregroundColor(Color.white.opacity(0.5))
+              .padding(.vertical, 4)
+          }
+        }
 
         Button {
           if forceProjectIntroOnly {

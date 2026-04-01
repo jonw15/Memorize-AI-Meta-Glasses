@@ -57,6 +57,8 @@ class GeminiLiveService: NSObject {
     private var hasStartedPlaying = false
     private var isPlaybackEngineRunning = false
     private var dropIncomingAudioUntilInterrupted = false
+    private var isAssistantAudioActive = false
+    private var micResumeAfterPlaybackWorkItem: DispatchWorkItem?
 
     // Streaming batch buffer — accumulates small chunks into larger ones for smooth playback
     private var streamingBuffer = Data()
@@ -143,18 +145,44 @@ class GeminiLiveService: NSObject {
     private func configureAudioSession() {
         do {
             let audioSession = AVAudioSession.sharedInstance()
+            let prefersBluetoothRoute = hasBluetoothAudioRouteAvailable(audioSession)
             if playbackOnly {
                 // Use .playAndRecord to maintain I/O cycle (pure .playback starves the engine)
                 // Use .default mode (not .voiceChat) to skip Voice Processing I/O overhead
                 // Use .allowBluetoothHFP so audio routes to connected Bluetooth device (e.g. glasses)
                 // Use .defaultToSpeaker as fallback when no Bluetooth device is connected
-                try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
-                selectBluetoothRouteIfAvailable()
+                try audioSession.setCategory(
+                    .playAndRecord,
+                    mode: .default,
+                    options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetoothA2DP]
+                )
             } else {
-                try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetoothHFP])
-                selectBluetoothRouteIfAvailable()
+                if prefersBluetoothRoute {
+                    // Use voice processing when the conversation is routed through
+                    // a connected Bluetooth HFP device like the Meta glasses.
+                    try audioSession.setCategory(
+                        .playAndRecord,
+                        mode: .voiceChat,
+                        options: [.allowBluetoothHFP, .allowBluetoothA2DP]
+                    )
+                } else {
+                    // For phone-only playback, keep voiceChat so iOS acoustic
+                    // echo cancellation prevents Gemini from hearing its own
+                    // spoken response, but still prefer the built-in speaker.
+                    try audioSession.setCategory(
+                        .playAndRecord,
+                        mode: .voiceChat,
+                        options: [.defaultToSpeaker]
+                    )
+                }
             }
+
             try audioSession.setActive(true, options: [.notifyOthersOnDeactivation])
+            if prefersBluetoothRoute {
+                try? audioSession.overrideOutputAudioPort(.none)
+                selectBluetoothRouteIfAvailable()
+                print("🎧 [Gemini] Preferred Bluetooth route enabled for conversation audio")
+            }
 
             // Prompt Voice Isolation if not already selected — suppresses other people's voices
             if AVCaptureDevice.preferredMicrophoneMode != .voiceIsolation {
@@ -171,15 +199,27 @@ class GeminiLiveService: NSObject {
     private func selectBluetoothRouteIfAvailable() {
         let session = AVAudioSession.sharedInstance()
         guard let inputs = session.availableInputs else { return }
-        for input in inputs where input.portType == .bluetoothHFP {
+        for input in inputs where input.portType == .bluetoothHFP || input.portType == .bluetoothLE {
             do {
                 try session.setPreferredInput(input)
-                print("🎧 [Gemini] Preferred Bluetooth HFP input selected")
+                print("🎧 [Gemini] Preferred Bluetooth input selected: \(input.portName) (\(input.portType.rawValue))")
             } catch {
                 print("⚠️ [Gemini] Failed to set preferred Bluetooth input: \(error)")
             }
             return
         }
+    }
+
+    private func hasBluetoothAudioRouteAvailable(_ session: AVAudioSession) -> Bool {
+        let hasBluetoothInput = session.availableInputs?.contains(where: {
+            $0.portType == .bluetoothHFP || $0.portType == .bluetoothLE
+        }) == true
+
+        let hasBluetoothOutput = session.currentRoute.outputs.contains(where: {
+            $0.portType == .bluetoothHFP || $0.portType == .bluetoothLE || $0.portType == .bluetoothA2DP
+        })
+
+        return hasBluetoothInput || hasBluetoothOutput
     }
 
     private func deactivateAudioSessionIfIdle() {
@@ -215,6 +255,7 @@ class GeminiLiveService: NSObject {
     private func stopPlaybackEngine() {
         guard let playbackEngine = playbackEngine, isPlaybackEngineRunning else { return }
 
+        markAssistantAudioStopped(immediate: true)
         playerNode?.stop()
         playerNode?.reset()
         playbackEngine.stop()
@@ -463,6 +504,7 @@ Do not apologize.
         }
         guard isPlaybackEngineRunning else { return }
         print("🤚 [Gemini] Interrupting AI playback")
+        markAssistantAudioStopped(immediate: true)
         streamingFlushTimer?.invalidate()
         streamingFlushTimer = nil
         streamingBuffer = Data()
@@ -583,6 +625,7 @@ Do not apologize.
         // 3. Stop playback engine (inline — don't call stopPlaybackEngine()
         //    which triggers deactivateAudioSessionIfIdle prematurely)
         if let playbackEngine = playbackEngine, isPlaybackEngineRunning {
+            markAssistantAudioStopped(immediate: true)
             playerNode?.stop()
             playerNode?.reset()
             playbackEngine.stop()
@@ -628,6 +671,7 @@ Do not apologize.
 
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat) {
         guard !isMicMuted else { return }
+        guard !shouldSuppressMicInputForPlaybackFeedback() else { return }
         guard let recordConverter, let recordTargetFormat else { return }
 
         let ratio = recordTargetFormat.sampleRate / inputFormat.sampleRate
@@ -1332,6 +1376,7 @@ Do not apologize.
 
         audioChunkCount = 0
         hasStartedPlaying = false
+        markAssistantAudioStopped(immediate: false)
         onAudioDone?()
     }
 
@@ -1355,6 +1400,7 @@ Do not apologize.
             return
         }
 
+        markAssistantAudioStarted()
         playerNode.scheduleBuffer(pcmBuffer)
 
         // Don't call play() if paused — buffers accumulate and will play on resume
@@ -1363,6 +1409,45 @@ Do not apologize.
         if !playerNode.isPlaying {
             playerNode.play()
         }
+    }
+
+    private func markAssistantAudioStarted() {
+        micResumeAfterPlaybackWorkItem?.cancel()
+        micResumeAfterPlaybackWorkItem = nil
+
+        guard !isAssistantAudioActive else { return }
+        isAssistantAudioActive = true
+        onSpeechStarted?()
+    }
+
+    private func markAssistantAudioStopped(immediate: Bool) {
+        micResumeAfterPlaybackWorkItem?.cancel()
+
+        let clearState = { [weak self] in
+            guard let self else { return }
+            guard self.isAssistantAudioActive else { return }
+            self.isAssistantAudioActive = false
+            self.onSpeechStopped?()
+        }
+
+        if immediate || !isUsingBuiltInSpeakerForPlayback() {
+            clearState()
+            micResumeAfterPlaybackWorkItem = nil
+            return
+        }
+
+        let workItem = DispatchWorkItem(block: clearState)
+        micResumeAfterPlaybackWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: workItem)
+    }
+
+    private func shouldSuppressMicInputForPlaybackFeedback() -> Bool {
+        isAssistantAudioActive && isUsingBuiltInSpeakerForPlayback()
+    }
+
+    private func isUsingBuiltInSpeakerForPlayback() -> Bool {
+        let route = AVAudioSession.sharedInstance().currentRoute
+        return route.outputs.contains(where: { $0.portType == .builtInSpeaker })
     }
 
     private func createPCMBuffer(from data: Data, format: AVAudioFormat) -> AVAudioPCMBuffer? {
