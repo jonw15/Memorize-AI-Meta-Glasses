@@ -75,6 +75,7 @@ class GeminiLiveService: NSObject {
     var onAudioDone: (() -> Void)?
     var onSpeechStarted: (() -> Void)?
     var onSpeechStopped: (() -> Void)?
+    var onInterrupted: (() -> Void)?
     var onError: ((String) -> Void)?
     var onConnected: (() -> Void)?
     var onFirstAudioSent: (() -> Void)?
@@ -1011,6 +1012,7 @@ Do not apologize.
             dropIncomingAudioUntilInterrupted = false
             stopPlaybackEngine()
             setupPlaybackEngine()
+            onInterrupted?()
             finishResponseTiming(status: "interrupted")
         }
 

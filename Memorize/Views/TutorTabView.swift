@@ -72,7 +72,10 @@ struct TutorTabView: View {
     @State private var isAIThinking = false
     @State private var errorMessage: String?
     @State private var isTransitioning = false
-    @State private var transitionStepTarget: Int = -1
+    @State private var transitionIsFinishing = false
+    @State private var transitionTask: Task<Void, Never>?
+    @State private var shouldRestoreMuteAfterTransition = false
+    @State private var serviceSessionID = UUID()
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
     @State private var showVoicePicker = false
 
@@ -342,6 +345,8 @@ struct TutorTabView: View {
                     .background(Color.green.opacity(0.6))
                     .cornerRadius(AppCornerRadius.md)
                 }
+                .disabled(isTransitioning || !isConnected)
+                .opacity((isTransitioning || !isConnected) ? 0.5 : 1.0)
 
                 // Voice picker
                 Button {
@@ -432,7 +437,7 @@ struct TutorTabView: View {
     }
 
     private func advanceToNextStep() {
-        guard let service = geminiService else { return }
+        guard !isTransitioning else { return }
 
         let next = currentStep.rawValue + 1
         let isFinishing = TutorStep(rawValue: next) == nil
@@ -441,52 +446,30 @@ struct TutorTabView: View {
             currentStep = nextStep
         }
 
-        // Save any in-progress AI message before clearing
-        let partialText = currentAIText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !partialText.isEmpty {
-            messages.append(MemorizeInteractMessage(isUser: false, text: partialText))
-        }
-
-        // Mute mic, send silent audio to force server-side interruption, clear local playback
+        transitionTask?.cancel()
         isTransitioning = true
-        transitionStepTarget = currentStep.rawValue
-        service.isMicMuted = true
-        isMuted = true
-        service.sendSilentAudioToInterrupt()
-        service.interruptPlayback(expectServerInterruption: true)
+        transitionIsFinishing = isFinishing
+        shouldRestoreMuteAfterTransition = isMuted
         currentAIText = ""
+        currentUserText = ""
         isAIThinking = true
+        isConnected = false
+        isRecording = false
+        serviceSessionID = UUID()
+        geminiService?.disconnect()
+        geminiService = nil
 
-        // Wait for the server to fully process the interruption, then send the new step
-        Task {
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            service.startPlaybackEngineIfNeeded()
-
-            if isFinishing {
-                service.sendTextInput("""
-                IMPORTANT: The tutoring session is now complete. Ignore everything you were previously saying.
-                Give a final encouraging summary: key takeaways, what the student did well, areas to review, and suggest spaced repetition timing (tomorrow, 3 days, 1 week). Say goodbye warmly.
-                """)
-            } else {
-                let step = currentStep
-                service.sendTextInput("""
-                IMPORTANT: We are now moving to Step \(step.rawValue + 1): \(step.title). Completely stop your previous topic.
-                \(stepInstruction(step))
-                Start this step now. Do not reference or continue the previous step.
-                """)
-            }
-
-            // Clear transition flag so new deltas come through
-            isTransitioning = false
-
-            // Unmute mic after AI starts responding
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            service.isMicMuted = false
-            isMuted = false
+        transitionTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled, isTransitioning else { return }
+            setupAndConnect(initialPrompt: promptForCurrentStep(isFinishing: transitionIsFinishing))
         }
     }
 
     private func endSession() {
+        transitionTask?.cancel()
+        transitionTask = nil
+        serviceSessionID = UUID()
         geminiService?.disconnect()
         geminiService = nil
         isConnected = false
@@ -496,9 +479,15 @@ struct TutorTabView: View {
         currentAIText = ""
         currentUserText = ""
         currentStep = .focus
+        isAIThinking = false
+        isTransitioning = false
+        transitionIsFinishing = false
     }
 
     private func reconnectWithNewVoice() {
+        transitionTask?.cancel()
+        transitionTask = nil
+        serviceSessionID = UUID()
         geminiService?.disconnect()
         geminiService = nil
         isConnected = false
@@ -506,14 +495,19 @@ struct TutorTabView: View {
         messages = []
         currentAIText = ""
         currentUserText = ""
+        isAIThinking = false
+        isTransitioning = false
+        transitionIsFinishing = false
         setupAndConnect()
     }
 
     // MARK: - Gemini Setup
 
-    private func setupAndConnect() {
+    private func setupAndConnect(initialPrompt: String? = nil) {
         let bookTitle = viewModel.book.title
         let context = sourceContext
+        let sessionID = UUID()
+        serviceSessionID = sessionID
 
         let systemPrompt = """
         You are an expert AI tutor conducting a structured voice study session. You are warm, encouraging, and direct.
@@ -556,19 +550,21 @@ struct TutorTabView: View {
 
         service.onConnected = { [service] in
             Task { @MainActor in
+                guard sessionID == serviceSessionID else { return }
                 isConnected = true
-                service.isMicMuted = false
+                service.isMicMuted = shouldRestoreMuteAfterTransition
                 service.startRecording()
                 isRecording = true
-                isMuted = false
-                // Kick off the conversation — AI speaks first
+                isMuted = shouldRestoreMuteAfterTransition
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                service.sendTextInput("Begin the tutoring session now. Greet the student warmly and start Step 1: Focus by asking your first question.")
+                service.sendTextInput(initialPrompt ?? promptForCurrentStep(isFinishing: false))
             }
         }
 
         service.onUserTranscript = { (userText: String) in
             Task { @MainActor in
+                guard sessionID == serviceSessionID else { return }
+                guard !isTransitioning else { return }
                 guard !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                 currentUserText += userText
                 isAIThinking = true
@@ -586,10 +582,15 @@ struct TutorTabView: View {
 
         service.onTranscriptDelta = { (delta: String) in
             Task { @MainActor in
-                // Block all deltas during step transition
-                guard !isTransitioning else { return }
+                guard sessionID == serviceSessionID else { return }
                 let cleaned = delta.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !cleaned.isEmpty else { return }
+                if isTransitioning {
+                    isTransitioning = false
+                    transitionIsFinishing = false
+                    transitionTask?.cancel()
+                    transitionTask = nil
+                }
                 if !currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     let finalUserText = currentUserText
                         .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -613,7 +614,7 @@ struct TutorTabView: View {
 
         service.onTranscriptDone = { (fullText: String) in
             Task { @MainActor in
-                // Skip stale turn completions during step transition (partial was already saved)
+                guard sessionID == serviceSessionID else { return }
                 guard !isTransitioning else { return }
                 let trimmed = (fullText.isEmpty ? currentAIText : fullText)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -627,12 +628,38 @@ struct TutorTabView: View {
 
         service.onError = { (errorText: String) in
             Task { @MainActor in
+                guard sessionID == serviceSessionID else { return }
                 errorMessage = errorText
+                isAIThinking = false
+                isTransitioning = false
+                transitionIsFinishing = false
+                transitionTask?.cancel()
+                transitionTask = nil
             }
         }
 
         geminiService = service
         service.connect()
+    }
+
+    private func promptForCurrentStep(isFinishing: Bool) -> String {
+        if isFinishing {
+            return """
+            IMPORTANT: The tutoring session is now complete. Ignore everything you were previously saying.
+            Give a final encouraging summary: key takeaways, what the student did well, areas to review, and suggest spaced repetition timing (tomorrow, 3 days, 1 week). Say goodbye warmly.
+            """
+        }
+
+        let step = currentStep
+        if step == .focus {
+            return "Begin the tutoring session now. Greet the student warmly and start Step 1: Focus by asking your first question."
+        }
+
+        return """
+        IMPORTANT: We are now moving to Step \(step.rawValue + 1): \(step.title). Completely stop your previous topic.
+        \(stepInstruction(step))
+        Start this step now. Do not reference or continue the previous step.
+        """
     }
 
     private func stepInstruction(_ step: TutorStep) -> String {
