@@ -20,6 +20,7 @@ struct MemorizeHomeView: View {
     @State private var selectedBook: Book?
     @State private var selectedParentBook: Book?
     @State private var selectedProjectBook: Book?
+    @State private var lastOpenedProjectId: UUID?
     @State private var pendingDeleteBook: Book?
     @State private var newSessionTitle: String = ""
     @State private var newSessionAuthor: String = ""
@@ -161,12 +162,24 @@ struct MemorizeHomeView: View {
             )
         }
         .fullScreenCover(item: $selectedProjectBook, onDismiss: {
+            // Clean up empty projects that user backed out of without adding anything
+            if let bookId = lastOpenedProjectId {
+                let books = MemorizeStorage.shared.loadBooks()
+                if let latest = books.first(where: { $0.id == bookId }),
+                   latest.sources.isEmpty && latest.pages.isEmpty {
+                    viewModel.deleteBook(bookId)
+                }
+                lastOpenedProjectId = nil
+            }
             viewModel.loadBooks()
         }) { book in
             ProjectDetailView(
                 book: book,
                 streamViewModel: streamViewModel
             )
+            .onAppear {
+                lastOpenedProjectId = book.id
+            }
         }
         .onChange(of: selectedProjectBook?.id) { id in
             if id != nil {
@@ -502,15 +515,11 @@ struct MemorizeHomeView: View {
 
             // Create New
             Button {
-                newSessionTitle = ""
-                newSessionAuthor = ""
-                newSessionChapter = ""
-                autoFillErrorMessage = nil
-                isWaitingForCoverSnapshot = false
-                coverSnapshotTimeoutTask?.cancel()
-                coverSnapshotTimeoutTask = nil
-                newSessionDetent = .medium
-                showNewSessionForm = true
+                let newBook = Book(title: "")
+                MemorizeStorage.shared.saveBook(newBook)
+                viewModel.loadBooks()
+                // Open the new project immediately so user can add sources
+                selectedProjectBook = newBook
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "plus")

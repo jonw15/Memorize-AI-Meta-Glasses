@@ -11,11 +11,15 @@ struct SourcesTabView: View {
     @ObservedObject var streamViewModel: StreamSessionViewModel
 
     @State private var showAddSourceSheet = false
-    @State private var showPDFPicker = false
+    @State private var didAutoShowAddSource = false
     @State private var showTextNoteEditor = false
     @State private var showCameraCapture = false
-    @State private var showFilePicker = false
     @State private var pendingDeleteSource: Source?
+    @State private var pendingAction: PendingSourceAction?
+
+    private enum PendingSourceAction {
+        case pdf, textNote, camera, file
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -141,39 +145,38 @@ struct SourcesTabView: View {
             AddSourceSheet(
                 onPDF: {
                     showAddSourceSheet = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        showPDFPicker = true
-                    }
+                    pendingAction = .pdf
                 },
                 onTextNote: {
                     showAddSourceSheet = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        showTextNoteEditor = true
-                    }
+                    pendingAction = .textNote
                 },
                 onCamera: {
                     showAddSourceSheet = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        showCameraCapture = true
-                    }
+                    pendingAction = .camera
                 },
                 onFile: {
                     showAddSourceSheet = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        showFilePicker = true
-                    }
+                    pendingAction = .file
                 }
             )
             .presentationDetents([.height(320)])
         }
-        .fileImporter(isPresented: $showPDFPicker, allowedContentTypes: [.pdf], allowsMultipleSelection: false) { result in
-            switch result {
-            case .success(let urls):
-                if let url = urls.first {
-                    Task { await viewModel.importPDF(from: url) }
+        .onChange(of: showAddSourceSheet) { showing in
+            if !showing, let action = pendingAction {
+                pendingAction = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    switch action {
+                    case .pdf:
+                        viewModel.filePickerMode = .pdf
+                        viewModel.showFilePicker = true
+                    case .textNote: showTextNoteEditor = true
+                    case .camera: showCameraCapture = true
+                    case .file:
+                        viewModel.filePickerMode = .textFile
+                        viewModel.showFilePicker = true
+                    }
                 }
-            case .failure(let error):
-                viewModel.pdfImportError = error.localizedDescription
             }
         }
         .sheet(isPresented: $showTextNoteEditor) {
@@ -189,16 +192,6 @@ struct SourcesTabView: View {
                 book: viewModel.book
             )
         }
-        .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.text, .plainText, .pdf], allowsMultipleSelection: false) { result in
-            switch result {
-            case .success(let urls):
-                if let url = urls.first {
-                    importFile(from: url)
-                }
-            case .failure(let error):
-                viewModel.pdfImportError = error.localizedDescription
-            }
-        }
         .alert(item: $pendingDeleteSource) { source in
             Alert(
                 title: Text("Delete Source"),
@@ -208,6 +201,18 @@ struct SourcesTabView: View {
                 },
                 secondaryButton: .cancel()
             )
+        }
+        .onAppear {
+            // Auto-open add source sheet only for brand-new empty projects (no title, no sources)
+            if !didAutoShowAddSource
+                && viewModel.book.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && viewModel.book.sources.isEmpty
+                && viewModel.book.pages.isEmpty {
+                didAutoShowAddSource = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    showAddSourceSheet = true
+                }
+            }
         }
     }
 
@@ -258,20 +263,6 @@ struct SourcesTabView: View {
         }
     }
 
-    private func importFile(from url: URL) {
-        guard url.startAccessingSecurityScopedResource() else { return }
-        defer { url.stopAccessingSecurityScopedResource() }
-
-        do {
-            let text = try String(contentsOf: url, encoding: .utf8)
-            let name = url.deletingPathExtension().lastPathComponent
-            let page = PageCapture(pageNumber: 1, extractedText: text, status: .completed)
-            let source = Source(name: name, sourceType: .file, pages: [page])
-            viewModel.addSource(source)
-        } catch {
-            viewModel.pdfImportError = "Failed to read file: \(error.localizedDescription)"
-        }
-    }
 }
 
 // Make Source conform to Identifiable for alert binding

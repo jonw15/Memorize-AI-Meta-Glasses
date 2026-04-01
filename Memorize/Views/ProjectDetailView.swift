@@ -4,6 +4,7 @@
  */
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ProjectDetailView: View {
     @ObservedObject var streamViewModel: StreamSessionViewModel
@@ -11,6 +12,8 @@ struct ProjectDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var selectedTab: ProjectTab = .sources
+    @State private var showRenameAlert = false
+    @State private var renameText = ""
 
     enum ProjectTab {
         case sources, study
@@ -49,6 +52,12 @@ struct ProjectDetailView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
+                        Button {
+                            renameText = viewModel.book.title
+                            showRenameAlert = true
+                        } label: {
+                            Label("Rename", systemImage: "pencil")
+                        }
                         Button(role: .destructive) {
                             MemorizeStorage.shared.deleteBook(viewModel.book.id)
                             dismiss()
@@ -65,6 +74,46 @@ struct ProjectDetailView: View {
         }
         .onAppear {
             viewModel.reload()
+        }
+        .fileImporter(
+            isPresented: $viewModel.showFilePicker,
+            allowedContentTypes: [.pdf, .text, .plainText],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first {
+                    if url.pathExtension.lowercased() == "pdf" {
+                        Task { await viewModel.importPDF(from: url) }
+                    } else {
+                        importFile(from: url)
+                    }
+                }
+            case .failure(let error):
+                viewModel.pdfImportError = error.localizedDescription
+            }
+        }
+        .alert("Rename Project", isPresented: $showRenameAlert) {
+            TextField("Project name", text: $renameText)
+            Button("Save") {
+                viewModel.renameProject(to: renameText)
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func importFile(from url: URL) {
+        guard url.startAccessingSecurityScopedResource() else { return }
+        defer { url.stopAccessingSecurityScopedResource() }
+
+        do {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            let name = url.deletingPathExtension().lastPathComponent
+            let page = PageCapture(pageNumber: 1, extractedText: text, status: .completed)
+            let source = Source(name: name, sourceType: .file, pages: [page])
+            viewModel.addSource(source)
+        } catch {
+            viewModel.pdfImportError = "Failed to read file: \(error.localizedDescription)"
         }
     }
 

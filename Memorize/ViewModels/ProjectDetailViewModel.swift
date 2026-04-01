@@ -11,6 +11,12 @@ class ProjectDetailViewModel: ObservableObject {
     @Published var isImportingPDF = false
     @Published var pdfImportProgress: PDFImportService.PDFImportProgress?
     @Published var pdfImportError: String?
+    @Published var showFilePicker = false
+    @Published var filePickerMode: FilePickerMode = .pdf
+
+    enum FilePickerMode {
+        case pdf, textFile
+    }
 
     // Study action state
     @Published var quizQuestions: [QuizQuestion] = []
@@ -48,6 +54,41 @@ class ProjectDetailViewModel: ObservableObject {
         book.updatedAt = Date()
         storage.updateBook(book)
         print("📚 [ProjectDetail] Added source: \(source.name) (\(source.sourceType.rawValue))")
+
+        // Auto-detect title if project is untitled
+        if book.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            autoDetectTitle()
+        }
+    }
+
+    func renameProject(to newTitle: String) {
+        book.title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        book.updatedAt = Date()
+        storage.updateBook(book)
+    }
+
+    private func autoDetectTitle() {
+        let pages = book.allPages.filter { $0.status == .completed }
+        guard !pages.isEmpty else { return }
+        let sampleText = String(pages.first!.extractedText.prefix(500))
+        guard !sampleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        Task {
+            do {
+                let info = try await memorizeService.detectBookInfo(from: sampleText)
+                if !info.title.isEmpty && info.title != "Unknown Book" {
+                    book.title = info.title
+                    if book.author.isEmpty && info.author != "Unknown Author" {
+                        book.author = info.author
+                    }
+                    book.updatedAt = Date()
+                    storage.updateBook(book)
+                    print("📖 [ProjectDetail] Auto-detected title: \(info.title)")
+                }
+            } catch {
+                print("⚠️ [ProjectDetail] Title detection failed: \(error)")
+            }
+        }
     }
 
     func deleteSource(_ sourceId: UUID) {
