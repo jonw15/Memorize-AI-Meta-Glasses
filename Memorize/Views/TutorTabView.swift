@@ -71,6 +71,8 @@ struct TutorTabView: View {
     @State private var currentUserText = ""
     @State private var isAIThinking = false
     @State private var errorMessage: String?
+    @State private var isTransitioning = false
+    @State private var transitionStepTarget: Int = -1
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
     @State private var showVoicePicker = false
 
@@ -265,12 +267,13 @@ struct TutorTabView: View {
                                 chatBubble(message)
                             }
 
-                            // Streaming AI text
+                            // Streaming AI text (shows in real-time as AI speaks)
                             if !currentAIText.isEmpty {
                                 chatBubble(MemorizeInteractMessage(isUser: false, text: currentAIText))
                                     .id("streaming")
                             }
 
+                            // Loading indicator (before AI starts speaking)
                             if isAIThinking && currentAIText.isEmpty {
                                 thinkingDots
                                     .id("thinking")
@@ -280,10 +283,21 @@ struct TutorTabView: View {
                     }
                 }
                 .onChange(of: messages.count) { _ in
-                    withAnimation { proxy.scrollTo("streaming", anchor: .bottom) }
+                    withAnimation {
+                        if isAIThinking && currentAIText.isEmpty {
+                            proxy.scrollTo("thinking", anchor: .bottom)
+                        } else {
+                            proxy.scrollTo("streaming", anchor: .bottom)
+                        }
+                    }
                 }
                 .onChange(of: currentAIText) { _ in
                     withAnimation { proxy.scrollTo("streaming", anchor: .bottom) }
+                }
+                .onChange(of: isAIThinking) { thinking in
+                    if thinking {
+                        withAnimation { proxy.scrollTo("thinking", anchor: .bottom) }
+                    }
                 }
             }
             .frame(maxHeight: .infinity)
@@ -427,16 +441,25 @@ struct TutorTabView: View {
             currentStep = nextStep
         }
 
-        // Mute mic, interrupt playback, clear state
+        // Save any in-progress AI message before clearing
+        let partialText = currentAIText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !partialText.isEmpty {
+            messages.append(MemorizeInteractMessage(isUser: false, text: partialText))
+        }
+
+        // Mute mic, send silent audio to force server-side interruption, clear local playback
+        isTransitioning = true
+        transitionStepTarget = currentStep.rawValue
         service.isMicMuted = true
         isMuted = true
-        service.interruptPlayback()
+        service.sendSilentAudioToInterrupt()
+        service.interruptPlayback(expectServerInterruption: true)
         currentAIText = ""
         isAIThinking = true
 
-        // Wait for the server to settle after interruption, then send the new step
+        // Wait for the server to fully process the interruption, then send the new step
         Task {
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
             service.startPlaybackEngineIfNeeded()
 
             if isFinishing {
@@ -452,6 +475,9 @@ struct TutorTabView: View {
                 Start this step now. Do not reference or continue the previous step.
                 """)
             }
+
+            // Clear transition flag so new deltas come through
+            isTransitioning = false
 
             // Unmute mic after AI starts responding
             try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -502,7 +528,7 @@ struct TutorTabView: View {
 
         STEP INSTRUCTIONS:
         1. FOCUS: Ask the student one question at a time: (a) What are you studying today? (b) Why does this matter to you? (c) How confident are you right now, 1 to 10? Get them mentally ready.
-        2. PREVIEW: Give a quick overview — main topic, 3-5 key concepts, important vocabulary, estimated study time. Make it scannable.
+        2. PREVIEW: Give a quick overview — main topic, 3-5 key concepts, important vocabulary. Make it scannable.
         3. LEARN: Present ONE concept at a time. Short summary, concrete example or analogy. Make it feel easy. Ask if they understand before continuing.
         4. EXPLAIN: Ask the student to explain what they just learned in their own words. Give feedback on what was good and what they missed.
         5. RECALL: Hide the notes. Ask specific memory questions: "What were the main ideas?" "Define this term." Give feedback after each answer.
@@ -560,6 +586,8 @@ struct TutorTabView: View {
 
         service.onTranscriptDelta = { (delta: String) in
             Task { @MainActor in
+                // Block all deltas during step transition
+                guard !isTransitioning else { return }
                 let cleaned = delta.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !cleaned.isEmpty else { return }
                 if !currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -585,6 +613,8 @@ struct TutorTabView: View {
 
         service.onTranscriptDone = { (fullText: String) in
             Task { @MainActor in
+                // Skip stale turn completions during step transition (partial was already saved)
+                guard !isTransitioning else { return }
                 let trimmed = (fullText.isEmpty ? currentAIText : fullText)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
@@ -608,7 +638,7 @@ struct TutorTabView: View {
     private func stepInstruction(_ step: TutorStep) -> String {
         switch step {
         case .focus: return "Ask the student what they're studying, why it matters, and how confident they feel."
-        case .preview: return "Give a quick overview of the material — key concepts, vocabulary, estimated time."
+        case .preview: return "Give a quick overview of the material — key concepts and vocabulary."
         case .learn: return "Present ONE concept from the material with a clear explanation and example."
         case .explain: return "Ask the student to explain what they just learned in their own words."
         case .recall: return "Test the student's memory — ask specific questions without letting them see notes."
