@@ -745,6 +745,22 @@ Do not apologize.
         }
     }
 
+    /// Ensure the playback engine is running so new AI audio can be heard.
+    func startPlaybackEngineIfNeeded() {
+        if !isPlaybackEngineRunning {
+            setupPlaybackEngine()
+            startPlaybackEngine()
+        }
+    }
+
+    /// Send a burst of silent audio to force the server to interrupt its current turn.
+    func sendSilentAudioToInterrupt() {
+        let silentBytes = Data(count: 6400)
+        let base64 = silentBytes.base64EncodedString()
+        print("🤫 [Gemini] Sending silent audio burst to trigger server interruption")
+        sendRealtimeInput(audioData: base64)
+    }
+
     private func sendRealtimeInput(audioData: String) {
         // Gemini Live realtime input format
         let message: [String: Any] = [

@@ -115,6 +115,18 @@ struct TutorTabView: View {
                             .foregroundColor(.white)
                     }
                 }
+                if hasStartedSession {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            endSession()
+                            dismiss()
+                        } label: {
+                            Text("End")
+                                .font(AppTypography.subheadline)
+                                .foregroundColor(Color.white.opacity(0.6))
+                        }
+                    }
+                }
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
@@ -237,11 +249,16 @@ struct TutorTabView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     if messages.isEmpty && currentAIText.isEmpty {
-                        Text("Connecting to your AI tutor...")
-                            .font(AppTypography.body)
-                            .foregroundColor(Color.white.opacity(0.5))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(AppSpacing.md)
+                        VStack(spacing: 12) {
+                            ProgressView()
+                                .tint(tutorAccent)
+                                .scaleEffect(1.1)
+                            Text(isConnected ? "Your tutor is preparing..." : "Connecting to your AI tutor...")
+                                .font(AppTypography.subheadline)
+                                .foregroundColor(Color.white.opacity(0.5))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 60)
                     } else {
                         LazyVStack(alignment: .leading, spacing: 10) {
                             ForEach(messages) { message in
@@ -276,67 +293,49 @@ struct TutorTabView: View {
             .padding(.top, AppSpacing.sm)
 
             // Controls
-            VStack(spacing: AppSpacing.sm) {
-                // Connection status
-                if !isConnected {
-                    HStack(spacing: 8) {
-                        ProgressView().tint(.white).scaleEffect(0.8)
-                        Text("Connecting...").font(AppTypography.caption).foregroundColor(Color.white.opacity(0.6))
-                    }
-                }
-
-                HStack(spacing: AppSpacing.md) {
-                    // Mic toggle
-                    Button {
-                        toggleMic()
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: isMuted ? "mic.slash.fill" : "mic.fill")
-                                .font(.system(size: 18, weight: .semibold))
-                            Text(isMuted ? "Unmute" : "Mute")
-                                .font(AppTypography.subheadline)
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(isMuted ? Color.white.opacity(0.15) : tutorAccent.opacity(0.5))
-                        .cornerRadius(AppCornerRadius.md)
-                    }
-
-                    // Next step button
-                    Button {
-                        advanceToNextStep()
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: currentStep == .review ? "checkmark" : "arrow.right")
-                                .font(.system(size: 16, weight: .semibold))
-                            Text(currentStep == .review ? "Finish" : "Next")
-                                .font(AppTypography.subheadline)
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(Color.green.opacity(0.6))
-                        .cornerRadius(AppCornerRadius.md)
-                    }
-
-                    // Voice picker
-                    Button {
-                        showVoicePicker = true
-                    } label: {
-                        Image(systemName: "person.crop.circle")
-                            .font(.system(size: 22))
-                            .foregroundColor(Color.white.opacity(0.5))
-                    }
-                }
-
-                // End session
+            HStack(spacing: AppSpacing.md) {
+                // Mic toggle
                 Button {
-                    endSession()
+                    toggleMic()
                 } label: {
-                    Text("End Session")
-                        .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(0.4))
+                    HStack(spacing: 8) {
+                        Image(systemName: isMuted ? "mic.slash.fill" : "mic.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                        Text(isMuted ? "Unmute" : "Mute")
+                            .font(AppTypography.subheadline)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(isMuted ? Color.white.opacity(0.15) : tutorAccent.opacity(0.5))
+                    .cornerRadius(AppCornerRadius.md)
+                }
+
+                // Next step button
+                Button {
+                    isAIThinking = true
+                    advanceToNextStep()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: currentStep == .review ? "checkmark" : "arrow.right")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text(currentStep == .review ? "Finish" : "Next")
+                            .font(AppTypography.subheadline)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(Color.green.opacity(0.6))
+                    .cornerRadius(AppCornerRadius.md)
+                }
+
+                // Voice picker
+                Button {
+                    showVoicePicker = true
+                } label: {
+                    Image(systemName: "person.crop.circle")
+                        .font(.system(size: 22))
+                        .foregroundColor(Color.white.opacity(0.5))
                 }
             }
             .padding(AppSpacing.md)
@@ -392,10 +391,13 @@ struct TutorTabView: View {
     }
 
     private var thinkingDots: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<3, id: \.self) { _ in
-                Circle().fill(Color.white.opacity(0.4)).frame(width: 8, height: 8)
-            }
+        HStack(spacing: 8) {
+            ProgressView()
+                .tint(tutorAccent)
+                .scaleEffect(0.8)
+            Text("Tutor is thinking...")
+                .font(AppTypography.caption)
+                .foregroundColor(Color.white.opacity(0.5))
         }
         .padding(12)
         .background(Color.white.opacity(0.08))
@@ -417,17 +419,44 @@ struct TutorTabView: View {
 
     private func advanceToNextStep() {
         guard let service = geminiService else { return }
-        // Interrupt current AI speech immediately
-        service.interruptPlayback()
-        currentAIText = ""
 
         let next = currentStep.rawValue + 1
+        let isFinishing = TutorStep(rawValue: next) == nil
+
         if let nextStep = TutorStep(rawValue: next) {
             currentStep = nextStep
-            service.sendTextInput("The student is ready to move on. Stop what you were saying. Begin Step \(nextStep.rawValue + 1): \(nextStep.title). \(stepInstruction(nextStep))")
-        } else {
-            // Session complete
-            service.sendTextInput("The session is complete. Give a final encouraging summary and say goodbye.")
+        }
+
+        // Mute mic, interrupt playback, clear state
+        service.isMicMuted = true
+        isMuted = true
+        service.interruptPlayback()
+        currentAIText = ""
+        isAIThinking = true
+
+        // Wait for the server to settle after interruption, then send the new step
+        Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            service.startPlaybackEngineIfNeeded()
+
+            if isFinishing {
+                service.sendTextInput("""
+                IMPORTANT: The tutoring session is now complete. Ignore everything you were previously saying.
+                Give a final encouraging summary: key takeaways, what the student did well, areas to review, and suggest spaced repetition timing (tomorrow, 3 days, 1 week). Say goodbye warmly.
+                """)
+            } else {
+                let step = currentStep
+                service.sendTextInput("""
+                IMPORTANT: We are now moving to Step \(step.rawValue + 1): \(step.title). Completely stop your previous topic.
+                \(stepInstruction(step))
+                Start this step now. Do not reference or continue the previous step.
+                """)
+            }
+
+            // Unmute mic after AI starts responding
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            service.isMicMuted = false
+            isMuted = false
         }
     }
 
@@ -517,6 +546,15 @@ struct TutorTabView: View {
                 guard !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                 currentUserText += userText
                 isAIThinking = true
+
+                // Detect voice commands to advance step
+                let lower = userText.lowercased()
+                if lower.contains("next section") || lower.contains("next step")
+                    || lower.contains("move on") || lower.contains("let's continue")
+                    || (lower.trimmingCharacters(in: .whitespacesAndNewlines) == "next")
+                    || (lower.trimmingCharacters(in: .whitespacesAndNewlines) == "continue") {
+                    advanceToNextStep()
+                }
             }
         }
 
