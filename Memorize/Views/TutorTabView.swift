@@ -552,15 +552,12 @@ struct TutorTabView: View {
             Task { @MainActor in
                 guard sessionID == serviceSessionID else { return }
                 isConnected = true
-                service.isMicMuted = shouldRestoreMuteAfterTransition
+                service.isMicMuted = false
                 service.startRecording()
                 isRecording = true
-                isMuted = shouldRestoreMuteAfterTransition
-                // Send a silent audio burst first to establish the realtime audio stream,
-                // then send the text prompt. This ensures the server keeps listening for
-                // user audio after the AI finishes its turn.
-                service.sendSilentAudioToInterrupt()
-                try? await Task.sleep(nanoseconds: 500_000_000)
+                isMuted = false
+                // Brief delay then send the initial prompt — mic is already live
+                try? await Task.sleep(nanoseconds: 300_000_000)
                 service.sendTextInput(initialPrompt ?? promptForCurrentStep(isFinishing: false))
             }
         }
@@ -571,7 +568,18 @@ struct TutorTabView: View {
                 guard !isTransitioning else { return }
                 guard !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                 currentUserText += userText
-                isAIThinking = true
+                // Show user text immediately as a message
+                let trimmed = currentUserText
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                if !trimmed.isEmpty {
+                    // Update or append the live user message
+                    if let lastIndex = messages.indices.last, messages[lastIndex].isUser {
+                        messages[lastIndex] = MemorizeInteractMessage(isUser: true, text: trimmed)
+                    } else {
+                        messages.append(MemorizeInteractMessage(isUser: true, text: trimmed))
+                    }
+                }
 
                 // Detect voice commands to advance step
                 let lower = userText.lowercased()
@@ -595,13 +603,8 @@ struct TutorTabView: View {
                     transitionTask?.cancel()
                     transitionTask = nil
                 }
-                if !currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    let finalUserText = currentUserText
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-                    messages.append(MemorizeInteractMessage(isUser: true, text: finalUserText))
-                    currentUserText = ""
-                }
+                // Clear accumulated user text (already shown in real-time)
+                currentUserText = ""
                 isAIThinking = false
                 if cleaned.hasPrefix(currentAIText) && cleaned.count > currentAIText.count {
                     currentAIText = cleaned

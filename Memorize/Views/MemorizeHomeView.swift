@@ -92,30 +92,7 @@ struct MemorizeHomeView: View {
             viewModel.loadBooks()
         }
         .task {
-            await homeVoice.requestPermissionsIfNeeded()
-            homeVoice.startListening { command in
-                newSessionTitle = ""
-                newSessionAuthor = ""
-                newSessionChapter = ""
-                autoFillErrorMessage = nil
-                isWaitingForCoverSnapshot = false
-                coverSnapshotTimeoutTask?.cancel()
-                coverSnapshotTimeoutTask = nil
-                newSessionDetent = .medium
-                showNewSessionForm = true
-
-                if command == .scanCover {
-                    // Auto-open scan cover after sheet appears, wait for camera to initialize
-                    Task {
-                        try? await Task.sleep(nanoseconds: 1_000_000_000)
-                        openCoverCapturePanel()
-                        try? await Task.sleep(nanoseconds: 4_000_000_000)
-                        if showCoverCapturePanel && coverCountdownTask == nil && !isWaitingForCoverSnapshot {
-                            startCoverCaptureCountdown()
-                        }
-                    }
-                }
-            }
+            // Home voice controller disabled
         }
         .onChange(of: showNewSessionForm) { showing in
             if showing {
