@@ -11,6 +11,8 @@ class ProjectDetailViewModel: ObservableObject {
     @Published var isImportingPDF = false
     @Published var pdfImportProgress: PDFImportService.PDFImportProgress?
     @Published var pdfImportError: String?
+    @Published var isImportingYouTube = false
+    @Published var youtubeImportError: String?
     @Published var showFilePicker = false
 
     // Study action state
@@ -29,6 +31,7 @@ class ProjectDetailViewModel: ObservableObject {
     private let storage = MemorizeStorage.shared
     private let memorizeService = MemorizeService()
     private let pdfImportService = PDFImportService()
+    private let youtubeTranscriptImportService = YouTubeTranscriptImportService()
 
     var allCompletedPages: [PageCapture] {
         book.allPages.filter { $0.status == .completed }
@@ -46,6 +49,12 @@ class ProjectDetailViewModel: ObservableObject {
 
     func addSource(_ source: Source) {
         book.sources.append(source)
+
+        if book.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let preferredTitle = preferredProjectTitle(from: source) {
+            book.title = preferredTitle
+        }
+
         book.updatedAt = Date()
         storage.updateBook(book)
         print("📚 [ProjectDetail] Added source: \(source.name) (\(source.sourceType.rawValue))")
@@ -53,6 +62,19 @@ class ProjectDetailViewModel: ObservableObject {
         // Auto-detect title if project is untitled
         if book.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             autoDetectTitle()
+        }
+    }
+
+    private func preferredProjectTitle(from source: Source) -> String? {
+        let trimmedName = source.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return nil }
+
+        switch source.sourceType {
+        case .youtube:
+            guard !trimmedName.hasPrefix("YouTube ·") else { return nil }
+            return trimmedName
+        default:
+            return nil
         }
     }
 
@@ -143,6 +165,30 @@ class ProjectDetailViewModel: ObservableObject {
         }
     }
 
+    func importYouTubeTranscript(from urlString: String) async {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            youtubeImportError = "Paste a YouTube link to continue."
+            return
+        }
+
+        isImportingYouTube = true
+        youtubeImportError = nil
+
+        do {
+            let result = try await youtubeTranscriptImportService.importTranscript(from: trimmed)
+            let page = PageCapture(pageNumber: 1, extractedText: result.transcript, status: .completed)
+            let source = Source(name: result.videoTitle, sourceType: .youtube, pages: [page])
+            addSource(source)
+            print("📺 [ProjectDetail] YouTube transcript imported: \(result.videoTitle) (\(result.videoID))")
+        } catch {
+            youtubeImportError = error.localizedDescription
+            print("❌ [ProjectDetail] YouTube transcript import failed: \(error)")
+        }
+
+        isImportingYouTube = false
+    }
+
     // MARK: - Study Actions
 
     func generateQuiz() {
@@ -173,6 +219,10 @@ class ProjectDetailViewModel: ObservableObject {
 
     func startPodcastWithMode(_ mode: PodcastMode) {
         podcastMode = mode
+        let pageCount = allCompletedPages.count
+        let targetMinutes = max(4, pageCount * 2)
+        let modeLabel = mode == .interactive ? "interactive" : "play"
+        print("🎙️ [MemorizePodcast] Opening podcast mode=\(modeLabel) target length=\(targetMinutes) min from \(pageCount) completed pages")
         showPodcastModePicker = false
         showPodcastPlayer = true
     }

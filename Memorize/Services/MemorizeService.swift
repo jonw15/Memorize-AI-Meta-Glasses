@@ -446,3 +446,443 @@ struct MemorizeService {
         }.value
     }
 }
+
+struct YouTubeTranscriptImportService {
+    struct ImportedTranscript {
+        let videoTitle: String
+        let transcript: String
+        let videoID: String
+    }
+
+    private let apiKey = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+    private let userAgent = "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)"
+    private let fallbackUserAgent = "Mozilla/5.0"
+    private let clientName = "IOS"
+    private let clientVersion = "20.10.4"
+    private let deviceModel = "iPhone16,2"
+
+    func importTranscript(from rawInput: String) async throws -> ImportedTranscript {
+        let trimmed = rawInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw YouTubeImportError.invalidURL
+        }
+
+        guard let videoID = extractVideoID(from: trimmed) else {
+            throw YouTubeImportError.invalidURL
+        }
+
+        async let transcript = fetchTranscript(videoID: videoID)
+        async let title = fetchTitle(videoID: videoID)
+
+        let finalTranscript = try await transcript
+        let resolvedTitle = (try? await title)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalTitle = (resolvedTitle?.isEmpty == false ? resolvedTitle! : "YouTube · \(videoID)")
+
+        return ImportedTranscript(videoTitle: finalTitle, transcript: finalTranscript, videoID: videoID)
+    }
+
+    private func fetchTitle(videoID: String) async throws -> String {
+        if let title = try await fetchTitleFromOEmbed(videoID: videoID) {
+            return title
+        }
+        return "YouTube · \(videoID)"
+    }
+
+    private func fetchTitleFromOEmbed(videoID: String) async throws -> String? {
+        var components = URLComponents(string: "https://www.youtube.com/oembed")!
+        components.queryItems = [
+            URLQueryItem(name: "url", value: "https://www.youtube.com/watch?v=\(videoID)"),
+            URLQueryItem(name: "format", value: "json")
+        ]
+
+        var request = URLRequest(url: components.url!)
+        request.setValue(fallbackUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("en-US,en", forHTTPHeaderField: "accept-language")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, 200...299 ~= httpResponse.statusCode else {
+            return nil
+        }
+
+        let payload = try JSONDecoder().decode(OEmbedResponse.self, from: data)
+        let title = payload.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? nil : title
+    }
+
+    private func fetchTranscript(videoID: String) async throws -> String {
+        let playerResponse = try await fetchPlayerResponse(videoID: videoID)
+
+        if let transcript = try await fetchTranscriptFromCaptionTracks(playerResponse) {
+            return transcript
+        }
+
+        let visitorData = try? await fetchVisitorData(videoID: videoID)
+        let data = try await requestTranscript(videoID: videoID, visitorData: visitorData ?? "")
+        let transcript = try parseTranscript(from: data)
+        guard !transcript.isEmpty else {
+            throw YouTubeImportError.transcriptUnavailable
+        }
+        return transcript
+    }
+
+    private func fetchPlayerResponse(videoID: String) async throws -> YouTubePlayerResponse {
+        var components = URLComponents(string: "https://www.youtube.com/youtubei/v1/player")!
+        components.queryItems = [
+            URLQueryItem(name: "key", value: apiKey),
+            URLQueryItem(name: "prettyPrint", value: "false")
+        ]
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: [
+                "context": [
+                    "client": [
+                        "clientName": clientName,
+                        "clientVersion": clientVersion,
+                        "deviceModel": deviceModel
+                    ]
+                ],
+                "videoId": videoID,
+                "contentCheckOk": true,
+                "racyCheckOk": true
+            ]
+        )
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("en-US,en", forHTTPHeaderField: "accept-language")
+        request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, 200...299 ~= httpResponse.statusCode else {
+            throw YouTubeImportError.transcriptUnavailable
+        }
+
+        return try JSONDecoder().decode(YouTubePlayerResponse.self, from: data)
+    }
+
+    private func fetchTranscriptFromCaptionTracks(_ playerResponse: YouTubePlayerResponse) async throws -> String? {
+        guard let tracks = playerResponse.captions?.playerCaptionsTracklistRenderer.captionTracks,
+              !tracks.isEmpty else {
+            return nil
+        }
+
+        guard let track = selectCaptionTrack(from: tracks) else {
+            return nil
+        }
+
+        guard var components = URLComponents(string: track.baseURL) else {
+            return nil
+        }
+
+        var queryItems = components.queryItems ?? []
+        queryItems.removeAll { $0.name == "fmt" }
+        queryItems.append(URLQueryItem(name: "fmt", value: "json3"))
+        components.queryItems = queryItems
+
+        guard let url = components.url else { return nil }
+
+        var request = URLRequest(url: url)
+        request.setValue(fallbackUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("en-US,en", forHTTPHeaderField: "accept-language")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, 200...299 ~= httpResponse.statusCode else {
+            return nil
+        }
+
+        let transcript = try parseCaptionJSON3Transcript(from: data)
+        return transcript.isEmpty ? nil : transcript
+    }
+
+    private func selectCaptionTrack(from tracks: [YouTubePlayerResponse.Captions.TracklistRenderer.CaptionTrack]) -> YouTubePlayerResponse.Captions.TracklistRenderer.CaptionTrack? {
+        if let preferred = tracks.first(where: { ($0.vssID ?? "").contains(".en") && $0.kind != "asr" }) {
+            return preferred
+        }
+        if let preferred = tracks.first(where: { $0.languageCode.lowercased().hasPrefix("en") && $0.kind != "asr" }) {
+            return preferred
+        }
+        if let preferred = tracks.first(where: { ($0.vssID ?? "").contains(".en") }) {
+            return preferred
+        }
+        if let preferred = tracks.first(where: { $0.languageCode.lowercased().hasPrefix("en") }) {
+            return preferred
+        }
+        if let preferred = tracks.first(where: { $0.kind != "asr" }) {
+            return preferred
+        }
+        return tracks.first
+    }
+
+    private func requestTranscript(videoID: String, visitorData: String) async throws -> Data {
+        var components = URLComponents(string: "https://www.youtube.com/youtubei/v1/get_transcript")!
+        components.queryItems = [
+            URLQueryItem(name: "key", value: apiKey),
+            URLQueryItem(name: "contentCheckOk", value: "true"),
+            URLQueryItem(name: "racyCheckOk", value: "true"),
+            URLQueryItem(name: "videoID", value: videoID)
+        ]
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: [
+                "context": [
+                    "client": [
+                        "clientName": clientName,
+                        "clientVersion": clientVersion,
+                        "deviceModel": deviceModel
+                    ]
+                ]
+            ]
+        )
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("en-US,en", forHTTPHeaderField: "accept-language")
+        request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
+        if !visitorData.isEmpty {
+            request.setValue(visitorData, forHTTPHeaderField: "X-Goog-Visitor-Id")
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, 200...299 ~= httpResponse.statusCode else {
+            throw YouTubeImportError.transcriptUnavailable
+        }
+        return data
+    }
+
+    private func fetchVisitorData(videoID: String) async throws -> String? {
+        var request = URLRequest(url: URL(string: "https://www.youtube.com/watch?v=\(videoID)")!)
+        request.setValue(fallbackUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("en-US,en", forHTTPHeaderField: "accept-language")
+        request.httpShouldHandleCookies = false
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, 200...299 ~= httpResponse.statusCode,
+              let html = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        let pattern = #""visitorData":"([^"]+)""#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+              let range = Range(match.range(at: 1), in: html) else {
+            return nil
+        }
+
+        return String(html[range])
+    }
+
+    private func parseTranscript(from data: Data) throws -> String {
+        let json = try JSONSerialization.jsonObject(with: data)
+        let rawSegments = collectTranscriptSegments(from: json)
+        let transcript = readableTranscript(from: rawSegments)
+        if transcript.isEmpty {
+            throw YouTubeImportError.transcriptUnavailable
+        }
+        return transcript
+    }
+
+    private func parseCaptionJSON3Transcript(from data: Data) throws -> String {
+        let payload = try JSONDecoder().decode(YouTubeCaptionResponse.self, from: data)
+        let segments = payload.events
+            .flatMap { $0.segs ?? [] }
+            .compactMap { segment in
+                segment.utf8?
+                    .replacingOccurrences(of: "\n", with: " ")
+                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        return readableTranscript(from: segments)
+    }
+
+    private func readableTranscript(from rawSegments: [String]) -> String {
+        let cleanedSegments = rawSegments
+            .map {
+                $0.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .filter { !$0.isEmpty }
+
+        let dedupedSegments = cleanedSegments.reduce(into: [String]()) { partialResult, segment in
+            if partialResult.last != segment {
+                partialResult.append(segment)
+            }
+        }
+
+        var paragraphs: [String] = []
+        var currentParagraph = ""
+
+        for segment in dedupedSegments {
+            if currentParagraph.isEmpty {
+                currentParagraph = segment
+            } else if currentParagraph.hasSuffix("-") {
+                currentParagraph += segment
+            } else {
+                currentParagraph += " " + segment
+            }
+
+            let endsSentence = segment.last.map { ".!?".contains($0) } ?? false
+            if endsSentence && currentParagraph.count >= 260 {
+                paragraphs.append(currentParagraph)
+                currentParagraph = ""
+            }
+        }
+
+        if !currentParagraph.isEmpty {
+            paragraphs.append(currentParagraph)
+        }
+
+        return paragraphs.joined(separator: "\n\n")
+    }
+
+    private func collectTranscriptSegments(from node: Any) -> [String] {
+        if let dict = node as? [String: Any] {
+            var segments: [String] = []
+
+            if let renderer = dict["transcriptSegmentRenderer"] as? [String: Any],
+               let text = extractSegmentText(from: renderer) {
+                segments.append(text)
+            }
+
+            for value in dict.values {
+                segments.append(contentsOf: collectTranscriptSegments(from: value))
+            }
+
+            return segments
+        }
+
+        if let array = node as? [Any] {
+            return array.flatMap { collectTranscriptSegments(from: $0) }
+        }
+
+        return []
+    }
+
+    private func extractSegmentText(from renderer: [String: Any]) -> String? {
+        if let snippet = renderer["snippet"] {
+            return extractText(from: snippet)
+        }
+        if let content = renderer["content"] {
+            return extractText(from: content)
+        }
+        return nil
+    }
+
+    private func extractText(from node: Any) -> String? {
+        if let string = node as? String {
+            return string
+        }
+
+        if let dict = node as? [String: Any] {
+            if let simpleText = dict["simpleText"] as? String {
+                return simpleText
+            }
+            if let text = dict["text"] as? String {
+                return text
+            }
+            if let runs = dict["runs"] as? [[String: Any]] {
+                let joined = runs.compactMap { $0["text"] as? String }.joined()
+                return joined.isEmpty ? nil : joined
+            }
+        }
+
+        if let array = node as? [Any] {
+            let joined = array.compactMap { extractText(from: $0) }.joined()
+            return joined.isEmpty ? nil : joined
+        }
+
+        return nil
+    }
+
+    private func extractVideoID(from rawInput: String) -> String? {
+        let trimmed = rawInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawIDPattern = #"^[A-Za-z0-9_-]{11}$"#
+        if trimmed.range(of: rawIDPattern, options: .regularExpression) != nil {
+            return trimmed
+        }
+
+        guard let url = URL(string: trimmed),
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+
+        if let host = components.host?.lowercased() {
+            if host.contains("youtu.be") {
+                let path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                return path.isEmpty ? nil : String(path.prefix(11))
+            }
+
+            if host.contains("youtube.com") {
+                if let queryID = components.queryItems?.first(where: { $0.name == "v" })?.value,
+                   !queryID.isEmpty {
+                    return String(queryID.prefix(11))
+                }
+
+                let parts = components.path.split(separator: "/")
+                if let markerIndex = parts.firstIndex(where: { $0 == "embed" || $0 == "shorts" || $0 == "live" }),
+                   parts.indices.contains(parts.index(after: markerIndex)) {
+                    return String(parts[parts.index(after: markerIndex)].prefix(11))
+                }
+            }
+        }
+
+        return nil
+    }
+
+    private enum YouTubeImportError: LocalizedError {
+        case invalidURL
+        case transcriptUnavailable
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidURL:
+                return "That doesn’t look like a valid YouTube link."
+            case .transcriptUnavailable:
+                return "Couldn’t retrieve a transcript for this video."
+            }
+        }
+    }
+
+    private struct OEmbedResponse: Decodable {
+        let title: String
+    }
+
+    private struct YouTubePlayerResponse: Decodable {
+        let captions: Captions?
+
+        struct Captions: Decodable {
+            let playerCaptionsTracklistRenderer: TracklistRenderer
+
+            struct TracklistRenderer: Decodable {
+                let captionTracks: [CaptionTrack]?
+
+                struct CaptionTrack: Decodable {
+                    let baseURL: String
+                    let languageCode: String
+                    let kind: String?
+                    let vssID: String?
+
+                    enum CodingKeys: String, CodingKey {
+                        case baseURL = "baseUrl"
+                        case languageCode
+                        case kind
+                        case vssID = "vssId"
+                    }
+                }
+            }
+        }
+    }
+
+    private struct YouTubeCaptionResponse: Decodable {
+        let events: [CaptionEvent]
+
+        struct CaptionEvent: Decodable {
+            let segs: [CaptionSegment]?
+        }
+
+        struct CaptionSegment: Decodable {
+            let utf8: String?
+        }
+    }
+}

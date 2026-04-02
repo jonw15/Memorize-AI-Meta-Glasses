@@ -60,6 +60,7 @@ enum SourceType: String, Codable {
     case pdf
     case textNote
     case file
+    case youtube
 }
 
 // MARK: - Source
@@ -91,6 +92,7 @@ struct Source: Identifiable, Codable {
         case .pdf: return "doc.fill"
         case .textNote: return "note.text"
         case .file: return "doc.text.fill"
+        case .youtube: return "play.rectangle.fill"
         }
     }
 }

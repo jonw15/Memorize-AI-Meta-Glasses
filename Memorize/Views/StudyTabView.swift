@@ -31,6 +31,10 @@ struct StudyTabView: View {
         !completedPages.isEmpty
     }
 
+    private var usesPDFLengthHeuristic: Bool {
+        viewModel.book.sources.contains(where: { $0.sourceType == .pdf })
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: AppSpacing.md) {
@@ -177,7 +181,8 @@ struct StudyTabView: View {
                 pages: completedPages,
                 bookTitle: bookTitle,
                 sectionTitle: sectionTitle,
-                mode: viewModel.podcastMode
+                mode: viewModel.podcastMode,
+                usesPDFLengthHeuristic: usesPDFLengthHeuristic
             ) {
                 viewModel.showPodcastPlayer = false
             }

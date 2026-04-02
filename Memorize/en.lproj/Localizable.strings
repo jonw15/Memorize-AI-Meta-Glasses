@@ -542,10 +542,16 @@
 "memorize.source_text_note_desc" = "Type or paste your notes";
 "memorize.source_file" = "File";
 "memorize.source_file_desc" = "Import a PDF or text file";
+"memorize.source_youtube" = "YouTube";
+"memorize.source_youtube_desc" = "Paste a link and import the transcript";
 "memorize.note_title_placeholder" = "Note title (optional)";
 "memorize.note_text_placeholder" = "Type or paste your notes here...";
 "memorize.save_note" = "Save Note";
 "memorize.add_text_note" = "Add Text Note";
+"memorize.youtube_import_title" = "Import YouTube Transcript";
+"memorize.youtube_link_placeholder" = "Paste a YouTube link";
+"memorize.youtube_import_button" = "Import Transcript";
+"memorize.youtube_import_loading" = "Importing transcript...";
 "memorize.interact_subtitle" = "Have a voice conversation about what you read";
 "memorize.explain_subtitle" = "Get an explanation from a persona";
 "memorize.podcast_subtitle" = "Listen to an AI-generated podcast";

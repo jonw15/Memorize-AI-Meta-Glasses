@@ -1116,6 +1116,10 @@ struct MemorizePostCaptureActionsView: View {
         viewModel.pages.filter { $0.status == .completed }
     }
 
+    private var usesPDFLengthHeuristic: Bool {
+        viewModel.currentBook?.sources.contains(where: { $0.sourceType == .pdf }) ?? false
+    }
+
     /// True when buttons should be disabled — before voice menu speaks or while a feature is active
     private var isButtonsDisabled: Bool {
         !voiceMenu.hasSpoken ||
@@ -1295,6 +1299,7 @@ struct MemorizePostCaptureActionsView: View {
                 bookTitle: bookTitle,
                 sectionTitle: sectionTitle,
                 mode: viewModel.podcastMode,
+                usesPDFLengthHeuristic: usesPDFLengthHeuristic,
                 onClose: {
                     viewModel.showPodcastPlayer = false
                 }
@@ -2585,6 +2590,7 @@ struct MemorizePodcastPlayerView: View {
     let bookTitle: String
     let sectionTitle: String
     let mode: PodcastMode
+    let usesPDFLengthHeuristic: Bool
     let onClose: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -2623,6 +2629,32 @@ struct MemorizePodcastPlayerView: View {
     private let barMaxHeights: [CGFloat] = [36, 48, 40, 44, 32]
     private let skipInterval: TimeInterval = 15
     private let bytesPerSecond: Double = 48000
+    private let wordsPerPodcastMinute = 170.0
+
+    private var completedPages: [PageCapture] {
+        pages.filter { $0.status == .completed }
+    }
+
+    private var sourceWordCount: Int {
+        completedPages.reduce(0) { total, page in
+            total + page.extractedText
+                .split { $0.isWhitespace || $0.isNewline }
+                .count
+        }
+    }
+
+    private var targetLengthStrategyLabel: String {
+        usesPDFLengthHeuristic ? "page_based" : "word_based"
+    }
+
+    private var targetPodcastMinutes: Int {
+        if usesPDFLengthHeuristic {
+            return max(4, completedPages.count * 2)
+        }
+
+        let estimatedMinutes = Int(ceil(Double(max(sourceWordCount, 1)) / wordsPerPodcastMinute))
+        return max(4, estimatedMinutes)
+    }
 
     private var totalDuration: TimeInterval {
         Double(accumulatedAudio.count) / bytesPerSecond
@@ -2766,6 +2798,8 @@ struct MemorizePodcastPlayerView: View {
             podcastReconnectWithNewVoice()
         }
         .task {
+            let modeLabel = mode == .interactive ? "interactive" : "play"
+            print("🎙️ [MemorizePodcast] View task started mode=\(modeLabel) target length=\(targetPodcastMinutes) min strategy=\(targetLengthStrategyLabel) words=\(sourceWordCount) pages=\(completedPages.count)")
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             try? await Task.sleep(nanoseconds: 500_000_000)
             setupAndConnect()
@@ -3002,7 +3036,6 @@ struct MemorizePodcastPlayerView: View {
     // MARK: - Gemini Setup
 
     private func setupAndConnect() {
-        let completedPages = pages.filter { $0.status == .completed }
         let sourceContext = buildMemorizeLiveSourceContext(
             from: completedPages,
             maxPages: 10,
@@ -3017,8 +3050,9 @@ struct MemorizePodcastPlayerView: View {
 
         // Scale podcast duration by page count: 2 min per page, minimum 4 min
         let pageCount = completedPages.count
-        let targetMinutes = max(4, pageCount * 2)
+        let targetMinutes = targetPodcastMinutes
         estimatedTotalDuration = Double(targetMinutes) * 60.0
+        print("🎙️ [MemorizePodcast] Loaded target length: \(targetMinutes) min (\(Int(estimatedTotalDuration))s) strategy=\(targetLengthStrategyLabel) words=\(sourceWordCount) pages=\(pageCount)")
 
         // Track how many continuation prompts we've sent
         var continuationCount = 0
@@ -3061,7 +3095,7 @@ struct MemorizePodcastPlayerView: View {
         service.onConnected = { [service] in
             Task { @MainActor in
                 isConnected = true
-                let micMuted = mode == .play
+                let micMuted = true
                 service.isMicMuted = micMuted
                 service.startRecording()
                 isRecording = true
@@ -3076,6 +3110,11 @@ struct MemorizePodcastPlayerView: View {
             Task { @MainActor in
                 let wasAtEnd = playbackPosition >= totalDuration - 0.1
                 accumulatedAudio.append(audioData)
+
+                if mode == .interactive && !isMuted {
+                    service.isMicMuted = true
+                    isMuted = true
+                }
 
                 if !hasStartedPlaying {
                     hasStartedPlaying = true
@@ -3092,7 +3131,14 @@ struct MemorizePodcastPlayerView: View {
             }
         }
 
-        service.onTranscriptDelta = { (_: String) in }
+        service.onTranscriptDelta = { (_: String) in
+            Task { @MainActor in
+                if mode == .interactive && !isMuted {
+                    service.isMicMuted = true
+                    isMuted = true
+                }
+            }
+        }
         service.onTranscriptDone = { (_: String) in }
 
         service.onAudioDone = { [service] in

@@ -9,6 +9,7 @@ struct AddSourceSheet: View {
     let onTextNote: () -> Void
     let onCamera: () -> Void
     let onFile: () -> Void
+    let onYouTube: () -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -21,6 +22,10 @@ struct AddSourceSheet: View {
                     .padding(.top, AppSpacing.md)
 
                 VStack(spacing: AppSpacing.sm) {
+                    sourceOption(icon: "play.rectangle.fill", title: "memorize.source_youtube".localized, subtitle: "memorize.source_youtube_desc".localized) {
+                        onYouTube()
+                    }
+
                     sourceOption(icon: "camera.fill", title: "memorize.source_camera".localized, subtitle: "memorize.source_camera_desc".localized) {
                         onCamera()
                     }

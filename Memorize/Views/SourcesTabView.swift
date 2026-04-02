@@ -14,12 +14,13 @@ struct SourcesTabView: View {
     @State private var didAutoShowAddSource = false
     @State private var showTextNoteEditor = false
     @State private var showCameraCapture = false
+    @State private var showYouTubeImporter = false
     @State private var pendingDeleteSource: Source?
     @State private var viewingSource: Source?
     @State private var pendingAction: PendingSourceAction?
 
     private enum PendingSourceAction {
-        case textNote, camera, file
+        case textNote, camera, file, youtube
     }
 
     var body: some View {
@@ -102,7 +103,26 @@ struct SourcesTabView: View {
                         .padding(.horizontal, AppSpacing.md)
                     }
 
+                    if viewModel.isImportingYouTube {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .tint(AppColors.memorizeAccent)
+                                .scaleEffect(0.8)
+                            Text("memorize.youtube_import_loading".localized)
+                                .font(AppTypography.caption)
+                                .foregroundColor(Color.white.opacity(0.6))
+                        }
+                        .padding(.horizontal, AppSpacing.md)
+                    }
+
                     if let error = viewModel.pdfImportError {
+                        Text(error)
+                            .font(AppTypography.caption)
+                            .foregroundColor(.red.opacity(0.8))
+                            .padding(.horizontal, AppSpacing.md)
+                    }
+
+                    if let error = viewModel.youtubeImportError {
                         Text(error)
                             .font(AppTypography.caption)
                             .foregroundColor(.red.opacity(0.8))
@@ -158,9 +178,14 @@ struct SourcesTabView: View {
                 onFile: {
                     showAddSourceSheet = false
                     pendingAction = .file
+                },
+                onYouTube: {
+                    viewModel.youtubeImportError = nil
+                    showAddSourceSheet = false
+                    pendingAction = .youtube
                 }
             )
-            .presentationDetents([.height(320)])
+            .presentationDetents([.height(380)])
         }
         .onChange(of: showAddSourceSheet) { showing in
             if !showing, let action = pendingAction {
@@ -168,6 +193,7 @@ struct SourcesTabView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     switch action {
                     case .textNote: showTextNoteEditor = true
+                    case .youtube: showYouTubeImporter = true
                     case .camera: showCameraCapture = true
                     case .file: viewModel.showFilePicker = true
                     }
@@ -177,6 +203,19 @@ struct SourcesTabView: View {
         .sheet(isPresented: $showTextNoteEditor) {
             TextNoteEditorView { title, text in
                 viewModel.addTextNote(title: title, text: text)
+            }
+        }
+        .sheet(isPresented: $showYouTubeImporter) {
+            YouTubeLinkImportView(
+                isImporting: viewModel.isImportingYouTube,
+                errorMessage: viewModel.youtubeImportError
+            ) { link in
+                Task {
+                    await viewModel.importYouTubeTranscript(from: link)
+                    if viewModel.youtubeImportError == nil {
+                        showYouTubeImporter = false
+                    }
+                }
             }
         }
         .fullScreenCover(isPresented: $showCameraCapture, onDismiss: {
@@ -258,6 +297,8 @@ struct SourcesTabView: View {
             return "Text note"
         case .file:
             return "Imported file"
+        case .youtube:
+            return "YouTube transcript"
         }
     }
 
@@ -276,6 +317,40 @@ struct SourceTextView: View {
             .joined(separator: "\n\n")
     }
 
+    private var displayText: String {
+        guard source.sourceType == .youtube else { return allText }
+
+        let segments = allText
+            .components(separatedBy: .newlines)
+            .map { $0.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var paragraphs: [String] = []
+        var currentParagraph = ""
+
+        for segment in segments {
+            if currentParagraph.isEmpty {
+                currentParagraph = segment
+            } else if currentParagraph.hasSuffix("-") {
+                currentParagraph += segment
+            } else {
+                currentParagraph += " " + segment
+            }
+
+            let endsSentence = segment.last.map { ".!?".contains($0) } ?? false
+            if endsSentence && currentParagraph.count >= 260 {
+                paragraphs.append(currentParagraph)
+                currentParagraph = ""
+            }
+        }
+
+        if !currentParagraph.isEmpty {
+            paragraphs.append(currentParagraph)
+        }
+
+        return paragraphs.joined(separator: "\n\n")
+    }
+
     var body: some View {
         NavigationView {
             ScrollView {
@@ -289,6 +364,7 @@ struct SourceTextView: View {
                             .font(AppTypography.caption)
                             .foregroundColor(Color.white.opacity(0.5))
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, AppSpacing.xs)
 
                     if allText.isEmpty {
@@ -298,13 +374,16 @@ struct SourceTextView: View {
                             .padding(.top, AppSpacing.xl)
                             .frame(maxWidth: .infinity)
                     } else {
-                        Text(allText)
+                        Text(displayText)
                             .font(AppTypography.body)
                             .foregroundColor(.white)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                     }
                 }
                 .padding(AppSpacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(AppColors.memorizeBackground.ignoresSafeArea())
             .navigationTitle(source.name)
@@ -328,5 +407,89 @@ struct SourceTextView: View {
 extension Source: Equatable {
     static func == (lhs: Source, rhs: Source) -> Bool {
         lhs.id == rhs.id
+    }
+}
+
+struct YouTubeLinkImportView: View {
+    let isImporting: Bool
+    let errorMessage: String?
+    let onImport: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var link = ""
+
+    private var trimmedLink: String {
+        link.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isValid: Bool {
+        !trimmedLink.isEmpty
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: AppSpacing.md) {
+                Text("memorize.source_youtube_desc".localized)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(Color.white.opacity(0.7))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                TextField("memorize.youtube_link_placeholder".localized, text: $link)
+                    .font(AppTypography.body)
+                    .foregroundColor(.white)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                    .autocorrectionDisabled()
+                    .padding(AppSpacing.sm)
+                    .background(AppColors.memorizeCard)
+                    .cornerRadius(AppCornerRadius.md)
+
+                if let errorMessage, !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .font(AppTypography.caption)
+                        .foregroundColor(.red.opacity(0.85))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Button {
+                    onImport(trimmedLink)
+                } label: {
+                    HStack(spacing: 8) {
+                        if isImporting {
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "text.badge.plus")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        Text("memorize.youtube_import_button".localized)
+                            .font(AppTypography.headline)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background((isValid && !isImporting) ? AppColors.memorizeAccent : Color.white.opacity(0.1))
+                    .cornerRadius(AppCornerRadius.md)
+                }
+                .disabled(!isValid || isImporting)
+
+                Spacer()
+            }
+            .padding(AppSpacing.md)
+            .background(AppColors.memorizeBackground.ignoresSafeArea())
+            .navigationTitle("memorize.youtube_import_title".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("memorize.cancel".localized) {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                    .disabled(isImporting)
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
     }
 }
