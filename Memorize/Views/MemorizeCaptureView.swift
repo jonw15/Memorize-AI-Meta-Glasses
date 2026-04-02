@@ -2598,6 +2598,8 @@ struct MemorizePodcastPlayerView: View {
     @State private var isConnected = false
     @State private var isRecording = false
     @State private var isMuted = true
+    @State private var listenerQuestionArmed = false
+    @State private var isAnsweringListenerQuestion = false
     @State private var errorMessage: String?
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
     @State private var showVoicePicker = false
@@ -2964,10 +2966,12 @@ struct MemorizePodcastPlayerView: View {
                 service.interruptPlayback()
                 service.isMicMuted = false
                 isMuted = false
+                listenerQuestionArmed = true
             } else {
                 // Re-mute
                 service.isMicMuted = true
                 isMuted = true
+                listenerQuestionArmed = false
             }
         } label: {
             HStack(spacing: 8) {
@@ -3079,6 +3083,14 @@ struct MemorizePodcastPlayerView: View {
         Speak naturally as if recording a real podcast episode. Be enthusiastic but not over the top.
         The episode should be about \(targetMinutes) minutes long. Cover the material thoroughly.
         Do NOT mention that you are an AI. Speak as a human podcast host would.
+        \(mode == .interactive ? """
+
+        INTERACTIVE MODE RULES:
+        - If the listener interrupts with a spoken question, immediately pause the podcast and answer the listener directly.
+        - Answer the question first in a concise, natural way.
+        - Do NOT continue the podcast automatically after answering a listener question.
+        - Only resume the podcast if the listener explicitly asks you to continue or resume.
+        """ : "")
         """
 
         print("⚡️ [MemorizePodcast] Live context chars: \(sourceContext.count)")
@@ -3100,8 +3112,55 @@ struct MemorizePodcastPlayerView: View {
                 service.startRecording()
                 isRecording = true
                 isMuted = micMuted
+                listenerQuestionArmed = false
+                isAnsweringListenerQuestion = false
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 service.sendTextInput("Begin the podcast now. Start with your intro and dive deep into the content. You have \(targetMinutes) minutes.")
+            }
+        }
+
+        service.onUserTranscript = { (userText: String) in
+            Task { @MainActor in
+                let trimmed = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                guard mode == .interactive, listenerQuestionArmed else { return }
+
+                let normalized = trimmed.lowercased()
+                let isResumeRequest =
+                    normalized == "continue"
+                    || normalized == "resume"
+                    || normalized.contains("continue the podcast")
+                    || normalized.contains("resume the podcast")
+                    || normalized.contains("keep going")
+
+                service.isMicMuted = true
+                isMuted = true
+                listenerQuestionArmed = false
+                isAnsweringListenerQuestion = !isResumeRequest
+
+                if isResumeRequest {
+                    print("🎙️ [Podcast] Listener requested resume")
+                    service.sendTextInput(
+                        """
+                        Resume the podcast now from exactly where you left off before the listener interruption.
+                        Do not restart the episode or repeat the introduction.
+                        Continue naturally with the next idea from the reading.
+                        """
+                    )
+                } else {
+                    print("🎙️ [Podcast] Listener question captured: \(trimmed)")
+                    service.sendTextInput(
+                        """
+                        The listener interrupted the podcast with this question:
+                        "\(trimmed)"
+
+                        Pause the podcast and answer the listener directly in a concise, natural way.
+                        Base your answer on the reading material when possible.
+                        Do not continue the podcast after answering.
+                        Wait for the listener to explicitly ask you to continue or resume.
+                        """
+                    )
+                }
             }
         }
 
@@ -3110,11 +3169,6 @@ struct MemorizePodcastPlayerView: View {
             Task { @MainActor in
                 let wasAtEnd = playbackPosition >= totalDuration - 0.1
                 accumulatedAudio.append(audioData)
-
-                if mode == .interactive && !isMuted {
-                    service.isMicMuted = true
-                    isMuted = true
-                }
 
                 if !hasStartedPlaying {
                     hasStartedPlaying = true
@@ -3131,18 +3185,17 @@ struct MemorizePodcastPlayerView: View {
             }
         }
 
-        service.onTranscriptDelta = { (_: String) in
-            Task { @MainActor in
-                if mode == .interactive && !isMuted {
-                    service.isMicMuted = true
-                    isMuted = true
-                }
-            }
-        }
+        service.onTranscriptDelta = { (_: String) in }
         service.onTranscriptDone = { (_: String) in }
 
         service.onAudioDone = { [service] in
             Task { @MainActor in
+                if mode == .interactive && isAnsweringListenerQuestion {
+                    print("🎙️ [Podcast] Finished answering listener question — holding before resume")
+                    isAnsweringListenerQuestion = false
+                    return
+                }
+
                 continuationCount += 1
                 let elapsedMinutes = totalDuration / 60.0
 
