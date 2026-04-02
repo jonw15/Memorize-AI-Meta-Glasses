@@ -2581,6 +2581,24 @@ struct PodcastModePickerView: View {
 // MARK: - Podcast Player View (Gemini Live)
 
 struct MemorizePodcastPlayerView: View {
+    private enum InteractivePodcastState {
+        case podcasting
+        case interrupting
+        case promptingForQuestion
+        case waitingForQuestion
+        case answeringQuestion
+        case resuming
+        case readyToResume
+    }
+
+    private enum PodcastTurnKind {
+        case podcast
+        case interruptingPodcast
+        case questionPrompt
+        case questionAnswer
+        case resumePodcast
+    }
+
     let pages: [PageCapture]
     let bookTitle: String
     let sectionTitle: String
@@ -2595,6 +2613,16 @@ struct MemorizePodcastPlayerView: View {
     @State private var errorMessage: String?
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
     @State private var showVoicePicker = false
+    @State private var interactiveState: InteractivePodcastState = .podcasting
+    @State private var currentTurnKind: PodcastTurnKind = .podcast
+    @State private var currentAssistantText = ""
+    @State private var currentUserText = ""
+    @State private var lastPodcastTranscriptExcerpt = ""
+    @State private var interruptionTask: Task<Void, Never>?
+    @State private var serviceSessionID = UUID()
+    @State private var podcastTargetMinutes = 0
+    @State private var continuationCount = 0
+    @State private var maxContinuations = 0
 
     // Audio accumulation & playback tracking
     @State private var accumulatedAudio = Data()
@@ -2623,6 +2651,35 @@ struct MemorizePodcastPlayerView: View {
     private let barMaxHeights: [CGFloat] = [36, 48, 40, 44, 32]
     private let skipInterval: TimeInterval = 15
     private let bytesPerSecond: Double = 48000
+
+    private var canRaiseHand: Bool {
+        mode == .interactive && isConnected && interactiveState == .podcasting
+    }
+
+    private var canResumePodcast: Bool {
+        mode == .interactive && isConnected && interactiveState == .readyToResume
+    }
+
+    private var interactionStatusText: String? {
+        guard mode == .interactive else { return nil }
+
+        switch interactiveState {
+        case .podcasting:
+            return "Listening to podcast. Tap Ask to interrupt with a question."
+        case .interrupting:
+            return "Stopping the podcast so you can ask a question..."
+        case .promptingForQuestion:
+            return "The host is inviting your question..."
+        case .waitingForQuestion:
+            return "The podcast is paused. Ask your question now."
+        case .answeringQuestion:
+            return "Answering your question..."
+        case .resuming:
+            return "Resuming the podcast..."
+        case .readyToResume:
+            return "Tap Resume to continue the podcast."
+        }
+    }
 
     private var totalDuration: TimeInterval {
         Double(accumulatedAudio.count) / bytesPerSecond
@@ -2707,7 +2764,15 @@ struct MemorizePodcastPlayerView: View {
                 }
 
                 if isConnected && mode == .interactive {
-                    microphoneButton
+                    interactiveControls
+
+                    if let interactionStatusText {
+                        Text(interactionStatusText)
+                            .font(AppTypography.caption)
+                            .foregroundColor(Color.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, AppSpacing.lg)
+                    }
                 }
 
                 Spacer()
@@ -2784,8 +2849,11 @@ struct MemorizePodcastPlayerView: View {
             scrubPosition = min(newPosition, effectiveMax)
         }
         .onDisappear {
+            interruptionTask?.cancel()
+            interruptionTask = nil
             stopBarTimer()
             stopPositionTimer()
+            serviceSessionID = UUID()
             geminiService?.disconnect()
             geminiService = nil
         }
@@ -2922,32 +2990,184 @@ struct MemorizePodcastPlayerView: View {
 
     // MARK: - Mic, Bars, Helpers
 
-    private var microphoneButton: some View {
-        Button {
-            guard isConnected, let service = geminiService else { return }
-            if isMuted {
-                // Unmute — let user speak/ask questions
-                service.interruptPlayback()
-                service.isMicMuted = false
-                isMuted = false
-            } else {
-                // Re-mute
-                service.isMicMuted = true
-                isMuted = true
+    private var interactiveControls: some View {
+        HStack(spacing: AppSpacing.sm) {
+            Button {
+                raiseHandForQuestion()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "hand.raised.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                    Text("memorize.podcast_hand_raise".localized)
+                        .font(AppTypography.subheadline)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(canRaiseHand ? podcastAccent.opacity(0.5) : Color.white.opacity(0.12))
+                .cornerRadius(AppCornerRadius.md)
             }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: isMuted ? "mic.slash.fill" : "mic.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                Text(isMuted ? "memorize.podcast_unmute".localized : "memorize.podcast_mute".localized)
-                    .font(AppTypography.subheadline)
+            .disabled(!canRaiseHand)
+
+            Button {
+                resumePodcastAfterQuestion()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("memorize.podcast_resume".localized)
+                        .font(AppTypography.subheadline)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(canResumePodcast ? podcastAccent.opacity(0.5) : Color.white.opacity(0.12))
+                .cornerRadius(AppCornerRadius.md)
             }
-            .foregroundColor(.white)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            .background(isMuted ? Color.white.opacity(0.15) : podcastAccent.opacity(0.5))
-            .cornerRadius(AppCornerRadius.md)
+            .disabled(!canResumePodcast)
         }
+        .padding(.horizontal, AppSpacing.md)
+    }
+
+    private func raiseHandForQuestion() {
+        guard canRaiseHand else { return }
+
+        interruptionTask?.cancel()
+        cachePodcastContextFromCurrentTurn()
+        interactiveState = .interrupting
+        currentTurnKind = .interruptingPodcast
+        currentAssistantText = ""
+        isMuted = true
+        currentUserText = ""
+        isPaused = true
+        stopBarTimer()
+        stopPositionTimer()
+        serviceSessionID = UUID()
+        geminiService?.disconnect()
+        geminiService = nil
+        isConnected = false
+        isRecording = false
+
+        interruptionTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard interactiveState == .interrupting else { return }
+            setupAndConnect(
+                initialPrompt: questionPromptText,
+                initialTurnKind: .questionPrompt,
+                initialInteractiveState: .promptingForQuestion,
+                preserveEpisodeState: true
+            )
+        }
+    }
+
+    private func promptForRelevantQuestion() {
+        guard let service = geminiService else { return }
+
+        interruptionTask?.cancel()
+        interruptionTask = nil
+        interactiveState = .promptingForQuestion
+        currentTurnKind = .questionPrompt
+        currentAssistantText = ""
+        currentUserText = ""
+        service.isMicMuted = true
+        isMuted = true
+        service.prepareForImmediatePromptPlayback()
+        service.sendTextInput("""
+        Pause the podcast. In one short sentence, ask the listener if they have a relevant question about what you just said.
+        Do not continue the podcast yet.
+        """)
+
+        interruptionTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            guard interactiveState == .promptingForQuestion else { return }
+            interactiveState = .waitingForQuestion
+            service.isMicMuted = false
+            isMuted = false
+        }
+    }
+
+    private func resumePodcastAfterQuestion() {
+        guard canResumePodcast else { return }
+
+        interruptionTask?.cancel()
+        interactiveState = .resuming
+        currentTurnKind = .resumePodcast
+        currentAssistantText = ""
+        currentUserText = ""
+        isMuted = true
+        isPaused = false
+        isStreamDone = false
+        hasStartedPlaying = false
+        stopBarTimer()
+        stopPositionTimer()
+        serviceSessionID = UUID()
+        geminiService?.disconnect()
+        geminiService = nil
+        isConnected = false
+        isRecording = false
+
+        interruptionTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard interactiveState == .resuming else { return }
+            setupAndConnect(
+                initialPrompt: resumePrompt(),
+                initialTurnKind: .resumePodcast,
+                initialInteractiveState: .podcasting,
+                preserveEpisodeState: true
+            )
+        }
+    }
+
+    private var questionPromptText: String {
+        """
+        Pause the podcast. In one short sentence, ask the listener if they have a relevant question about what you just said.
+        Do not continue the podcast yet.
+        """
+    }
+
+    private func resumePrompt() -> String {
+        let context = lastPodcastTranscriptExcerpt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if context.isEmpty {
+            return """
+            Resume the Deep Dive podcast exactly where you left off before the listener's question.
+            Continue naturally with the episode and do not repeat the intro or the question-and-answer exchange.
+            """
+        }
+
+        return """
+        Resume the Deep Dive podcast exactly where you left off before the listener's question.
+        The last podcast point you were making was: "\(context)".
+        Continue naturally from there and do not repeat the intro or the question-and-answer exchange.
+        """
+    }
+
+    private func appendAssistantDelta(_ delta: String) {
+        let cleaned = delta.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return }
+
+        if cleaned.hasPrefix(currentAssistantText) && cleaned.count > currentAssistantText.count {
+            currentAssistantText = cleaned
+        } else if currentAssistantText.isEmpty || !cleaned.hasPrefix(currentAssistantText) {
+            if currentAssistantText.isEmpty {
+                currentAssistantText = cleaned
+            } else {
+                let needsSpace = !currentAssistantText.hasSuffix(" ") && !cleaned.hasPrefix(" ")
+                currentAssistantText += (needsSpace ? " " : "") + cleaned
+            }
+        }
+    }
+
+    private func cachePodcastContextFromCurrentTurn() {
+        guard currentTurnKind == .podcast || currentTurnKind == .resumePodcast else { return }
+
+        let normalized = currentAssistantText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        guard !normalized.isEmpty else { return }
+
+        lastPodcastTranscriptExcerpt = String(normalized.suffix(260))
     }
 
     private func startBarTimer() {
@@ -2974,6 +3194,9 @@ struct MemorizePodcastPlayerView: View {
     }
 
     private func disconnectAndDismiss() {
+        interruptionTask?.cancel()
+        interruptionTask = nil
+        serviceSessionID = UUID()
         geminiService?.disconnect()
         geminiService = nil
         dismiss()
@@ -2981,6 +3204,9 @@ struct MemorizePodcastPlayerView: View {
     }
 
     private func podcastReconnectWithNewVoice() {
+        interruptionTask?.cancel()
+        interruptionTask = nil
+        serviceSessionID = UUID()
         geminiService?.disconnect()
         geminiService = nil
         accumulatedAudio = Data()
@@ -2996,12 +3222,26 @@ struct MemorizePodcastPlayerView: View {
         sliderMax = 0.1
         stopBarTimer()
         stopPositionTimer()
+        interactiveState = .podcasting
+        currentTurnKind = .podcast
+        currentAssistantText = ""
+        currentUserText = ""
+        lastPodcastTranscriptExcerpt = ""
+        continuationCount = 0
         setupAndConnect()
     }
 
     // MARK: - Gemini Setup
 
-    private func setupAndConnect() {
+    private func setupAndConnect(
+        initialPrompt: String? = nil,
+        initialTurnKind: PodcastTurnKind = .podcast,
+        initialInteractiveState: InteractivePodcastState = .podcasting,
+        preserveEpisodeState: Bool = false
+    ) {
+        let sessionID = UUID()
+        serviceSessionID = sessionID
+
         let completedPages = pages.filter { $0.status == .completed }
         let sourceContext = buildMemorizeLiveSourceContext(
             from: completedPages,
@@ -3020,9 +3260,16 @@ struct MemorizePodcastPlayerView: View {
         let targetMinutes = max(4, pageCount * 2)
         estimatedTotalDuration = Double(targetMinutes) * 60.0
 
-        // Track how many continuation prompts we've sent
-        var continuationCount = 0
-        let maxContinuations = max(1, targetMinutes / 2)  // ~2 min per response from Gemini
+        podcastTargetMinutes = targetMinutes
+        if !preserveEpisodeState {
+            continuationCount = 0
+            lastPodcastTranscriptExcerpt = ""
+        }
+        maxContinuations = max(1, targetMinutes / 2)  // ~2 min per response from Gemini
+        interactiveState = initialInteractiveState
+        currentTurnKind = initialTurnKind
+        currentAssistantText = ""
+        currentUserText = ""
 
         let systemPrompt = """
         You are the host of an engaging educational podcast called "Deep Dive". You have a warm, enthusiastic personality.
@@ -3060,20 +3307,39 @@ struct MemorizePodcastPlayerView: View {
 
         service.onConnected = { [service] in
             Task { @MainActor in
+                guard sessionID == serviceSessionID else { return }
                 isConnected = true
-                let micMuted = mode == .play
+                let micMuted = true
                 service.isMicMuted = micMuted
                 service.startRecording()
                 isRecording = true
                 isMuted = micMuted
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                service.sendTextInput("Begin the podcast now. Start with your intro and dive deep into the content. You have \(targetMinutes) minutes.")
+                currentTurnKind = initialTurnKind
+                interactiveState = initialInteractiveState
+                service.sendTextInput(initialPrompt ?? "Begin the podcast now. Start with your intro and dive deep into the content. You have \(targetMinutes) minutes.")
+            }
+        }
+
+        service.onUserTranscript = { (userText: String) in
+            Task { @MainActor in
+                guard sessionID == serviceSessionID else { return }
+                let trimmed = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                currentUserText += userText
+
+                if mode == .interactive,
+                   (interactiveState == .waitingForQuestion || interactiveState == .promptingForQuestion) {
+                    currentTurnKind = .questionAnswer
+                    interactiveState = .answeringQuestion
+                }
             }
         }
 
         // Accumulate raw PCM audio for seeking
         service.onAudioDelta = { (audioData: Data) in
             Task { @MainActor in
+                guard sessionID == serviceSessionID else { return }
                 let wasAtEnd = playbackPosition >= totalDuration - 0.1
                 accumulatedAudio.append(audioData)
 
@@ -3092,29 +3358,98 @@ struct MemorizePodcastPlayerView: View {
             }
         }
 
-        service.onTranscriptDelta = { (_: String) in }
-        service.onTranscriptDone = { (_: String) in }
+        service.onTranscriptDelta = { (delta: String) in
+            Task { @MainActor in
+                guard sessionID == serviceSessionID else { return }
+                guard interactiveState != .interrupting else { return }
+                appendAssistantDelta(delta)
+
+                if mode == .interactive,
+                   currentTurnKind == .questionAnswer,
+                   interactiveState == .answeringQuestion {
+                    service.isMicMuted = true
+                    isMuted = true
+                }
+            }
+        }
+
+        service.onTranscriptDone = { [service] (_: String) in
+            Task { @MainActor in
+                guard sessionID == serviceSessionID else { return }
+                let finalText = currentAssistantText
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+
+                if currentTurnKind == .podcast || currentTurnKind == .resumePodcast {
+                    if !finalText.isEmpty {
+                        lastPodcastTranscriptExcerpt = String(finalText.suffix(260))
+                    }
+                }
+
+                if currentTurnKind == .interruptingPodcast {
+                    currentAssistantText = ""
+                    currentUserText = ""
+                } else if currentTurnKind == .questionPrompt {
+                    interactiveState = .waitingForQuestion
+                    service.isMicMuted = false
+                    isMuted = false
+                    currentAssistantText = ""
+                } else if currentTurnKind == .questionAnswer {
+                    interactiveState = .readyToResume
+                    service.isMicMuted = true
+                    isMuted = true
+                    currentUserText = ""
+                    currentAssistantText = ""
+                } else {
+                    currentAssistantText = ""
+                }
+            }
+        }
 
         service.onAudioDone = { [service] in
             Task { @MainActor in
-                continuationCount += 1
-                let elapsedMinutes = totalDuration / 60.0
+                guard sessionID == serviceSessionID else { return }
+                switch currentTurnKind {
+                case .interruptingPodcast:
+                    break
 
-                if elapsedMinutes < Double(targetMinutes) - 0.5 && continuationCount < maxContinuations {
-                    // Not enough content yet — ask Gemini to continue
-                    let remainingMinutes = Int(Double(targetMinutes) - elapsedMinutes)
-                    print("🎙️ [Podcast] \(String(format: "%.1f", elapsedMinutes))min elapsed, target \(targetMinutes)min — requesting continuation")
-                    try? await Task.sleep(nanoseconds: 300_000_000)
-                    service.sendTextInput("Continue the podcast. You still have about \(remainingMinutes) minutes. Keep discussing the material — go deeper into the details, share more insights, and cover points you haven't addressed yet. Do NOT wrap up or say goodbye yet.")
-                } else {
-                    print("🎙️ [Podcast] Done — \(String(format: "%.1f", elapsedMinutes))min total")
-                    isStreamDone = true
+                case .questionPrompt:
+                    if interactiveState == .promptingForQuestion {
+                        interactiveState = .waitingForQuestion
+                        service.isMicMuted = false
+                        isMuted = false
+                    }
+
+                case .questionAnswer:
+                    if interactiveState == .answeringQuestion {
+                        interactiveState = .readyToResume
+                        service.isMicMuted = true
+                        isMuted = true
+                    }
+
+                case .podcast, .resumePodcast:
+                    continuationCount += 1
+                    let elapsedMinutes = totalDuration / 60.0
+
+                    if elapsedMinutes < Double(podcastTargetMinutes) - 0.5 && continuationCount < maxContinuations {
+                        let remainingMinutes = Int(Double(podcastTargetMinutes) - elapsedMinutes)
+                        print("🎙️ [Podcast] \(String(format: "%.1f", elapsedMinutes))min elapsed, target \(podcastTargetMinutes)min — requesting continuation")
+                        try? await Task.sleep(nanoseconds: 300_000_000)
+                        currentTurnKind = .resumePodcast
+                        service.sendTextInput("Continue the podcast. You still have about \(remainingMinutes) minutes. Keep discussing the material — go deeper into the details, share more insights, and cover points you haven't addressed yet. Do NOT wrap up or say goodbye yet.")
+                    } else {
+                        print("🎙️ [Podcast] Done — \(String(format: "%.1f", elapsedMinutes))min total")
+                        isStreamDone = true
+                    }
                 }
             }
         }
 
         service.onError = { (errorText: String) in
             Task { @MainActor in
+                guard sessionID == serviceSessionID else { return }
+                interruptionTask?.cancel()
+                interruptionTask = nil
                 errorMessage = errorText
             }
         }

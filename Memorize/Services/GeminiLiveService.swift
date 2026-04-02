@@ -300,11 +300,15 @@ class GeminiLiveService: NSObject {
     func disconnect() {
         print("🔌 [Gemini] Disconnecting WebSocket")
         isDisconnecting = true
+        connectWaitTask?.cancel()
+        connectWaitTask = nil
         streamingFlushTimer?.invalidate()
         streamingFlushTimer = nil
         streamingBuffer = Data()
         webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
+        urlSession?.invalidateAndCancel()
+        urlSession = nil
         stopRecording()
         stopPlaybackEngine()
         isSessionConfigured = false
@@ -754,6 +758,14 @@ Do not apologize.
         }
     }
 
+    /// Clear any stale interruption suppression before sending a fresh prompt
+    /// that should speak immediately.
+    func prepareForImmediatePromptPlayback() {
+        dropIncomingAudioUntilInterrupted = false
+        isPlaybackPaused = false
+        startPlaybackEngineIfNeeded()
+    }
+
     /// Send a burst of silent audio to force the server to interrupt its current turn.
     func sendSilentAudioToInterrupt() {
         let silentBytes = Data(count: 6400)
@@ -847,6 +859,7 @@ Do not apologize.
         webSocket?.receive { [weak self] result in
             switch result {
             case .success(let message):
+                guard self?.isDisconnecting != true else { return }
                 self?.handleMessage(message)
                 self?.receiveMessage()
 
@@ -880,6 +893,7 @@ Do not apologize.
     }
 
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
+        guard !isDisconnecting else { return }
         switch message {
         case .string(let text):
             handleServerEvent(text)
@@ -899,6 +913,7 @@ Do not apologize.
         }
 
         DispatchQueue.main.async {
+            guard !self.isDisconnecting else { return }
             // Handle setup complete
             if json["setupComplete"] != nil {
                 print("✅ [Gemini] Session configuration complete")
