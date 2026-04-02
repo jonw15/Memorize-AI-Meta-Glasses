@@ -52,7 +52,7 @@ struct MemorizeQuizView: View {
         .task {
             // Let the audio session from the previous screen fully release
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
             voiceAssistant.enableVoiceAnswering { action in
                 switch action {
                 case .answer(let answerIndex):
@@ -61,6 +61,7 @@ struct MemorizeQuizView: View {
                     goToNextQuestion()
                 }
             }
+            print("🧪 [Quiz] Voice answering enabled, speaking first question...")
             speakCurrentQuestionIfNeeded()
         }
         .onChange(of: currentIndex) { _ in
@@ -176,6 +177,18 @@ struct MemorizeQuizView: View {
                 .padding(.horizontal, AppSpacing.md)
             }
             .frame(maxHeight: 320)
+
+            // Voice hint
+            if question.selectedIndex == nil {
+                HStack(spacing: 6) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 12))
+                    Text("Say A, B, C, or D to answer")
+                        .font(AppTypography.caption)
+                }
+                .foregroundColor(Color.white.opacity(0.35))
+                .padding(.top, AppSpacing.xs)
+            }
 
             Spacer()
 
@@ -423,6 +436,7 @@ private final class QuizVoiceAssistant: ObservableObject {
     private var transcriptDebounceTask: Task<Void, Never>?
     // Only start listening after OUR text finishes playing, not unsolicited Gemini responses
     private var awaitingOurSpeechDone = false
+    private var sawAssistantAudioThisTurn = false
 
     func connect() {
         guard geminiService == nil else { return }
@@ -480,6 +494,12 @@ private final class QuizVoiceAssistant: ObservableObject {
             }
         }
 
+        service.onAudioDelta = { [weak self] (_: Data) in
+            Task { @MainActor [weak self] in
+                self?.sawAssistantAudioThisTurn = true
+            }
+        }
+
         // Only start listening when OUR speech finishes (not unsolicited Gemini responses)
         service.onAudioDone = { [weak self] in
             Task { @MainActor [weak self] in
@@ -488,6 +508,18 @@ private final class QuizVoiceAssistant: ObservableObject {
                 self.fallbackTask?.cancel()
                 self.fallbackTask = nil
                 print("🔊 [QuizVoice] Our speech finished, starting mic")
+                self.startListeningForAnswer()
+            }
+        }
+
+        service.onTranscriptDone = { [weak self] (_: String) in
+            Task { @MainActor [weak self] in
+                guard let self, self.shouldListen, self.awaitingOurSpeechDone else { return }
+                guard !self.sawAssistantAudioThisTurn else { return }
+                self.awaitingOurSpeechDone = false
+                self.fallbackTask?.cancel()
+                self.fallbackTask = nil
+                print("📝 [QuizVoice] Transcript-only turn finished, starting mic")
                 self.startListeningForAnswer()
             }
         }
@@ -522,12 +554,14 @@ private final class QuizVoiceAssistant: ObservableObject {
         speechTask?.cancel()
         fallbackTask?.cancel()
         fallbackTask = nil
-        awaitingOurSpeechDone = false
         listenMode = .waitingForAnswer
+        awaitingOurSpeechDone = false
 
         let letters = ["A", "B", "C", "D"]
         let optionText = question.options.enumerated().map { "\(letters[$0.offset]). \($0.element)" }.joined(separator: ". ")
-        let text = "[READ] Question \(index) of \(total). \(question.question). \(optionText) [/READ]"
+        let typePrefix = questionTypeLabel(for: question.type).map { "\($0). " } ?? ""
+        let text = "[READ] Question \(index) of \(total). \(typePrefix)\(question.question). \(optionText) [/READ]"
+        sawAssistantAudioThisTurn = false
 
         speechTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -545,15 +579,14 @@ private final class QuizVoiceAssistant: ObservableObject {
         speechTask?.cancel()
         fallbackTask?.cancel()
         fallbackTask = nil
-        awaitingOurSpeechDone = false
         listenMode = .waitingForNext
+        awaitingOurSpeechDone = false
+        sawAssistantAudioThisTurn = false
 
-        // Always interrupt first — mic is already off from transcript processing
         speechTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let connected = await self.prepareFreshSpeechConnection()
             guard connected, !Task.isCancelled else { return }
-            // Give the brand-new playback engine a moment to settle.
             try? await Task.sleep(nanoseconds: immediate ? 50_000_000 : 150_000_000)
             guard !Task.isCancelled else { return }
             self.markSpeechSentAndStartFallback()
@@ -579,9 +612,10 @@ private final class QuizVoiceAssistant: ObservableObject {
     private func markSpeechSentAndStartFallback() {
         awaitingOurSpeechDone = true
         fallbackTask?.cancel()
+        print("🔊 [QuizVoice] Waiting for Gemini speech to finish")
         fallbackTask = Task { @MainActor [weak self] in
-            // If onAudioDone doesn't fire within 6 seconds, start listening anyway
-            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            // If finish callbacks don't arrive promptly, start listening anyway.
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
             guard !Task.isCancelled, let self else { return }
             if self.awaitingOurSpeechDone && self.shouldListen {
                 print("⏰ [QuizVoice] Fallback: onAudioDone didn't fire, starting mic")
@@ -611,6 +645,7 @@ private final class QuizVoiceAssistant: ObservableObject {
         isProcessingTranscript = false
         accumulatedTranscript = ""
         awaitingOurSpeechDone = false
+        sawAssistantAudioThisTurn = false
     }
 
     private func startListeningForAnswer() {
@@ -799,6 +834,22 @@ private final class QuizVoiceAssistant: ObservableObject {
             return "d"
         default:
             return token
+        }
+    }
+
+    private func questionTypeLabel(for rawType: String?) -> String? {
+        guard let rawType = rawType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !rawType.isEmpty else { return nil }
+
+        switch rawType {
+        case "core":
+            return "Core understanding"
+        case "detail":
+            return "Key detail"
+        case "application":
+            return "Application"
+        default:
+            return rawType.capitalized
         }
     }
 }
