@@ -26,6 +26,7 @@ struct MainAppView: View {
   @State private var shouldAutoLaunchLiveAI = false
   @State private var showLaunchIntro = true
   @State private var restoreProjectContext: ProjectContextSnapshot?
+  @State private var showWelcome = true
 
   init(wearables: WearablesInterface, viewModel: WearablesViewModel) {
     self.wearables = wearables
@@ -35,31 +36,36 @@ struct MainAppView: View {
 
   var body: some View {
     Group {
-      if viewModel.registrationState == .registered || viewModel.hasMockDevice {
-          // Registered/connected device — go straight to main app
-          if !hasCheckedPermissions {
-            // First launch, request permissions
-            PermissionsRequestView { _ in
-              hasCheckedPermissions = true
-            }
-          } else {
-            // Permissions checked, show main interface
-            MainTabView(
-              streamViewModel: streamViewModel,
-              wearablesViewModel: viewModel,
-              autoLaunchLiveAI: $shouldAutoLaunchLiveAI,
-              restoreProjectContext: $restoreProjectContext
-            )
-              .onAppear {
-                // Set up QuickVisionManager's StreamViewModel reference
-                quickVisionManager.setStreamViewModel(streamViewModel)
-              }
+      if showWelcome {
+        // Welcome / onboarding screen
+        HomeScreenView(viewModel: viewModel, onContinue: {
+          withAnimation(.easeInOut(duration: 0.4)) {
+            showWelcome = false
           }
+        })
+        .transition(.opacity)
+      } else if !hasCheckedPermissions {
+        // Request permissions
+        PermissionsRequestView { _ in
+          hasCheckedPermissions = true
+        }
+        .transition(.opacity)
       } else {
-        // Not registered - show registration/onboarding flow
-        HomeScreenView(viewModel: viewModel)
+        // Main app interface
+        MainTabView(
+          streamViewModel: streamViewModel,
+          wearablesViewModel: viewModel,
+          autoLaunchLiveAI: $shouldAutoLaunchLiveAI,
+          restoreProjectContext: $restoreProjectContext
+        )
+        .onAppear {
+          quickVisionManager.setStreamViewModel(streamViewModel)
+        }
+        .transition(.opacity)
       }
     }
+    .animation(.easeInOut(duration: 0.4), value: showWelcome)
+    .animation(.easeInOut(duration: 0.4), value: hasCheckedPermissions)
     .onReceive(NotificationCenter.default.publisher(for: .returnToNewProjectIntro)) { _ in
       shouldAutoLaunchLiveAI = false
       showLaunchIntro = true

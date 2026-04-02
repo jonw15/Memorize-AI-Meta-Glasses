@@ -501,9 +501,7 @@ struct MemorizeHomeView: View {
             // Create New
             Button {
                 let newBook = Book(title: "")
-                MemorizeStorage.shared.saveBook(newBook)
-                viewModel.loadBooks()
-                // Open the new project immediately so user can add sources
+                // Don't save yet — ProjectDetailViewModel will save when first source is added
                 selectedProjectBook = newBook
             } label: {
                 HStack(spacing: 6) {

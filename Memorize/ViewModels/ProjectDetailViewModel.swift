@@ -78,7 +78,13 @@ class ProjectDetailViewModel: ObservableObject {
         }
 
         book.updatedAt = Date()
-        storage.updateBook(book)
+
+        // Save or update — if this is the first source, the book may not be in storage yet
+        if storage.bookExists(book.id) {
+            storage.updateBook(book)
+        } else {
+            storage.saveBook(book)
+        }
         print("📚 [ProjectDetail] Added source: \(source.name) (\(source.sourceType.rawValue))")
 
         // Auto-detect title if project is untitled

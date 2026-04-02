@@ -20,6 +20,7 @@ struct HomeScreenView: View {
   @ObservedObject var viewModel: WearablesViewModel
   var forceProjectIntroOnly: Bool = false
   var onNewProject: ((ProjectContextSnapshot) -> Void)? = nil
+  var onContinue: (() -> Void)? = nil
   @State private var showConnectionSuccess = false
   @State private var showConnectPage = false
 
@@ -71,6 +72,7 @@ struct HomeScreenView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
           withAnimation {
             showConnectionSuccess = false
+            showConnectPage = false // Return to welcome page with "Get Started"
           }
         }
       }
@@ -110,41 +112,41 @@ struct HomeScreenView: View {
 
       Spacer()
 
-      // "Do you have glasses?" section
+      // Bottom actions
       VStack(spacing: AppSpacing.sm) {
-        Text("Do you have Ray-Ban Meta glasses?")
-          .font(AppTypography.subheadline)
-          .foregroundColor(Color.white.opacity(0.6))
-
-        Button {
-          withAnimation { showConnectPage = true }
-        } label: {
-          HStack(spacing: 8) {
-            Image(systemName: "eyeglasses")
-              .font(.title3)
-            Text("Yes, connect my glasses")
-          }
-          .font(AppTypography.headline)
-          .foregroundColor(.white)
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 16)
-          .background(AppColors.memorizeAccent)
-          .cornerRadius(AppCornerRadius.lg)
-        }
-        .padding(.horizontal, AppSpacing.lg)
-
+        // Get Started / Continue button
         Button {
           if forceProjectIntroOnly {
             onNewProject?(ProjectContextSnapshot(instructions: [], tools: [], parts: [], videos: []))
           } else {
-            // Skip glasses — mark as registered so app proceeds
             viewModel.skipRegistration()
+            onContinue?()
           }
         } label: {
-          Text("No, use phone camera only")
+          Text("Get Started")
+            .font(AppTypography.headline)
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(AppColors.memorizeAccent)
+            .cornerRadius(AppCornerRadius.lg)
+        }
+        .padding(.horizontal, AppSpacing.lg)
+
+        // Connect glasses option (only if not already registered)
+        if viewModel.registrationState != .registered && !viewModel.hasMockDevice {
+          Button {
+            withAnimation { showConnectPage = true }
+          } label: {
+            HStack(spacing: 6) {
+              Image(systemName: "eyeglasses")
+                .font(.system(size: 14))
+              Text("Connect Ray-Ban Meta glasses")
+            }
             .font(AppTypography.subheadline)
             .foregroundColor(Color.white.opacity(0.5))
             .padding(.vertical, 12)
+          }
         }
       }
       .padding(.bottom, AppSpacing.xl)
