@@ -168,7 +168,7 @@ struct MemorizeService {
 
     // MARK: - Generate Quiz
 
-    func generateQuiz(from pages: [PageCapture]) async throws -> [QuizQuestion] {
+    func generateQuiz(from pages: [PageCapture], questionCount: Int? = nil) async throws -> [QuizQuestion] {
         let completedPages = pages.filter { $0.status == .completed }
         guard !completedPages.isEmpty else { return [] }
 
@@ -177,30 +177,89 @@ struct MemorizeService {
             .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
             .joined(separator: "\n\n")
 
-        let questionsPerPage = 2
-        let totalQuestions = completedPages.count * questionsPerPage
+        let recommendedQuestionCap = min(max(questionCount ?? 10, 5), 10)
 
         let prompt = """
-        Based on the following text extracted from book pages, generate exactly \(totalQuestions) multiple-choice quiz questions to test reading comprehension.
+        You are an expert learning designer focused on maximizing retention through active recall.
 
-        Text:
+        Your task is to generate a concise, high-quality quiz from the source material below.
+
+        GOALS:
+        - Reinforce key concepts (not test everything)
+        - Minimize cognitive overload
+        - Prioritize clarity and usefulness over quantity
+
+        SOURCE MATERIAL:
         \(combinedText)
 
-        Requirements:
-        1. Generate exactly \(totalQuestions) questions
-        2. Each question must have exactly 4 answer options
-        3. Questions should test understanding of key concepts, facts, and details
-        4. Make wrong answers plausible but clearly incorrect
-        5. Vary question difficulty
+        ---
 
-        Respond with ONLY a JSON array in this exact format, no other text:
-        [
-          {
-            "question": "What is...?",
-            "options": ["Option A", "Option B", "Option C", "Option D"],
-            "correctIndex": 0
-          }
-        ]
+        STEP 1: EXTRACT KEY CONCEPTS
+        - Identify the most important concepts in the source material
+        - A key concept is:
+          - A main idea, framework, definition, or important example
+          - Mentioned multiple times OR central to understanding the topic
+        - Return a list of key concepts (max 12, min 5)
+
+        ---
+
+        STEP 2: DETERMINE QUESTION COUNT
+        - Let N = number of key concepts
+        - question_count = min(max(N, 5), 10)
+        - Keep the final question count at or below \(recommendedQuestionCap) if the source is short
+
+        ---
+
+        STEP 3: SELECT CONCEPTS TO TEST
+        - Prioritize:
+          1. Concepts repeated multiple times
+          2. Concepts with definitions or explanations
+          3. Concepts critical to understanding the topic
+        - Do NOT create multiple questions for the same concept unless absolutely necessary
+
+        ---
+
+        STEP 4: GENERATE QUESTIONS
+        Structure:
+        - 60% Core Understanding (main ideas)
+        - 30% Key Details (important supporting info)
+        - 10% Application (real-world or reasoning)
+
+        Rules:
+        - One question per concept (avoid redundancy)
+        - Keep questions short and clear
+        - Avoid trivial or overly specific details
+        - Prefer conceptual understanding over memorization
+        - Each question must have exactly 4 answer options
+        - Ensure questions can be answered using only the source material
+
+        ---
+
+        STEP 5: FORMAT OUTPUT
+        Return ONLY valid JSON in this exact structure:
+        {
+          "total_questions": number,
+          "concepts": [
+            "concept 1",
+            "concept 2"
+          ],
+          "questions": [
+            {
+              "type": "core | detail | application",
+              "concept": "the concept being tested",
+              "question": "...",
+              "options": ["A", "B", "C", "D"],
+              "answer": "correct option",
+              "explanation": "short explanation of why it's correct"
+            }
+          ]
+        }
+
+        CONSTRAINTS:
+        - Total questions must NOT exceed 10
+        - Avoid repeating the same idea in multiple questions
+        - Keep explanations concise (1-2 sentences)
+        - Use only plain JSON with no markdown fences or extra commentary
         """
 
         let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
@@ -299,20 +358,68 @@ struct MemorizeService {
     }
 
     private func parseQuizQuestions(from response: String) -> [QuizQuestion] {
-        // Extract JSON array from response (handle markdown code blocks)
         let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
-        let jsonString = extractJSONArray(from: cleaned) ?? cleaned
+        let jsonObjectString = extractJSONObject(from: cleaned)
 
-        guard let data = jsonString.data(using: .utf8) else { return [] }
+        struct RawQuestionEnvelope: Decodable {
+            let total_questions: Int?
+            let concepts: [String]?
+            let questions: [RawQuestion]
+        }
 
         struct RawQuestion: Decodable {
+            let type: String?
+            let concept: String?
+            let question: String
+            let options: [String]
+            let answer: String
+            let explanation: String?
+        }
+
+        struct LegacyRawQuestion: Decodable {
             let question: String
             let options: [String]
             let correctIndex: Int
         }
 
+        if let jsonObjectString,
+           let data = jsonObjectString.data(using: .utf8),
+           let rawEnvelope = try? JSONDecoder().decode(RawQuestionEnvelope.self, from: data) {
+            let knownConcepts = rawEnvelope.concepts ?? []
+            let parsedQuestions = rawEnvelope.questions.compactMap { q -> QuizQuestion? in
+                guard q.options.count == 4 else { return nil }
+
+                let normalizedAnswer = q.answer.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                let correctIndex = q.options.firstIndex {
+                    $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalizedAnswer
+                } ?? answerIndex(from: normalizedAnswer)
+
+                guard let correctIndex, correctIndex >= 0, correctIndex < q.options.count else { return nil }
+
+                let fallbackConcept = knownConcepts.first { concept in
+                    q.question.localizedCaseInsensitiveContains(concept)
+                }
+
+                return QuizQuestion(
+                    type: q.type,
+                    concept: q.concept ?? fallbackConcept,
+                    question: q.question,
+                    options: q.options,
+                    correctIndex: correctIndex,
+                    explanation: q.explanation
+                )
+            }
+
+            if !parsedQuestions.isEmpty {
+                return parsedQuestions
+            }
+        }
+
+        let jsonArrayString = extractJSONArray(from: cleaned) ?? cleaned
+        guard let legacyData = jsonArrayString.data(using: .utf8) else { return [] }
+
         do {
-            let raw = try JSONDecoder().decode([RawQuestion].self, from: data)
+            let raw = try JSONDecoder().decode([LegacyRawQuestion].self, from: legacyData)
             return raw.compactMap { q in
                 guard q.options.count == 4, q.correctIndex >= 0, q.correctIndex < 4 else { return nil }
                 return QuizQuestion(question: q.question, options: q.options, correctIndex: q.correctIndex)
@@ -320,6 +427,21 @@ struct MemorizeService {
         } catch {
             print("❌ [Memorize] Quiz JSON parse error: \(error)")
             return []
+        }
+    }
+
+    private func answerIndex(from normalizedAnswer: String) -> Int? {
+        switch normalizedAnswer {
+        case "a", "option a":
+            return 0
+        case "b", "option b":
+            return 1
+        case "c", "option c":
+            return 2
+        case "d", "option d":
+            return 3
+        default:
+            return nil
         }
     }
 
@@ -710,27 +832,69 @@ struct YouTubeTranscriptImportService {
             }
         }
 
-        var paragraphs: [String] = []
-        var currentParagraph = ""
-
-        for segment in dedupedSegments {
-            if currentParagraph.isEmpty {
-                currentParagraph = segment
-            } else if currentParagraph.hasSuffix("-") {
-                currentParagraph += segment
+        let joinedTranscript = dedupedSegments.reduce(into: "") { partialResult, segment in
+            if partialResult.isEmpty {
+                partialResult = segment
+            } else if partialResult.hasSuffix("-") {
+                partialResult += segment
             } else {
-                currentParagraph += " " + segment
-            }
-
-            let endsSentence = segment.last.map { ".!?".contains($0) } ?? false
-            if endsSentence && currentParagraph.count >= 260 {
-                paragraphs.append(currentParagraph)
-                currentParagraph = ""
+                partialResult += " " + segment
             }
         }
 
-        if !currentParagraph.isEmpty {
-            paragraphs.append(currentParagraph)
+        return paragraphizeTranscript(joinedTranscript)
+    }
+
+    private func paragraphizeTranscript(_ text: String) -> String {
+        let normalized = text
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !normalized.isEmpty else { return "" }
+
+        let sentencePattern = #"[^.!?]+(?:[.!?]+|$)"#
+        let regex = try? NSRegularExpression(pattern: sentencePattern)
+        let nsRange = NSRange(normalized.startIndex..., in: normalized)
+        let sentenceMatches = regex?.matches(in: normalized, range: nsRange) ?? []
+
+        let sentences = sentenceMatches.compactMap { match -> String? in
+            guard let range = Range(match.range, in: normalized) else { return nil }
+            let sentence = normalized[range]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return sentence.isEmpty ? nil : sentence
+        }
+
+        if sentences.isEmpty {
+            return normalized
+        }
+
+        var paragraphs: [String] = []
+        var currentSentences: [String] = []
+        var currentLength = 0
+
+        for sentence in sentences {
+            let sentenceLength = sentence.count
+            let projectedLength = currentLength + (currentSentences.isEmpty ? 0 : 1) + sentenceLength
+            let shouldBreak =
+                !currentSentences.isEmpty &&
+                (
+                    currentSentences.count >= 3 ||
+                    projectedLength >= 360 ||
+                    (currentLength >= 180 && sentenceLength >= 120)
+                )
+
+            if shouldBreak {
+                paragraphs.append(currentSentences.joined(separator: " "))
+                currentSentences = [sentence]
+                currentLength = sentenceLength
+            } else {
+                currentSentences.append(sentence)
+                currentLength = projectedLength
+            }
+        }
+
+        if !currentSentences.isEmpty {
+            paragraphs.append(currentSentences.joined(separator: " "))
         }
 
         return paragraphs.joined(separator: "\n\n")

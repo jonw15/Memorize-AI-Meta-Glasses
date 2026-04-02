@@ -32,6 +32,7 @@ class ProjectDetailViewModel: ObservableObject {
     private let memorizeService = MemorizeService()
     private let pdfImportService = PDFImportService()
     private let youtubeTranscriptImportService = YouTubeTranscriptImportService()
+    private let wordsPerQuizQuestion = 85.0
 
     var allCompletedPages: [PageCapture] {
         book.allPages.filter { $0.status == .completed }
@@ -39,6 +40,27 @@ class ProjectDetailViewModel: ObservableObject {
 
     var hasContent: Bool {
         !allCompletedPages.isEmpty
+    }
+
+    private var usesPDFQuizLengthHeuristic: Bool {
+        book.sources.contains(where: { $0.sourceType == .pdf })
+    }
+
+    private var sourceWordCount: Int {
+        allCompletedPages.reduce(0) { total, page in
+            total + page.extractedText
+                .split { $0.isWhitespace || $0.isNewline }
+                .count
+        }
+    }
+
+    private var targetQuizQuestionCount: Int {
+        if usesPDFQuizLengthHeuristic {
+            return max(4, allCompletedPages.count * 2)
+        }
+
+        let estimatedQuestions = Int(ceil(Double(max(sourceWordCount, 1)) / wordsPerQuizQuestion))
+        return max(4, estimatedQuestions)
     }
 
     init(book: Book) {
@@ -193,7 +215,9 @@ class ProjectDetailViewModel: ObservableObject {
 
     func generateQuiz() {
         let pages = allCompletedPages
-        print("🧪 [ProjectDetail] generateQuiz — allPages: \(book.allPages.count), completed: \(pages.count), legacy pages: \(book.pages.count), sources: \(book.sources.count)")
+        let strategy = usesPDFQuizLengthHeuristic ? "page_based" : "word_based"
+        let questionCount = targetQuizQuestionCount
+        print("🧪 [ProjectDetail] generateQuiz — allPages: \(book.allPages.count), completed: \(pages.count), legacy pages: \(book.pages.count), sources: \(book.sources.count), strategy: \(strategy), words: \(sourceWordCount), questions: \(questionCount)")
         guard !pages.isEmpty else {
             print("🧪 [ProjectDetail] No completed pages — skipping quiz")
             return
@@ -203,7 +227,7 @@ class ProjectDetailViewModel: ObservableObject {
 
         Task {
             do {
-                let questions = try await memorizeService.generateQuiz(from: pages)
+                let questions = try await memorizeService.generateQuiz(from: pages, questionCount: questionCount)
                 quizQuestions = questions
                 showQuiz = true
             } catch {

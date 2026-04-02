@@ -188,16 +188,31 @@ struct Book: Identifiable, Codable {
 
 struct QuizQuestion: Identifiable, Codable {
     let id: UUID
+    let type: String?
+    let concept: String?
     let question: String
     let options: [String]       // 4 choices
     let correctIndex: Int       // index of correct answer
+    let explanation: String?
     var selectedIndex: Int?     // user's pick (nil = unanswered)
 
-    init(id: UUID = UUID(), question: String, options: [String], correctIndex: Int, selectedIndex: Int? = nil) {
+    init(
+        id: UUID = UUID(),
+        type: String? = nil,
+        concept: String? = nil,
+        question: String,
+        options: [String],
+        correctIndex: Int,
+        explanation: String? = nil,
+        selectedIndex: Int? = nil
+    ) {
         self.id = id
+        self.type = type
+        self.concept = concept
         self.question = question
         self.options = options
         self.correctIndex = correctIndex
+        self.explanation = explanation
         self.selectedIndex = selectedIndex
     }
 }

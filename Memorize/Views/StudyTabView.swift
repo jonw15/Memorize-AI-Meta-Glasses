@@ -12,7 +12,6 @@ struct StudyTabView: View {
     @State private var showInteract = false
     @State private var showExplainPersonaSelector = false
     @State private var showVoiceSummary = false
-    @State private var showReadAloud = false
     @State private var showInfographics = false
 
     private var completedPages: [PageCapture] {
@@ -86,16 +85,6 @@ struct StudyTabView: View {
                         gradient: [Color(red: 0.64, green: 0.21, blue: 0.83), Color(red: 0.5, green: 0.15, blue: 0.7)]
                     ) {
                         viewModel.startPodcast()
-                    }
-
-                    // Read Aloud
-                    studyActionButton(
-                        title: "memorize.read_aloud".localized,
-                        subtitle: "memorize.read_aloud_subtitle".localized,
-                        icon: "speaker.wave.2.fill",
-                        gradient: [Color.cyan, Color.cyan.opacity(0.7)]
-                    ) {
-                        showReadAloud = true
                     }
 
                     // Infographics
@@ -206,14 +195,6 @@ struct StudyTabView: View {
         // Voice Summary
         .fullScreenCover(isPresented: $showVoiceSummary) {
             MemorizeVoiceSummaryView(
-                pages: completedPages,
-                bookTitle: bookTitle,
-                sectionTitle: sectionTitle
-            )
-        }
-        // Read Aloud
-        .fullScreenCover(isPresented: $showReadAloud) {
-            MemorizeReadAloudView(
                 pages: completedPages,
                 bookTitle: bookTitle,
                 sectionTitle: sectionTitle

@@ -113,19 +113,38 @@ struct MemorizeQuizView: View {
             .frame(height: 4)
             .padding(.horizontal, AppSpacing.md)
 
+            if let typeLabel = questionTypeLabel(for: question.type) {
+                Text(typeLabel)
+                    .font(AppTypography.caption)
+                    .foregroundColor(AppColors.memorizeAccent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(AppColors.memorizeCard)
+                    .cornerRadius(AppCornerRadius.sm)
+            }
+
             // Question card (scrolls for long prompts)
             ScrollView(.vertical, showsIndicators: true) {
-                Text(question.question)
-                    .font(AppTypography.title)
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(AppSpacing.md)
-                    .background(AppColors.memorizeCard)
-                    .cornerRadius(AppCornerRadius.md)
-                    .padding(.horizontal, AppSpacing.md)
+                VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                    if let concept = question.concept?.trimmingCharacters(in: .whitespacesAndNewlines), !concept.isEmpty {
+                        Text(concept)
+                            .font(AppTypography.caption)
+                            .foregroundColor(Color.white.opacity(0.55))
+                            .textCase(.uppercase)
+                    }
+
+                    Text(question.question)
+                        .font(AppTypography.title)
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(AppSpacing.md)
+                .background(AppColors.memorizeCard)
+                .cornerRadius(AppCornerRadius.md)
+                .padding(.horizontal, AppSpacing.md)
             }
             .frame(minHeight: 120, maxHeight: 220)
 
@@ -134,6 +153,24 @@ struct MemorizeQuizView: View {
                 VStack(spacing: AppSpacing.sm) {
                     ForEach(0..<question.options.count, id: \.self) { index in
                         optionRow(index: index, question: question)
+                    }
+
+                    if let explanation = question.explanation?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       question.selectedIndex != nil,
+                       !explanation.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Why")
+                                .font(AppTypography.caption)
+                                .foregroundColor(AppColors.memorizeAccent)
+                            Text(explanation)
+                                .font(AppTypography.body)
+                                .foregroundColor(.white.opacity(0.9))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(AppSpacing.md)
+                        .background(AppColors.memorizeCard)
+                        .cornerRadius(AppCornerRadius.md)
                     }
                 }
                 .padding(.horizontal, AppSpacing.md)
@@ -309,14 +346,35 @@ struct MemorizeQuizView: View {
 
         questions[currentIndex].selectedIndex = index
 
+        let explanation = questions[currentIndex].explanation?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let isCorrect = index == questions[currentIndex].correctIndex
         if isCorrect {
-            voiceAssistant.speakFeedback("Correct.", immediate: fromTap)
+            let feedback = explanation.isEmpty ? "Correct." : "Correct. \(explanation)"
+            voiceAssistant.speakFeedback(feedback, immediate: fromTap)
         } else {
             let correctIndex = questions[currentIndex].correctIndex
             let correctLetter = ["A", "B", "C", "D"][correctIndex]
             let correctText = questions[currentIndex].options[correctIndex]
-            voiceAssistant.speakFeedback("Wrong. The correct answer is \(correctLetter): \(correctText).", immediate: fromTap)
+            let feedbackBase = "Wrong. The correct answer is \(correctLetter): \(correctText)."
+            let feedback = explanation.isEmpty ? feedbackBase : "\(feedbackBase) \(explanation)"
+            voiceAssistant.speakFeedback(feedback, immediate: fromTap)
+        }
+    }
+
+    private func questionTypeLabel(for rawType: String?) -> String? {
+        guard let rawType = rawType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !rawType.isEmpty else { return nil }
+
+        switch rawType {
+        case "core":
+            return "Core Understanding"
+        case "detail":
+            return "Key Detail"
+        case "application":
+            return "Application"
+        default:
+            return rawType.capitalized
         }
     }
 

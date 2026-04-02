@@ -237,7 +237,11 @@ struct SourcesTabView: View {
             )
         }
         .fullScreenCover(item: $viewingSource) { source in
-            SourceTextView(source: source)
+            SourceTextView(
+                source: source,
+                projectTitle: viewModel.book.title,
+                projectSectionTitle: viewModel.book.chapter
+            )
         }
         .onAppear {
             // Auto-open add source sheet only for brand-new empty projects (no title, no sources)
@@ -308,7 +312,10 @@ struct SourcesTabView: View {
 
 struct SourceTextView: View {
     let source: Source
+    let projectTitle: String
+    let projectSectionTitle: String
     @Environment(\.dismiss) private var dismiss
+    @State private var showReadAloud = false
 
     private var allText: String {
         source.pages
@@ -317,35 +324,80 @@ struct SourceTextView: View {
             .joined(separator: "\n\n")
     }
 
+    private var readAloudBookTitle: String {
+        let trimmedProjectTitle = projectTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedProjectTitle.isEmpty ? source.name : trimmedProjectTitle
+    }
+
+    private var readAloudSectionTitle: String {
+        let trimmedProjectSection = projectSectionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSourceName = source.name.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !trimmedProjectSection.isEmpty {
+            return trimmedProjectSection
+        }
+
+        if trimmedSourceName != readAloudBookTitle {
+            return trimmedSourceName
+        }
+
+        return ""
+    }
+
     private var displayText: String {
         guard source.sourceType == .youtube else { return allText }
+        return paragraphizedYouTubeTranscript(allText)
+    }
 
-        let segments = allText
-            .components(separatedBy: .newlines)
-            .map { $0.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+    private func paragraphizedYouTubeTranscript(_ text: String) -> String {
+        let normalized = text
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !normalized.isEmpty else { return "" }
+
+        let sentencePattern = #"[^.!?]+(?:[.!?]+|$)"#
+        let regex = try? NSRegularExpression(pattern: sentencePattern)
+        let nsRange = NSRange(normalized.startIndex..., in: normalized)
+        let sentenceMatches = regex?.matches(in: normalized, range: nsRange) ?? []
+
+        let sentences = sentenceMatches.compactMap { match -> String? in
+            guard let range = Range(match.range, in: normalized) else { return nil }
+            let sentence = normalized[range].trimmingCharacters(in: .whitespacesAndNewlines)
+            return sentence.isEmpty ? nil : sentence
+        }
+
+        if sentences.isEmpty {
+            return normalized
+        }
 
         var paragraphs: [String] = []
-        var currentParagraph = ""
+        var currentSentences: [String] = []
+        var currentLength = 0
 
-        for segment in segments {
-            if currentParagraph.isEmpty {
-                currentParagraph = segment
-            } else if currentParagraph.hasSuffix("-") {
-                currentParagraph += segment
+        for sentence in sentences {
+            let sentenceLength = sentence.count
+            let projectedLength = currentLength + (currentSentences.isEmpty ? 0 : 1) + sentenceLength
+            let shouldBreak =
+                !currentSentences.isEmpty &&
+                (
+                    currentSentences.count >= 3 ||
+                    projectedLength >= 360 ||
+                    (currentLength >= 180 && sentenceLength >= 120)
+                )
+
+            if shouldBreak {
+                paragraphs.append(currentSentences.joined(separator: " "))
+                currentSentences = [sentence]
+                currentLength = sentenceLength
             } else {
-                currentParagraph += " " + segment
-            }
-
-            let endsSentence = segment.last.map { ".!?".contains($0) } ?? false
-            if endsSentence && currentParagraph.count >= 260 {
-                paragraphs.append(currentParagraph)
-                currentParagraph = ""
+                currentSentences.append(sentence)
+                currentLength = projectedLength
             }
         }
 
-        if !currentParagraph.isEmpty {
-            paragraphs.append(currentParagraph)
+        if !currentSentences.isEmpty {
+            paragraphs.append(currentSentences.joined(separator: " "))
         }
 
         return paragraphs.joined(separator: "\n\n")
@@ -367,6 +419,24 @@ struct SourceTextView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, AppSpacing.xs)
 
+                    if !allText.isEmpty {
+                        Button {
+                            showReadAloud = true
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "speaker.wave.2.fill")
+                                    .font(.system(size: 15, weight: .semibold))
+                                Text("memorize.read_aloud".localized)
+                                    .font(AppTypography.subheadline)
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(AppColors.memorizeAccent.opacity(0.9))
+                            .cornerRadius(AppCornerRadius.md)
+                        }
+                    }
+
                     if allText.isEmpty {
                         Text("No text content available")
                             .font(AppTypography.subheadline)
@@ -377,6 +447,7 @@ struct SourceTextView: View {
                         Text(displayText)
                             .font(AppTypography.body)
                             .foregroundColor(.white)
+                            .lineSpacing(6)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
@@ -399,6 +470,13 @@ struct SourceTextView: View {
                 }
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .fullScreenCover(isPresented: $showReadAloud) {
+            MemorizeReadAloudView(
+                pages: source.pages,
+                bookTitle: readAloudBookTitle,
+                sectionTitle: readAloudSectionTitle
+            )
         }
     }
 }
