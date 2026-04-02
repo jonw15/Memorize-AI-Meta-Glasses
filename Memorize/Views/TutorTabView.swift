@@ -556,7 +556,11 @@ struct TutorTabView: View {
                 service.startRecording()
                 isRecording = true
                 isMuted = shouldRestoreMuteAfterTransition
-                try? await Task.sleep(nanoseconds: 300_000_000)
+                // Send a silent audio burst first to establish the realtime audio stream,
+                // then send the text prompt. This ensures the server keeps listening for
+                // user audio after the AI finishes its turn.
+                service.sendSilentAudioToInterrupt()
+                try? await Task.sleep(nanoseconds: 500_000_000)
                 service.sendTextInput(initialPrompt ?? promptForCurrentStep(isFinishing: false))
             }
         }

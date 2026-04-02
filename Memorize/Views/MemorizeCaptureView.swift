@@ -2601,6 +2601,7 @@ struct MemorizePodcastPlayerView: View {
     @State private var listenerQuestionArmed = false
     @State private var isAnsweringListenerQuestion = false
     @State private var errorMessage: String?
+    @State private var micLevel: Float = 0
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
     @State private var showVoicePicker = false
 
@@ -2741,6 +2742,14 @@ struct MemorizePodcastPlayerView: View {
                 }
 
                 if isConnected && mode == .interactive {
+                    // Voice waveform — shows when mic is active
+                    if !isMuted {
+                        MicWaveformView(level: micLevel, accent: podcastAccent)
+                            .frame(height: 40)
+                            .padding(.horizontal, AppSpacing.xl)
+                            .padding(.top, AppSpacing.sm)
+                    }
+
                     microphoneButton
                 }
 
@@ -3218,8 +3227,36 @@ struct MemorizePodcastPlayerView: View {
             }
         }
 
+        service.onMicLevel = { level in
+            Task { @MainActor in
+                micLevel = level
+            }
+        }
+
         geminiService = service
         service.connect()
+    }
+}
+
+// MARK: - Mic Waveform View
+
+struct MicWaveformView: View {
+    let level: Float
+    let accent: Color
+    private let barCount = 7
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<barCount, id: \.self) { i in
+                let distance = abs(Float(i) - Float(barCount) / 2.0) / (Float(barCount) / 2.0)
+                let barLevel = max(0.08, CGFloat(level) * CGFloat(1.0 - distance * 0.5))
+
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(accent.opacity(0.5 + Double(level) * 0.5))
+                    .frame(width: 4, height: max(4, barLevel * 40))
+                    .animation(.easeOut(duration: 0.08), value: level)
+            }
+        }
     }
 }
 

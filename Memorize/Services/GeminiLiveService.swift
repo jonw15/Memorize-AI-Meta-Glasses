@@ -79,6 +79,8 @@ class GeminiLiveService: NSObject {
     var onError: ((String) -> Void)?
     var onConnected: (() -> Void)?
     var onFirstAudioSent: (() -> Void)?
+    /// Called with mic input audio level (0.0 = silence, 1.0 = max). Updated ~every buffer (~50ms).
+    var onMicLevel: ((Float) -> Void)?
     var onMultipleStepInstructions: ((MultipleStepInstructionsPayload) -> Void)?
     var onYouTubeResults: (([YouTubeVideo], Bool) -> Void)?
 
@@ -146,7 +148,7 @@ class GeminiLiveService: NSObject {
             if playbackOnly {
                 // Use .playAndRecord to maintain I/O cycle (pure .playback starves the engine)
                 // Use .default mode (not .voiceChat) to skip Voice Processing I/O overhead
-                // Use .allowBluetoothHFP so audio routes to connected Bluetooth device (e.g. glasses)
+                // Use .allowBluetoothHFP so audio routes to Bluetooth devices (glasses, AirPods via HFP)
                 // Use .defaultToSpeaker as fallback when no Bluetooth device is connected
                 try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
                 selectBluetoothRouteIfAvailable()
@@ -170,16 +172,21 @@ class GeminiLiveService: NSObject {
 
     private func selectBluetoothRouteIfAvailable() {
         let session = AVAudioSession.sharedInstance()
-        guard let inputs = session.availableInputs else { return }
+        guard let inputs = session.availableInputs else {
+            print("🎧 [Gemini] No available inputs")
+            return
+        }
+        print("🎧 [Gemini] Available inputs: \(inputs.map { "\($0.portName) (\($0.portType.rawValue))" })")
         for input in inputs where input.portType == .bluetoothHFP {
             do {
                 try session.setPreferredInput(input)
-                print("🎧 [Gemini] Preferred Bluetooth HFP input selected")
+                print("🎧 [Gemini] Preferred Bluetooth HFP input selected: \(input.portName)")
             } catch {
                 print("⚠️ [Gemini] Failed to set preferred Bluetooth input: \(error)")
             }
             return
         }
+        print("🎧 [Gemini] No Bluetooth HFP input found, using default")
     }
 
     private func deactivateAudioSessionIfIdle() {
@@ -661,6 +668,20 @@ Do not apologize.
             let sample = channel[i]
             let clampedSample = max(-1.0, min(1.0, sample))
             int16Data[i] = Int16(clampedSample * 32767.0)
+        }
+
+        // Calculate RMS audio level for waveform visualization
+        if let onMicLevel {
+            var sumOfSquares: Float = 0
+            for i in 0..<frameLength {
+                let sample = channel[i]
+                sumOfSquares += sample * sample
+            }
+            let rms = sqrt(sumOfSquares / Float(max(frameLength, 1)))
+            let normalized = min(rms * 3.0, 1.0)  // Amplify for better visual response
+            DispatchQueue.main.async {
+                onMicLevel(normalized)
+            }
         }
 
         let data = Data(bytes: int16Data, count: frameLength * MemoryLayout<Int16>.size)
