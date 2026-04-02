@@ -124,59 +124,39 @@ struct MemorizeQuizView: View {
                     .cornerRadius(AppCornerRadius.sm)
             }
 
-            // Question card (scrolls for long prompts)
+            // Question + Answer options in one scroll
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                    if let concept = question.concept?.trimmingCharacters(in: .whitespacesAndNewlines), !concept.isEmpty {
-                        Text(concept)
-                            .font(AppTypography.caption)
-                            .foregroundColor(Color.white.opacity(0.55))
-                            .textCase(.uppercase)
-                    }
-
-                    Text(question.question)
-                        .font(AppTypography.title)
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(nil)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(AppSpacing.md)
-                .background(AppColors.memorizeCard)
-                .cornerRadius(AppCornerRadius.md)
-                .padding(.horizontal, AppSpacing.md)
-            }
-            .frame(minHeight: 120, maxHeight: 220)
-
-            // Answer options (scrolls when options are long)
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(spacing: AppSpacing.sm) {
-                    ForEach(0..<question.options.count, id: \.self) { index in
-                        optionRow(index: index, question: question)
-                    }
-
-                    if let explanation = question.explanation?.trimmingCharacters(in: .whitespacesAndNewlines),
-                       question.selectedIndex != nil,
-                       !explanation.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Why")
+                VStack(spacing: AppSpacing.md) {
+                    // Question card
+                    VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                        if let concept = question.concept?.trimmingCharacters(in: .whitespacesAndNewlines), !concept.isEmpty {
+                            Text(concept)
                                 .font(AppTypography.caption)
-                                .foregroundColor(AppColors.memorizeAccent)
-                            Text(explanation)
-                                .font(AppTypography.body)
-                                .foregroundColor(.white.opacity(0.9))
-                                .fixedSize(horizontal: false, vertical: true)
+                                .foregroundColor(Color.white.opacity(0.55))
+                                .textCase(.uppercase)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(AppSpacing.md)
-                        .background(AppColors.memorizeCard)
-                        .cornerRadius(AppCornerRadius.md)
+
+                        Text(question.question)
+                            .font(AppTypography.title)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(AppSpacing.md)
+                    .background(AppColors.memorizeCard)
+                    .cornerRadius(AppCornerRadius.md)
+
+                    // Answer options
+                    VStack(spacing: AppSpacing.sm) {
+                        ForEach(0..<question.options.count, id: \.self) { index in
+                            optionRow(index: index, question: question)
+                        }
                     }
                 }
                 .padding(.horizontal, AppSpacing.md)
             }
-            .frame(maxHeight: 320)
 
             // Voice hint
             if question.selectedIndex == nil {

@@ -496,23 +496,6 @@ struct MemorizeHomeView: View {
 
     private var bottomActionBar: some View {
         HStack(spacing: AppSpacing.md) {
-            // Camera quick-add
-            Button {
-                // Open camera capture, then user picks project
-                selectedBook = Book()
-            } label: {
-                Image(systemName: "camera")
-                    .font(.system(size: 18))
-                    .foregroundColor(.white)
-                    .padding(14)
-                    .background(Color.white.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: AppCornerRadius.md))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppCornerRadius.md)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                    )
-            }
-
             // Create New
             Button {
                 let newBook = Book(title: "")

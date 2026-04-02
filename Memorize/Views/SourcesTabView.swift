@@ -136,17 +136,6 @@ struct SourcesTabView: View {
             // Bottom action bar
             HStack(spacing: AppSpacing.md) {
                 Button {
-                    showCameraCapture = true
-                } label: {
-                    Image(systemName: "camera")
-                        .font(.system(size: 18))
-                        .foregroundColor(.white)
-                        .padding(14)
-                        .background(Color.white.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: AppCornerRadius.md))
-                }
-
-                Button {
                     showAddSourceSheet = true
                 } label: {
                     HStack(spacing: 6) {
