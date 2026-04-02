@@ -542,7 +542,7 @@
 "memorize.source_text_note" = "文本笔记";
 "memorize.source_text_note_desc" = "输入或粘贴笔记";
 "memorize.source_file" = "文件";
-"memorize.source_file_desc" = "导入 PDF 或文本文件";
+"memorize.source_file_desc" = "导入 PDF、DOCX 或文本文件";
 "memorize.source_youtube" = "YouTube";
 "memorize.source_youtube_desc" = "粘贴链接并导入字幕文本";
 "memorize.note_title_placeholder" = "笔记标题（可选）";

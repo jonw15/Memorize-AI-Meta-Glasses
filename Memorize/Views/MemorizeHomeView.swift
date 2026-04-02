@@ -163,10 +163,12 @@ struct MemorizeHomeView: View {
         }
         .fullScreenCover(item: $selectedProjectBook, onDismiss: {
             // Clean up empty projects that user backed out of without adding anything
+            // Only delete if title is also empty (brand new, never interacted with)
             if let bookId = lastOpenedProjectId {
                 let books = MemorizeStorage.shared.loadBooks()
                 if let latest = books.first(where: { $0.id == bookId }),
-                   latest.sources.isEmpty && latest.pages.isEmpty {
+                   latest.sources.isEmpty && latest.pages.isEmpty &&
+                   latest.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     viewModel.deleteBook(bookId)
                 }
                 lastOpenedProjectId = nil

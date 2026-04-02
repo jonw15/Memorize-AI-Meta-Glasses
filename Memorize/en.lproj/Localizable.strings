@@ -541,7 +541,7 @@
 "memorize.source_text_note" = "Text Note";
 "memorize.source_text_note_desc" = "Type or paste your notes";
 "memorize.source_file" = "File";
-"memorize.source_file_desc" = "Import a PDF or text file";
+"memorize.source_file_desc" = "Import a PDF, DOCX, or text file";
 "memorize.source_youtube" = "YouTube";
 "memorize.source_youtube_desc" = "Paste a link and import the transcript";
 "memorize.note_title_placeholder" = "Note title (optional)";
