@@ -76,6 +76,8 @@ struct TutorTabView: View {
     @State private var transitionTask: Task<Void, Never>?
     @State private var shouldRestoreMuteAfterTransition = false
     @State private var serviceSessionID = UUID()
+    @State private var supportsHandsFreeMic = false
+    @State private var isAISpeaking = false
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
     @State private var showVoicePicker = false
 
@@ -427,9 +429,12 @@ struct TutorTabView: View {
 
     private func toggleMic() {
         guard let service = geminiService else { return }
+        let routeSupportsHandsFreeMic = service.supportsHandsFreeMicRoute()
+        supportsHandsFreeMic = routeSupportsHandsFreeMic
+
         if isMuted {
-            service.isMicMuted = false
             isMuted = false
+            service.isMicMuted = routeSupportsHandsFreeMic ? false : isAISpeaking
         } else {
             service.isMicMuted = true
             isMuted = true
@@ -455,6 +460,8 @@ struct TutorTabView: View {
         isAIThinking = true
         isConnected = false
         isRecording = false
+        supportsHandsFreeMic = false
+        isAISpeaking = false
         serviceSessionID = UUID()
         geminiService?.disconnect()
         geminiService = nil
@@ -482,6 +489,8 @@ struct TutorTabView: View {
         isAIThinking = false
         isTransitioning = false
         transitionIsFinishing = false
+        supportsHandsFreeMic = false
+        isAISpeaking = false
     }
 
     private func reconnectWithNewVoice() {
@@ -498,6 +507,8 @@ struct TutorTabView: View {
         isAIThinking = false
         isTransitioning = false
         transitionIsFinishing = false
+        supportsHandsFreeMic = false
+        isAISpeaking = false
         setupAndConnect()
     }
 
@@ -552,11 +563,16 @@ struct TutorTabView: View {
             Task { @MainActor in
                 guard sessionID == serviceSessionID else { return }
                 isConnected = true
-                service.isMicMuted = false
                 service.startRecording()
                 isRecording = true
+
+                let routeSupportsHandsFreeMic = service.supportsHandsFreeMicRoute()
+                supportsHandsFreeMic = routeSupportsHandsFreeMic
+                isAISpeaking = false
                 isMuted = false
-                // Brief delay then send the initial prompt — mic is already live
+                service.isMicMuted = !routeSupportsHandsFreeMic
+
+                // Brief delay then send the initial prompt.
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 service.sendTextInput(initialPrompt ?? promptForCurrentStep(isFinishing: false))
             }
@@ -633,6 +649,26 @@ struct TutorTabView: View {
             }
         }
 
+        service.onSpeechStarted = { [service] in
+            Task { @MainActor in
+                guard sessionID == serviceSessionID else { return }
+                isAISpeaking = true
+                let routeSupportsHandsFreeMic = service.supportsHandsFreeMicRoute()
+                supportsHandsFreeMic = routeSupportsHandsFreeMic
+                service.isMicMuted = routeSupportsHandsFreeMic ? isMuted : true
+            }
+        }
+
+        service.onSpeechStopped = { [service] in
+            Task { @MainActor in
+                guard sessionID == serviceSessionID else { return }
+                isAISpeaking = false
+                let routeSupportsHandsFreeMic = service.supportsHandsFreeMicRoute()
+                supportsHandsFreeMic = routeSupportsHandsFreeMic
+                service.isMicMuted = isMuted
+            }
+        }
+
         service.onError = { (errorText: String) in
             Task { @MainActor in
                 guard sessionID == serviceSessionID else { return }
@@ -640,6 +676,7 @@ struct TutorTabView: View {
                 isAIThinking = false
                 isTransitioning = false
                 transitionIsFinishing = false
+                isAISpeaking = false
                 transitionTask?.cancel()
                 transitionTask = nil
             }

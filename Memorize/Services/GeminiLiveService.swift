@@ -200,6 +200,31 @@ class GeminiLiveService: NSObject {
         }
     }
 
+    func supportsHandsFreeMicRoute() -> Bool {
+        let session = AVAudioSession.sharedInstance()
+        let safePorts: Set<AVAudioSession.Port> = [
+            .bluetoothHFP,
+            .bluetoothA2DP,
+            .bluetoothLE,
+            .headphones,
+            .usbAudio
+        ]
+
+        let outputPorts = session.currentRoute.outputs.map(\.portType)
+        let inputPorts = session.currentRoute.inputs.map(\.portType)
+        let availableInputPorts = session.availableInputs?.map(\.portType) ?? []
+
+        let hasSafeRoute = outputPorts.contains(where: safePorts.contains) ||
+            inputPorts.contains(where: safePorts.contains) ||
+            availableInputPorts.contains(where: safePorts.contains)
+
+        let outputs = session.currentRoute.outputs.map { "\($0.portType.rawValue)(\($0.portName))" }
+        let inputs = session.currentRoute.inputs.map { "\($0.portType.rawValue)(\($0.portName))" }
+        print("🎧 [Gemini] Hands-free mic route check outputs=\(outputs) inputs=\(inputs) supported=\(hasSafeRoute)")
+
+        return hasSafeRoute
+    }
+
     @discardableResult
     private func selectBluetoothRouteIfAvailable() -> Bool {
         let session = AVAudioSession.sharedInstance()

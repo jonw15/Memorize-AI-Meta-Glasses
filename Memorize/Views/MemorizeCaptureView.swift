@@ -4364,8 +4364,11 @@ struct MemorizeExplainView: View {
         Button {
             guard isConnected, let service = geminiService else { return }
             if isMuted {
-                // Unmute — allow user to interrupt and speak
-                service.interruptPlayback()
+                // Unmute acts as a hard "stop and listen" command.
+                currentAIText = ""
+                isAIThinking = false
+                service.interruptPlayback(expectServerInterruption: true)
+                service.sendSilentAudioToInterrupt()
                 service.isMicMuted = false
                 isMuted = false
             } else {
@@ -5253,7 +5256,10 @@ struct MemorizeInteractView: View {
         Button {
             guard isConnected, let service = geminiService else { return }
             if isMuted {
-                service.interruptPlayback()
+                currentAIText = ""
+                isAIThinking = false
+                service.interruptPlayback(expectServerInterruption: true)
+                service.sendSilentAudioToInterrupt()
                 service.isMicMuted = false
                 isMuted = false
             } else {
