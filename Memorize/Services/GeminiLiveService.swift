@@ -57,6 +57,8 @@ class GeminiLiveService: NSObject {
     private var hasStartedPlaying = false
     private var isPlaybackEngineRunning = false
     private var dropIncomingAudioUntilInterrupted = false
+    private var pendingPlaybackBufferCount = 0
+    private var hasReceivedPlaybackTurnDone = false
 
     // Streaming batch buffer — accumulates small chunks into larger ones for smooth playback
     private var streamingBuffer = Data()
@@ -254,6 +256,8 @@ class GeminiLiveService: NSObject {
 
         playerNode?.stop()
         playerNode?.reset()
+        pendingPlaybackBufferCount = 0
+        hasReceivedPlaybackTurnDone = false
         playbackEngine.stop()
         isPlaybackEngineRunning = false
         print("⏹️ [Gemini] Playback engine stopped and queue cleared")
@@ -509,6 +513,8 @@ Do not apologize.
         isCollectingAudio = false
         audioChunkCount = 0
         hasStartedPlaying = false
+        pendingPlaybackBufferCount = 0
+        hasReceivedPlaybackTurnDone = false
         // Re-prime the player node so new audio can be scheduled immediately
         playerNode?.play()
     }
@@ -545,6 +551,8 @@ Do not apologize.
         // Stop current playback
         playerNode.stop()
         playerNode.reset()
+        pendingPlaybackBufferCount = 0
+        hasReceivedPlaybackTurnDone = false
         streamingFlushTimer?.invalidate()
         streamingFlushTimer = nil
         streamingBuffer = Data()
@@ -1316,6 +1324,7 @@ Do not apologize.
 
         if !isCollectingAudio {
             isCollectingAudio = true
+            hasReceivedPlaybackTurnDone = false
             DispatchQueue.main.async { [weak self] in
                 self?.onSpeechStarted?()
             }
@@ -1386,10 +1395,8 @@ Do not apologize.
 
         audioChunkCount = 0
         hasStartedPlaying = false
-        DispatchQueue.main.async { [weak self] in
-            self?.onSpeechStopped?()
-        }
-        onAudioDone?()
+        hasReceivedPlaybackTurnDone = true
+        notifyPlaybackFinishedIfDrained()
     }
 
     private func playAudio(_ audioData: Data) {
@@ -1412,13 +1419,29 @@ Do not apologize.
             return
         }
 
-        playerNode.scheduleBuffer(pcmBuffer)
+        pendingPlaybackBufferCount += 1
+        playerNode.scheduleBuffer(pcmBuffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.pendingPlaybackBufferCount = max(0, self.pendingPlaybackBufferCount - 1)
+                self.notifyPlaybackFinishedIfDrained()
+            }
+        }
 
         // Don't call play() if paused — buffers accumulate and will play on resume
         guard !isPlaybackPaused else { return }
 
         if !playerNode.isPlaying {
             playerNode.play()
+        }
+    }
+
+    private func notifyPlaybackFinishedIfDrained() {
+        guard hasReceivedPlaybackTurnDone, pendingPlaybackBufferCount == 0 else { return }
+        hasReceivedPlaybackTurnDone = false
+        DispatchQueue.main.async { [weak self] in
+            self?.onSpeechStopped?()
+            self?.onAudioDone?()
         }
     }
 

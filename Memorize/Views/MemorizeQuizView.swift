@@ -417,6 +417,7 @@ private final class QuizVoiceAssistant: ObservableObject {
     // Only start listening after OUR text finishes playing, not unsolicited Gemini responses
     private var awaitingOurSpeechDone = false
     private var sawAssistantAudioThisTurn = false
+    private var speechStartedThisTurn = false
 
     func connect() {
         guard geminiService == nil else { return }
@@ -480,10 +481,31 @@ private final class QuizVoiceAssistant: ObservableObject {
             }
         }
 
+        service.onSpeechStarted = { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.shouldListen, self.awaitingOurSpeechDone else { return }
+                self.speechStartedThisTurn = true
+                self.fallbackTask?.cancel()
+                self.fallbackTask = nil
+                print("🔊 [QuizVoice] Gemini speech started")
+            }
+        }
+
+        service.onSpeechStopped = { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.shouldListen, self.awaitingOurSpeechDone, self.speechStartedThisTurn else { return }
+                self.awaitingOurSpeechDone = false
+                self.speechStartedThisTurn = false
+                print("🔊 [QuizVoice] Gemini playback finished, starting mic")
+                self.startListeningForAnswer()
+            }
+        }
+
         // Only start listening when OUR speech finishes (not unsolicited Gemini responses)
         service.onAudioDone = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self, self.shouldListen, self.awaitingOurSpeechDone else { return }
+                guard !self.speechStartedThisTurn else { return }
                 self.awaitingOurSpeechDone = false
                 self.fallbackTask?.cancel()
                 self.fallbackTask = nil
@@ -495,6 +517,7 @@ private final class QuizVoiceAssistant: ObservableObject {
         service.onTranscriptDone = { [weak self] (_: String) in
             Task { @MainActor [weak self] in
                 guard let self, self.shouldListen, self.awaitingOurSpeechDone else { return }
+                guard !self.speechStartedThisTurn else { return }
                 guard !self.sawAssistantAudioThisTurn else { return }
                 self.awaitingOurSpeechDone = false
                 self.fallbackTask?.cancel()
@@ -536,6 +559,7 @@ private final class QuizVoiceAssistant: ObservableObject {
         fallbackTask = nil
         listenMode = .waitingForAnswer
         awaitingOurSpeechDone = false
+        speechStartedThisTurn = false
 
         let letters = ["A", "B", "C", "D"]
         let optionText = question.options.enumerated().map { "\(letters[$0.offset]). \($0.element)" }.joined(separator: ". ")
@@ -561,6 +585,7 @@ private final class QuizVoiceAssistant: ObservableObject {
         fallbackTask = nil
         listenMode = .waitingForNext
         awaitingOurSpeechDone = false
+        speechStartedThisTurn = false
         sawAssistantAudioThisTurn = false
 
         speechTask = Task { @MainActor [weak self] in
@@ -591,14 +616,15 @@ private final class QuizVoiceAssistant: ObservableObject {
     /// in case onAudioDone never fires (e.g. playback engine was stopped).
     private func markSpeechSentAndStartFallback() {
         awaitingOurSpeechDone = true
+        speechStartedThisTurn = false
         fallbackTask?.cancel()
-        print("🔊 [QuizVoice] Waiting for Gemini speech to finish")
+        print("🔊 [QuizVoice] Waiting for Gemini speech to start")
         fallbackTask = Task { @MainActor [weak self] in
-            // If finish callbacks don't arrive promptly, start listening anyway.
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            // Only use fallback if Gemini never starts speaking.
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
             guard !Task.isCancelled, let self else { return }
-            if self.awaitingOurSpeechDone && self.shouldListen {
-                print("⏰ [QuizVoice] Fallback: onAudioDone didn't fire, starting mic")
+            if self.awaitingOurSpeechDone && self.shouldListen && !self.speechStartedThisTurn {
+                print("⏰ [QuizVoice] Fallback: Gemini speech never started, starting mic")
                 self.awaitingOurSpeechDone = false
                 self.startListeningForAnswer()
             }
@@ -626,6 +652,7 @@ private final class QuizVoiceAssistant: ObservableObject {
         accumulatedTranscript = ""
         awaitingOurSpeechDone = false
         sawAssistantAudioThisTurn = false
+        speechStartedThisTurn = false
     }
 
     private func startListeningForAnswer() {
