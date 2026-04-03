@@ -344,11 +344,14 @@ struct MemorizeService {
         Source material:
         \(sourceText)
 
-        Provide a concise but useful explanation that helps the learner understand the key ideas.
-        Format:
-        1. A short 1-2 sentence overview.
-        2. 3-5 clear bullet points (each no longer than 24 words) describing important ideas.
-        3. End with 1 sentence that connects the ideas to learning outcomes.
+        Provide a concise but useful summary that helps the learner understand the key ideas.
+        Write it in the requested persona's voice as natural spoken prose.
+        Requirements:
+        1. Start directly with the summary content, not a greeting or question.
+        2. Use 2-4 short paragraphs.
+        3. Focus on the most important ideas, connections, and takeaways from the source.
+        4. Do not use bullet points or numbered lists.
+        5. Do not end with a question or invitation to discuss more.
 
         Use plain text only. Do not include markdown code fences.
         """

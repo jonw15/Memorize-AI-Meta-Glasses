@@ -473,6 +473,8 @@
 "memorize.explain.persona.like_i_am_5" = "Like I'm 5";
 "memorize.explain_header" = "Character-based summary";
 "memorize.explain_generating" = "Generating summary...";
+"memorize.explain_connecting" = "Preparing your summary tutor...";
+"memorize.explain_starting" = "Starting your summary aloud...";
 "memorize.explain_result_placeholder" = "Your selected character summary will appear here.";
 "memorize.explain_no_pages_error" = "There is no completed page content to summarize.";
 "memorize.explain_empty_error" = "Could not generate a summary. Please try again.";
@@ -500,12 +502,15 @@
 "memorize.interact" = "Conversation";
 "memorize.interact_prompt" = "Have a voice conversation about what you've read";
 "memorize.interact_connecting" = "Connecting...";
+"memorize.interact_starting" = "Starting the conversation...";
 "memorize.interact_placeholder" = "Ask me anything about the text you captured.";
 "memorize.podcast" = "Podcast";
 "memorize.voice_menu_prompt" = "You can say: conversation, summary, podcast, read aloud, infographics, pop quiz, or voice summary.";
 "memorize.podcast_header" = "AI-Generated Podcast";
 "memorize.podcast_listening" = "Starting podcast...";
 "memorize.podcast_loading" = "Podcast loading...";
+"memorize.podcast_loading_play" = "Preparing your podcast...";
+"memorize.podcast_loading_interactive" = "Preparing your interactive podcast...";
 "memorize.podcast_stop" = "Stop Podcast";
 "memorize.podcast_mute" = "Mute Mic";
 "memorize.podcast_unmute" = "Unmute Mic";

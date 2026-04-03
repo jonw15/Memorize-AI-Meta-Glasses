@@ -2667,6 +2667,15 @@ struct MemorizePodcastPlayerView: View {
         return max(4, estimatedMinutes)
     }
 
+    private var startupLoadingText: String {
+        switch mode {
+        case .play:
+            return "memorize.podcast_loading_play".localized
+        case .interactive:
+            return "memorize.podcast_loading_interactive".localized
+        }
+    }
+
     private var totalDuration: TimeInterval {
         Double(accumulatedAudio.count) / bytesPerSecond
     }
@@ -2738,7 +2747,7 @@ struct MemorizePodcastPlayerView: View {
                         ProgressView()
                             .tint(.white)
                             .scaleEffect(0.8)
-                        Text("memorize.podcast_loading".localized)
+                        Text(startupLoadingText)
                             .font(AppTypography.caption)
                             .foregroundColor(Color.white.opacity(0.6))
                     }
@@ -3847,9 +3856,22 @@ struct MemorizeExplainView: View {
     @State private var errorMessage: String?
     @State private var isMuted = false
     @State private var loadingPulse = false
+    @State private var hasDeliveredOpeningExplanation = false
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
     @State private var showVoicePicker = false
     private let explainAccent = Color(red: 0.94, green: 0.55, blue: 0.24)
+
+    private var isStartingSummary: Bool {
+        isConnected &&
+        messages.isEmpty &&
+        currentAIText.isEmpty &&
+        currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        isAIThinking
+    }
+
+    private var shouldShowStartupCard: Bool {
+        (!isConnected && !viewModel.isGeneratingExplanation) || isStartingSummary
+    }
 
     var body: some View {
         NavigationView {
@@ -3873,20 +3895,12 @@ struct MemorizeExplainView: View {
                 if viewModel.isGeneratingExplanation && viewModel.explanationText.isEmpty {
                     generatingCard
                         .padding(.horizontal, AppSpacing.md)
+                } else if shouldShowStartupCard {
+                    startupStatusCard(text: isStartingSummary ? "memorize.explain_starting".localized : "memorize.explain_connecting".localized)
+                        .padding(.horizontal, AppSpacing.md)
                 } else {
                     conversationCard
                         .padding(.horizontal, AppSpacing.md)
-                }
-
-                if !isConnected && !viewModel.isGeneratingExplanation {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .tint(.white)
-                            .scaleEffect(0.8)
-                        Text("memorize.interact_connecting".localized)
-                            .font(AppTypography.caption)
-                            .foregroundColor(Color.white.opacity(0.6))
-                    }
                 }
 
                 if isConnected {
@@ -4010,6 +4024,7 @@ struct MemorizeExplainView: View {
         currentAIText = ""
         currentUserText = ""
         isAIThinking = false
+        hasDeliveredOpeningExplanation = false
         errorMessage = nil
         setupAndConnect(summaryText: summaryText)
     }
@@ -4035,20 +4050,25 @@ struct MemorizeExplainView: View {
         \(sourceContext)
         ---
 
-        Here is a written summary that was prepared:
+        Here is a written persona summary that was prepared:
 
         ---
         \(compactSummary)
         ---
 
         Your task:
-        1. First, read the summary aloud to the student in a clear, engaging way. Use the persona style described above.
-        2. After reading the summary, pause briefly and invite the student to ask questions — for example: "Do you have any questions about what we just covered?"
-        3. Then answer any follow-up questions the student asks, drawing from the original text and the summary.
-        4. If the student asks for a quick recap, answer in 1-2 short sentences first.
+        1. Your first response must be a persona-based explanation of the source material, not a question.
+        2. Use the prepared summary and source notes to give a clear spoken summary in the selected persona's style.
+        3. Do not ask the student anything in your first response.
+        4. After finishing that explanation, pause and wait silently for the student.
+        5. Then answer any follow-up questions the student asks, drawing from the original text and the summary.
+        6. If the student asks for a quick recap, answer in 1-2 short sentences first.
 
         Keep your responses concise and conversational. Speak clearly and at a pace suitable for learning.
+        Your opening response should feel like diving straight into the summary of the material.
         Do not apologize. Do not mention that you are an AI unless asked.
+        Do not open with a question. Do not proactively ask a follow-up question after the explanation unless the student asks you to continue.
+        The first spoken line should begin with the explanation itself, not with a greeting, check-in, or prompt to the student.
         """
 
         print("⚡️ [MemorizeExplain] Live context chars: \(sourceContext.count), summary chars: \(compactSummary.count)")
@@ -4065,14 +4085,28 @@ struct MemorizeExplainView: View {
         service.onConnected = { [service] in
             Task { @MainActor in
                 isConnected = true
-                // Start recording with mic live — user can interrupt anytime
-                service.isMicMuted = false
+                hasDeliveredOpeningExplanation = false
+                // Keep the mic muted until the opening persona summary is finished.
+                service.isMicMuted = true
                 service.startRecording()
                 isRecording = true
-                isMuted = false
-                // Trigger the AI to start reading the summary aloud immediately
+                isMuted = true
+                // Trigger the AI to explain the sources in persona immediately.
+                isAIThinking = true
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                service.sendTextInput("Please begin reading the summary aloud now.")
+                service.sendTextInput(
+                    """
+                    Dive straight into a spoken summary of the source material now in the selected persona.
+                    This first turn must be summary only.
+                    Start immediately with the summary itself.
+                    Do not greet the student.
+                    Do not ask a question.
+                    Do not ask for clarification.
+                    Do not invite discussion.
+                    Do not say anything like "let's begin" or "here's a summary."
+                    After your summary is complete, stop and wait silently for the student.
+                    """
+                )
             }
         }
 
@@ -4115,6 +4149,12 @@ struct MemorizeExplainView: View {
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     messages.append(MemorizeInteractMessage(isUser: false, text: trimmed))
+                    if !hasDeliveredOpeningExplanation {
+                        hasDeliveredOpeningExplanation = true
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        service.isMicMuted = false
+                        isMuted = false
+                    }
                 }
                 currentAIText = ""
                 isAIThinking = false
@@ -4135,8 +4175,10 @@ struct MemorizeExplainView: View {
 
         service.onSpeechStopped = {
             Task { @MainActor in
+                guard hasDeliveredOpeningExplanation else { return }
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 service.isMicMuted = false
+                isMuted = false
             }
         }
 
@@ -4192,6 +4234,24 @@ struct MemorizeExplainView: View {
         .cornerRadius(AppCornerRadius.md)
     }
 
+    private func startupStatusCard(text: String) -> some View {
+        VStack(spacing: AppSpacing.md) {
+            ProgressView()
+                .tint(.white)
+                .scaleEffect(0.95)
+
+            Text(text)
+                .font(AppTypography.body)
+                .foregroundColor(.white.opacity(0.85))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, AppSpacing.lg)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 240, maxHeight: 320)
+        .background(AppColors.memorizeCard)
+        .cornerRadius(AppCornerRadius.md)
+    }
+
     private var conversationCard: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -4237,12 +4297,26 @@ struct MemorizeExplainView: View {
 
                         if isAIThinking && currentAIText.isEmpty {
                             HStack {
-                                ThinkingDotsView()
+                                if isStartingSummary {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        ThinkingDotsView()
+                                        Text("memorize.explain_starting".localized)
+                                            .font(AppTypography.caption)
+                                            .foregroundColor(.white.opacity(0.72))
+                                    }
                                     .padding(AppSpacing.sm)
                                     .background(
                                         RoundedRectangle(cornerRadius: AppCornerRadius.sm)
                                             .fill(AppColors.memorizeCard.opacity(0.7))
                                     )
+                                } else {
+                                    ThinkingDotsView()
+                                        .padding(AppSpacing.sm)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: AppCornerRadius.sm)
+                                                .fill(AppColors.memorizeCard.opacity(0.7))
+                                        )
+                                }
                                 Spacer()
                             }
                             .id("thinking")
@@ -4567,16 +4641,6 @@ struct ExplainPersonaPickerView: View {
                 .foregroundColor(.white)
                 .padding(.top, 32)
 
-            if voiceListener.isListening {
-                HStack(spacing: 6) {
-                    Image(systemName: "mic.fill")
-                        .foregroundColor(explainAccent)
-                    Text("Listening...")
-                        .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(0.7))
-                }
-            }
-
             ForEach(MemorizeExplainPersona.allCases) { persona in
                 Button {
                     voiceListener.stop()
@@ -4609,17 +4673,6 @@ struct ExplainPersonaPickerView: View {
             .padding(.bottom, AppSpacing.lg)
         }
         .background(AppColors.memorizeBackground.ignoresSafeArea())
-        .task {
-            // Brief delay for audio session to settle
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            try? await Task.sleep(nanoseconds: 800_000_000)
-            voiceListener.startListening { persona in
-                onSelect(persona)
-            }
-        }
-        .onDisappear {
-            voiceListener.stop()
-        }
     }
 }
 
@@ -4792,6 +4845,7 @@ struct MemorizeInteractView: View {
     let pages: [PageCapture]
     let bookTitle: String
     let sectionTitle: String
+    var customSystemPrompt: String? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var geminiService: GeminiLiveService?
@@ -4808,6 +4862,18 @@ struct MemorizeInteractView: View {
 
     private let interactAccent = Color(red: 0.15, green: 0.72, blue: 0.52)
 
+    private var isStartingConversation: Bool {
+        isConnected &&
+        messages.isEmpty &&
+        currentAIText.isEmpty &&
+        currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        isAIThinking
+    }
+
+    private var shouldShowStartupCard: Bool {
+        !isConnected || isStartingConversation
+    }
+
     var body: some View {
         NavigationView {
             VStack(spacing: AppSpacing.md) {
@@ -4823,18 +4889,12 @@ struct MemorizeInteractView: View {
                     .lineLimit(2)
                     .padding(.horizontal, AppSpacing.md)
 
-                conversationCard
-                    .padding(.horizontal, AppSpacing.md)
-
-                if !isConnected {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .tint(.white)
-                            .scaleEffect(0.8)
-                        Text("memorize.interact_connecting".localized)
-                            .font(AppTypography.caption)
-                            .foregroundColor(Color.white.opacity(0.6))
-                    }
+                if shouldShowStartupCard {
+                    startupStatusCard(text: isStartingConversation ? "memorize.interact_starting".localized : "memorize.interact_connecting".localized)
+                        .padding(.horizontal, AppSpacing.md)
+                } else {
+                    conversationCard
+                        .padding(.horizontal, AppSpacing.md)
                 }
 
                 microphoneButton
@@ -4922,26 +4982,32 @@ struct MemorizeInteractView: View {
             maxTotalChars: 4200
         )
 
-        let systemPrompt = """
-        You are a friendly, knowledgeable reading tutor. The student has just read the following condensed notes from "\(bookTitle)"\(sectionTitle.isEmpty ? "" : " — section: \(sectionTitle)"):
+        let systemPrompt: String
+        print("🗣️ [Interact] customSystemPrompt is \(customSystemPrompt == nil ? "nil" : "set (\(customSystemPrompt!.prefix(50))...)")")
+        if let custom = customSystemPrompt {
+            systemPrompt = custom.replacingOccurrences(of: "{{SOURCE_CONTEXT}}", with: sourceContext)
+        } else {
+            systemPrompt = """
+            You are a friendly, knowledgeable reading tutor. The student has just read the following condensed notes from "\(bookTitle)"\(sectionTitle.isEmpty ? "" : " — section: \(sectionTitle)"):
 
-        ---
-        \(sourceContext)
-        ---
+            ---
+            \(sourceContext)
+            ---
 
-        Help the student understand what they read. You can:
-        - Answer questions about the text
-        - Explain difficult concepts or vocabulary
-        - Ask comprehension questions to test understanding
-        - Summarize key points when asked
-        - Connect ideas in the text to broader knowledge
-        - Give very short recap answers when the student asks for a summary of what you just said
+            Help the student understand what they read. You can:
+            - Answer questions about the text
+            - Explain difficult concepts or vocabulary
+            - Ask comprehension questions to test understanding
+            - Summarize key points when asked
+            - Connect ideas in the text to broader knowledge
+            - Give very short recap answers when the student asks for a summary of what you just said
 
-        Keep your responses concise and conversational. For simple recap questions, answer in 1-2 sentences before adding detail.
-        Speak clearly and at a pace suitable for learning.
-        Do not apologize. Do not mention that you are an AI unless asked.
-        Start by briefly greeting the student and asking what they'd like to discuss about the reading.
-        """
+            Keep your responses concise and conversational. For simple recap questions, answer in 1-2 sentences before adding detail.
+            Speak clearly and at a pace suitable for learning.
+            Do not apologize. Do not mention that you are an AI unless asked.
+            Start by briefly greeting the student and asking what they'd like to discuss about the reading.
+            """
+        }
 
         print("⚡️ [MemorizeConversation] Live context chars: \(sourceContext.count)")
 
@@ -4957,11 +5023,26 @@ struct MemorizeInteractView: View {
         service.onConnected = { [service] in
             Task { @MainActor in
                 isConnected = true
-                // Start recording with mic live — conversation mode is fully hands-free
-                service.isMicMuted = false
+                let isSummaryMode = customSystemPrompt != nil
+                // Summary mode: mute mic so AI can summarize uninterrupted
+                // Conversation mode: mic live for hands-free
+                service.isMicMuted = isSummaryMode
                 service.startRecording()
                 isRecording = true
-                isMuted = false
+                isMuted = isSummaryMode
+                isAIThinking = true
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                service.startPlaybackEngineIfNeeded()
+                if isSummaryMode {
+                    service.sendTextInput("Begin the summary now. Start speaking immediately.")
+                } else {
+                    service.sendTextInput(
+                        """
+                        Start the conversation now.
+                        Greet the student briefly, mention the reading naturally, and ask one clear opening question to get them talking.
+                        """
+                    )
+                }
             }
         }
 
@@ -5086,12 +5167,26 @@ struct MemorizeInteractView: View {
                         // Show thinking indicator
                         if isAIThinking && currentAIText.isEmpty {
                             HStack {
-                                ThinkingDotsView()
+                                if isStartingConversation {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        ThinkingDotsView()
+                                        Text("memorize.interact_starting".localized)
+                                            .font(AppTypography.caption)
+                                            .foregroundColor(.white.opacity(0.72))
+                                    }
                                     .padding(AppSpacing.sm)
                                     .background(
                                         RoundedRectangle(cornerRadius: AppCornerRadius.sm)
                                             .fill(AppColors.memorizeCard.opacity(0.7))
                                     )
+                                } else {
+                                    ThinkingDotsView()
+                                        .padding(AppSpacing.sm)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: AppCornerRadius.sm)
+                                                .fill(AppColors.memorizeCard.opacity(0.7))
+                                        )
+                                }
                                 Spacer()
                             }
                             .id("thinking")
@@ -5131,6 +5226,24 @@ struct MemorizeInteractView: View {
                 withAnimation { proxy.scrollTo("streaming", anchor: .bottom) }
             }
         }
+        .frame(minHeight: 260, maxHeight: 400)
+        .background(AppColors.memorizeCard)
+        .cornerRadius(AppCornerRadius.md)
+    }
+
+    private func startupStatusCard(text: String) -> some View {
+        VStack(spacing: AppSpacing.md) {
+            ProgressView()
+                .tint(.white)
+                .scaleEffect(0.95)
+
+            Text(text)
+                .font(AppTypography.body)
+                .foregroundColor(.white.opacity(0.85))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, AppSpacing.lg)
+        }
+        .frame(maxWidth: .infinity)
         .frame(minHeight: 260, maxHeight: 400)
         .background(AppColors.memorizeCard)
         .cornerRadius(AppCornerRadius.md)

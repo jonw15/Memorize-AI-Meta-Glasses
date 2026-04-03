@@ -152,19 +152,18 @@ class GeminiLiveService: NSObject {
                 try audioSession.setCategory(.playback, mode: .spokenAudio, options: [])
                 print("🔊 [Gemini] Media playback mode active")
             } else {
-                let conversationOptions: AVAudioSession.CategoryOptions =
-                    preferSpeakerInConversation ? [.defaultToSpeaker, .allowBluetoothHFP] : [.allowBluetoothHFP]
-                try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: conversationOptions)
-                let hasBluetoothRoute = selectBluetoothRouteIfAvailable()
-                if !hasBluetoothRoute {
+                let hasBluetoothHFP = audioSession.availableInputs?.contains { $0.portType == .bluetoothHFP } ?? false
+                if hasBluetoothHFP {
+                    // Glasses/HFP headset connected — use .voiceChat for echo cancellation
+                    try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetoothHFP])
+                    _ = selectBluetoothRouteIfAvailable()
+                    print("🎧 [Gemini] Conversation mode with Bluetooth HFP")
+                } else {
+                    // No HFP device — use .default mode to avoid Voice Isolation blocking mic
+                    try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
                     try? audioSession.setPreferredInput(nil)
-                    if preferSpeakerInConversation {
-                        try? audioSession.overrideOutputAudioPort(.speaker)
-                        print("📱 [Gemini] Conversation mode using built-in mic + speaker fallback")
-                    } else {
-                        try? audioSession.overrideOutputAudioPort(.none)
-                        print("📱 [Gemini] Conversation mode using built-in mic + receiver fallback")
-                    }
+                    try? audioSession.overrideOutputAudioPort(.speaker)
+                    print("📱 [Gemini] Conversation mode using built-in mic + speaker")
                 }
             }
             try audioSession.setActive(true, options: [.notifyOthersOnDeactivation])

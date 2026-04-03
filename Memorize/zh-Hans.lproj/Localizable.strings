@@ -474,6 +474,8 @@
 "memorize.explain.persona.like_i_am_5" = "像5岁小孩那样总结";
 "memorize.explain_header" = "角色总结";
 "memorize.explain_generating" = "正在生成总结...";
+"memorize.explain_connecting" = "正在准备总结老师...";
+"memorize.explain_starting" = "正在开始朗读总结...";
 "memorize.explain_result_placeholder" = "你选择的角色总结将在此显示。";
 "memorize.explain_no_pages_error" = "暂无已完成页面内容可用于总结。";
 "memorize.explain_empty_error" = "未能生成总结内容，请重试。";
@@ -501,12 +503,15 @@
 "memorize.interact" = "互动对话";
 "memorize.interact_prompt" = "用语音讨论你刚刚阅读的内容";
 "memorize.interact_connecting" = "连接中...";
+"memorize.interact_starting" = "正在开始对话...";
 "memorize.interact_placeholder" = "问我任何关于你拍摄文本的问题。";
 "memorize.podcast" = "播客";
 "memorize.voice_menu_prompt" = "你可以说：对话、总结、播客、朗读、信息图、小测验 或 语音摘要。";
 "memorize.podcast_header" = "AI 生成播客";
 "memorize.podcast_listening" = "正在启动播客...";
 "memorize.podcast_loading" = "播客加载中...";
+"memorize.podcast_loading_play" = "正在准备播客...";
+"memorize.podcast_loading_interactive" = "正在准备互动播客...";
 "memorize.podcast_stop" = "停止播客";
 "memorize.podcast_mute" = "静音麦克风";
 "memorize.podcast_unmute" = "取消静音";

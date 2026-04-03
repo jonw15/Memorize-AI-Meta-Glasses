@@ -89,16 +89,6 @@ struct StudyTabView: View {
                         viewModel.startPodcast()
                     }
 
-                    // Infographics
-                    studyActionButton(
-                        title: "memorize.infographics".localized,
-                        subtitle: "memorize.infographics_subtitle".localized,
-                        icon: "chart.bar.doc.horizontal.fill",
-                        gradient: [Color.pink, Color.pink.opacity(0.7)]
-                    ) {
-                        showInfographics = true
-                    }
-
                     Text("memorize.test_mode_prompt".localized)
                         .font(AppTypography.subheadline)
                         .foregroundColor(Color.white.opacity(0.7))
@@ -187,12 +177,26 @@ struct StudyTabView: View {
             }
             .presentationDetents([.medium])
         }
-        // Explain view — conversation with persona context
+        // Summary view — AI immediately summarizes as selected persona
         .fullScreenCover(isPresented: $showExplain) {
             MemorizeInteractView(
                 pages: completedPages,
                 bookTitle: bookTitle,
-                sectionTitle: "Explain as: \(selectedPersona.displayKey.localized)"
+                sectionTitle: "\(selectedPersona.displayKey.localized) Summary",
+                customSystemPrompt: """
+                You are a friendly tutor. The student wants a summary of the following material from "\(bookTitle)":
+
+                ---
+                {{SOURCE_CONTEXT}}
+                ---
+
+                Summarize this material as if you are explaining it to \(selectedPersona.promptInstruction).
+
+                IMPORTANT: Start immediately with the summary. Do NOT ask any questions first. Do NOT greet the student. Just begin summarizing the key points right away in a clear, engaging way.
+
+                After you finish the summary, you can answer any follow-up questions the student has.
+                Keep your language conversational and easy to understand.
+                """
             )
         }
         // Interact
