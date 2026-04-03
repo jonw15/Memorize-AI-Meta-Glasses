@@ -2623,6 +2623,12 @@ struct MemorizePodcastPlayerView: View {
 
     @State private var estimatedTotalDuration: TimeInterval = 0
 
+    // Transcript tracking for play mode
+    @State private var transcriptSegments: [(time: TimeInterval, text: String)] = []
+    @State private var currentTranscriptText = ""
+    @State private var transcriptStartTime: Date?
+    @State private var isWaitingForSeekAudio = false
+
     // Soundwave animation
     @State private var barHeights: [CGFloat] = [12, 12, 12, 12, 12]
     @State private var barTimer: Timer?
@@ -2840,6 +2846,53 @@ struct MemorizePodcastPlayerView: View {
 
     private var podcastPlaybackControls: some View {
         VStack(spacing: AppSpacing.sm) {
+            // Scrub bar
+            VStack(spacing: 4) {
+                Slider(
+                    value: Binding(
+                        get: { displayPosition },
+                        set: { newValue in
+                            scrubPosition = newValue
+                            if !isScrubbing {
+                                isScrubbing = true
+                            }
+                        }
+                    ),
+                    in: 0...effectiveMax,
+                    onEditingChanged: { editing in
+                        if !editing {
+                            isScrubbing = false
+                            podcastSeek(to: scrubPosition)
+                        }
+                    }
+                )
+                .tint(podcastAccent)
+
+                HStack {
+                    Text(formatTime(displayPosition))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(Color.white.opacity(0.5))
+                    Spacer()
+                    Text(formatTime(effectiveMax))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(Color.white.opacity(0.5))
+                }
+            }
+
+            if isWaitingForSeekAudio {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .tint(podcastAccent)
+                        .scaleEffect(0.75)
+                    Text("Jumping to \(formatTime(displayPosition))... transcript catching up.")
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.6))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, AppSpacing.xs)
+            }
+
+            // Playback controls
             HStack(spacing: AppSpacing.xl) {
                 Button { podcastSkip(by: -skipInterval) } label: {
                     Image(systemName: "gobackward.15")
@@ -2882,35 +2935,41 @@ struct MemorizePodcastPlayerView: View {
 
     private func podcastSkip(by seconds: TimeInterval) {
         let current = isScrubbing ? scrubPosition : playbackPosition
-        let newPosition = max(0, min(current + seconds, totalDuration))
+        let newPosition = max(0, min(current + seconds, effectiveMax))
         podcastSeek(to: newPosition)
     }
 
     private func podcastSeek(to position: TimeInterval) {
         guard let service = geminiService else { return }
-        seekTarget = nil
+        let clampedPosition = max(0, min(position, effectiveMax))
+        seekTarget = clampedPosition
         isSeeking = true
-
-        // Clamp to what we actually have
         let availableDuration = totalDuration
-        let clampedPosition = max(0, min(position, availableDuration))
-        let byteOffset = Int(clampedPosition * bytesPerSecond)
-        let alignedOffset = byteOffset & ~1
-
-        // Only seek if there's audio ahead of the seek point
-        if alignedOffset < accumulatedAudio.count {
-            service.seekAndPlay(audioData: accumulatedAudio, fromByteOffset: alignedOffset)
-        } else {
-            // Seeked to the very end; resume playback so new audio can play.
-            service.resumePlayback()
-        }
-        // If seeking to or past the live edge, streaming will resume naturally
-
-        playbackPosition = clampedPosition
         scrubPosition = clampedPosition
-        isPaused = false
-        startBarTimer()
-        startPositionTimer()
+
+        if clampedPosition <= availableDuration {
+            let byteOffset = Int(clampedPosition * bytesPerSecond)
+            let alignedOffset = byteOffset & ~1
+
+            if alignedOffset < accumulatedAudio.count {
+                service.seekAndPlay(audioData: accumulatedAudio, fromByteOffset: alignedOffset)
+            } else {
+                service.resumePlayback()
+            }
+
+            seekTarget = nil
+            isWaitingForSeekAudio = false
+            playbackPosition = clampedPosition
+            isPaused = false
+            startBarTimer()
+            startPositionTimer()
+        } else {
+            service.pausePlayback()
+            isWaitingForSeekAudio = true
+            isPaused = true
+            stopBarTimer()
+            stopPositionTimer()
+        }
 
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 500_000_000)
@@ -3043,6 +3102,7 @@ struct MemorizePodcastPlayerView: View {
         sliderMax = 0.1
         stopBarTimer()
         stopPositionTimer()
+        isWaitingForSeekAudio = false
         setupAndConnect()
     }
 
@@ -3178,6 +3238,7 @@ struct MemorizePodcastPlayerView: View {
             Task { @MainActor in
                 let wasAtEnd = playbackPosition >= totalDuration - 0.1
                 accumulatedAudio.append(audioData)
+                let availableDuration = totalDuration
 
                 if !hasStartedPlaying {
                     hasStartedPlaying = true
@@ -3185,7 +3246,18 @@ struct MemorizePodcastPlayerView: View {
                 if isStreamDone { // Un-mark done since more audio arrived
                     isStreamDone = false
                 }
-                if isPaused && wasAtEnd {
+                if let pendingSeek = seekTarget, pendingSeek <= availableDuration {
+                    let byteOffset = Int(pendingSeek * bytesPerSecond)
+                    let alignedOffset = byteOffset & ~1
+                    service.seekAndPlay(audioData: accumulatedAudio, fromByteOffset: alignedOffset)
+                    playbackPosition = pendingSeek
+                    scrubPosition = pendingSeek
+                    seekTarget = nil
+                    isWaitingForSeekAudio = false
+                    isPaused = false
+                    startBarTimer()
+                    startPositionTimer()
+                } else if isPaused && wasAtEnd && !isWaitingForSeekAudio {
                     // Auto-resume if it stalled waiting for chunks
                     isPaused = false
                     startBarTimer()
@@ -3194,8 +3266,34 @@ struct MemorizePodcastPlayerView: View {
             }
         }
 
-        service.onTranscriptDelta = { (_: String) in }
-        service.onTranscriptDone = { (_: String) in }
+        service.onTranscriptDelta = { (delta: String) in
+            Task { @MainActor in
+                guard mode == .play else { return }
+                let cleaned = delta.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !cleaned.isEmpty else { return }
+                if cleaned.hasPrefix(currentTranscriptText) && cleaned.count > currentTranscriptText.count {
+                    currentTranscriptText = cleaned
+                } else if currentTranscriptText.isEmpty || !cleaned.hasPrefix(currentTranscriptText) {
+                    if currentTranscriptText.isEmpty {
+                        currentTranscriptText = cleaned
+                    } else {
+                        let needsSpace = !currentTranscriptText.hasSuffix(" ") && !cleaned.hasPrefix(" ")
+                        currentTranscriptText += (needsSpace ? " " : "") + cleaned
+                    }
+                }
+            }
+        }
+
+        service.onTranscriptDone = { (_: String) in
+            Task { @MainActor in
+                guard mode == .play else { return }
+                let text = currentTranscriptText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty {
+                    transcriptSegments.append((time: playbackPosition, text: text))
+                }
+                currentTranscriptText = ""
+            }
+        }
 
         service.onAudioDone = { [service] in
             Task { @MainActor in
