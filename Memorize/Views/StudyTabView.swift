@@ -11,6 +11,8 @@ struct StudyTabView: View {
 
     @State private var showInteract = false
     @State private var showExplainPersonaSelector = false
+    @State private var showExplain = false
+    @State private var selectedPersona: MemorizeExplainPersona = .highSchoolStudent
     @State private var showVoiceSummary = false
     @State private var showInfographics = false
 
@@ -176,13 +178,22 @@ struct StudyTabView: View {
                 viewModel.showPodcastPlayer = false
             }
         }
-        // Explain persona selector → opens Interact with persona prompt
+        // Explain persona selector
         .sheet(isPresented: $showExplainPersonaSelector) {
             ExplainPersonaPickerView { persona in
+                selectedPersona = persona
                 showExplainPersonaSelector = false
-                showInteract = true
+                showExplain = true
             }
             .presentationDetents([.medium])
+        }
+        // Explain view — conversation with persona context
+        .fullScreenCover(isPresented: $showExplain) {
+            MemorizeInteractView(
+                pages: completedPages,
+                bookTitle: bookTitle,
+                sectionTitle: "Explain as: \(selectedPersona.displayKey.localized)"
+            )
         }
         // Interact
         .fullScreenCover(isPresented: $showInteract) {
