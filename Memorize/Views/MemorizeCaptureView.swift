@@ -3033,14 +3033,18 @@ struct MemorizePodcastPlayerView: View {
             guard isConnected, let service = geminiService else { return }
             if isMuted {
                 // Unmute — let user speak/ask questions
+                service.activateConversationMode(startRecordingIfNeeded: true)
                 service.interruptPlayback(expectServerInterruption: true)
                 service.sendSilentAudioToInterrupt()
                 service.isMicMuted = false
+                isRecording = true
                 isMuted = false
                 listenerQuestionArmed = true
             } else {
                 // Re-mute
                 service.isMicMuted = true
+                service.activatePlaybackOnlyMode()
+                isRecording = false
                 isMuted = true
                 listenerQuestionArmed = false
             }
@@ -3228,9 +3232,9 @@ struct MemorizePodcastPlayerView: View {
             Task { @MainActor in
                 isConnected = true
                 let micMuted = true
+                service.activatePlaybackOnlyMode()
                 service.isMicMuted = micMuted
-                service.startRecording()
-                isRecording = true
+                isRecording = false
                 isMuted = micMuted
                 listenerQuestionArmed = false
                 isAnsweringListenerQuestion = false
@@ -3256,6 +3260,8 @@ struct MemorizePodcastPlayerView: View {
                     || normalized.contains("keep going")
 
                 service.isMicMuted = true
+                service.activatePlaybackOnlyMode()
+                isRecording = false
                 isMuted = true
                 listenerQuestionArmed = false
                 isAnsweringListenerQuestion = !isResumeRequest
@@ -4054,6 +4060,7 @@ struct MemorizeExplainView: View {
             includeTools: false
         )
         service.voiceName = selectedVoice
+        service.preferSpeakerInConversation = true
 
         service.onConnected = { [service] in
             Task { @MainActor in
@@ -4117,6 +4124,19 @@ struct MemorizeExplainView: View {
         service.onError = { (errorText: String) in
             Task { @MainActor in
                 errorMessage = errorText
+            }
+        }
+
+        service.onSpeechStarted = {
+            Task { @MainActor in
+                service.isMicMuted = true
+            }
+        }
+
+        service.onSpeechStopped = {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                service.isMicMuted = false
             }
         }
 
@@ -4932,6 +4952,7 @@ struct MemorizeInteractView: View {
             includeTools: false
         )
         service.voiceName = selectedVoice
+        service.preferSpeakerInConversation = true
 
         service.onConnected = { [service] in
             Task { @MainActor in
@@ -4996,6 +5017,19 @@ struct MemorizeInteractView: View {
         service.onError = { (errorText: String) in
             Task { @MainActor in
                 errorMessage = errorText
+            }
+        }
+
+        service.onSpeechStarted = {
+            Task { @MainActor in
+                service.isMicMuted = true
+            }
+        }
+
+        service.onSpeechStopped = {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                service.isMicMuted = false
             }
         }
 

@@ -96,6 +96,9 @@ class GeminiLiveService: NSObject {
     /// When true, use `.playback` audio session instead of `.playAndRecord` + `.voiceChat`.
     /// Avoids Voice Processing I/O overhead. Call `startRecording()` to switch to full mode.
     var playbackOnly = false
+    /// When true, voice-chat mode prefers the loud speaker on phone-only routes.
+    /// Use carefully with a mic-suppression guard to avoid feedback loops.
+    var preferSpeakerInConversation = false
     /// Gemini voice name used in session config. Set before calling connect().
     var voiceName: String = "Aoede"
 
@@ -146,24 +149,22 @@ class GeminiLiveService: NSObject {
         do {
             let audioSession = AVAudioSession.sharedInstance()
             if playbackOnly {
-                // Use .playAndRecord to maintain I/O cycle (pure .playback starves the engine)
-                // Use .default mode (not .voiceChat) to skip Voice Processing I/O overhead
-                // Use .allowBluetoothHFP so audio routes to Bluetooth devices (glasses, AirPods via HFP)
-                // Use .defaultToSpeaker as fallback when no Bluetooth device is connected
-                try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
-                let hasBluetoothRoute = selectBluetoothRouteIfAvailable()
-                if !hasBluetoothRoute {
-                    try? audioSession.setPreferredInput(nil)
-                    try? audioSession.overrideOutputAudioPort(.speaker)
-                    print("📱 [Gemini] Playback-only mode using iPhone speaker fallback")
-                }
+                try audioSession.setCategory(.playback, mode: .spokenAudio, options: [])
+                print("🔊 [Gemini] Media playback mode active")
             } else {
-                try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetoothHFP])
+                let conversationOptions: AVAudioSession.CategoryOptions =
+                    preferSpeakerInConversation ? [.defaultToSpeaker, .allowBluetoothHFP] : [.allowBluetoothHFP]
+                try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: conversationOptions)
                 let hasBluetoothRoute = selectBluetoothRouteIfAvailable()
                 if !hasBluetoothRoute {
                     try? audioSession.setPreferredInput(nil)
-                    try? audioSession.overrideOutputAudioPort(.speaker)
-                    print("📱 [Gemini] Conversation mode using built-in mic + speaker fallback")
+                    if preferSpeakerInConversation {
+                        try? audioSession.overrideOutputAudioPort(.speaker)
+                        print("📱 [Gemini] Conversation mode using built-in mic + speaker fallback")
+                    } else {
+                        try? audioSession.overrideOutputAudioPort(.none)
+                        print("📱 [Gemini] Conversation mode using built-in mic + receiver fallback")
+                    }
                 }
             }
             try audioSession.setActive(true, options: [.notifyOthersOnDeactivation])
@@ -177,6 +178,24 @@ class GeminiLiveService: NSObject {
             }
         } catch {
             print("⚠️ [Gemini] Audio session configuration failed: \(error)")
+        }
+    }
+
+    func activatePlaybackOnlyMode() {
+        playbackOnly = true
+        if isRecording {
+            stopRecording()
+        }
+        setupPlaybackEngine()
+        startPlaybackEngine()
+    }
+
+    func activateConversationMode(startRecordingIfNeeded: Bool = true) {
+        playbackOnly = false
+        setupPlaybackEngine()
+        startPlaybackEngine()
+        if startRecordingIfNeeded {
+            startRecording()
         }
     }
 
@@ -1298,6 +1317,9 @@ Do not apologize.
 
         if !isCollectingAudio {
             isCollectingAudio = true
+            DispatchQueue.main.async { [weak self] in
+                self?.onSpeechStarted?()
+            }
             audioBuffer = Data()
             streamingBuffer = Data()
             audioChunkCount = 0
@@ -1365,6 +1387,9 @@ Do not apologize.
 
         audioChunkCount = 0
         hasStartedPlaying = false
+        DispatchQueue.main.async { [weak self] in
+            self?.onSpeechStopped?()
+        }
         onAudioDone?()
     }
 
