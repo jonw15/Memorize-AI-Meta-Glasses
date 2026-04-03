@@ -2628,6 +2628,8 @@ struct MemorizePodcastPlayerView: View {
     @State private var currentTranscriptText = ""
     @State private var transcriptStartTime: Date?
     @State private var isWaitingForSeekAudio = false
+    @State private var currentAudioTimelineStart: TimeInterval = 0
+    @State private var pendingPodcastLaunchPrompt: String?
 
     // Soundwave animation
     @State private var barHeights: [CGFloat] = [12, 12, 12, 12, 12]
@@ -2675,6 +2677,10 @@ struct MemorizePodcastPlayerView: View {
 
     private var effectiveMax: TimeInterval {
         return max(estimatedTotalDuration, totalDuration, 0.1)
+    }
+
+    private var availableTimelineEnd: TimeInterval {
+        currentAudioTimelineStart + totalDuration
     }
 
     var body: some View {
@@ -2944,11 +2950,11 @@ struct MemorizePodcastPlayerView: View {
         let clampedPosition = max(0, min(position, effectiveMax))
         seekTarget = clampedPosition
         isSeeking = true
-        let availableDuration = totalDuration
         scrubPosition = clampedPosition
 
-        if clampedPosition <= availableDuration {
-            let byteOffset = Int(clampedPosition * bytesPerSecond)
+        if clampedPosition >= currentAudioTimelineStart && clampedPosition <= availableTimelineEnd {
+            let localOffset = clampedPosition - currentAudioTimelineStart
+            let byteOffset = Int(localOffset * bytesPerSecond)
             let alignedOffset = byteOffset & ~1
 
             if alignedOffset < accumulatedAudio.count {
@@ -2964,11 +2970,7 @@ struct MemorizePodcastPlayerView: View {
             startBarTimer()
             startPositionTimer()
         } else {
-            service.pausePlayback()
-            isWaitingForSeekAudio = true
-            isPaused = true
-            stopBarTimer()
-            stopPositionTimer()
+            jumpPodcast(to: clampedPosition)
         }
 
         Task { @MainActor in
@@ -2985,8 +2987,8 @@ struct MemorizePodcastPlayerView: View {
         positionTimer?.invalidate()
         positionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
             Task { @MainActor in
-                let currentTotal = totalDuration
-                if currentTotal > sliderMax { sliderMax = currentTotal }
+                let currentTimelineEnd = availableTimelineEnd
+                if currentTimelineEnd > sliderMax { sliderMax = currentTimelineEnd }
                 guard !isPaused, !isScrubbing, let startDate = playbackStartDate else { return }
                 // Don't update position while user is dragging the slider
                 if seekTarget != nil { return }
@@ -2994,15 +2996,15 @@ struct MemorizePodcastPlayerView: View {
                 let elapsed = Date().timeIntervalSince(startDate)
                 var newPos = playbackStartOffset + elapsed
                 
-                if newPos >= currentTotal {
-                    newPos = currentTotal
+                if newPos >= currentTimelineEnd {
+                    newPos = currentTimelineEnd
                     // Shift base to prevent jumping ahead when more audio arrives
-                    playbackStartOffset = currentTotal
+                    playbackStartOffset = currentTimelineEnd
                     playbackStartDate = Date()
                     
                     if isStreamDone && !isSeeking {
-                        playbackPosition = currentTotal
-                        sliderMax = currentTotal
+                        playbackPosition = currentTimelineEnd
+                        sliderMax = currentTimelineEnd
                         isPaused = true
                         playbackStartDate = nil
                         stopBarTimer()
@@ -3086,6 +3088,52 @@ struct MemorizePodcastPlayerView: View {
         onClose()
     }
 
+    private func jumpPodcast(to targetPosition: TimeInterval) {
+        let clampedPosition = max(0, min(targetPosition, effectiveMax))
+        print("⏩ [MemorizePodcast] Jumping to \(formatTime(clampedPosition)) of \(formatTime(effectiveMax))")
+
+        geminiService?.disconnect()
+        geminiService = nil
+        isConnected = false
+        isRecording = false
+        isStreamDone = false
+        isPaused = true
+        isWaitingForSeekAudio = true
+        currentAudioTimelineStart = clampedPosition
+        pendingPodcastLaunchPrompt = podcastLaunchPrompt(startingAt: clampedPosition)
+        accumulatedAudio = Data()
+        playbackPosition = clampedPosition
+        scrubPosition = clampedPosition
+        playbackStartOffset = clampedPosition
+        playbackStartDate = nil
+        seekTarget = clampedPosition
+        currentTranscriptText = ""
+        transcriptStartTime = nil
+        stopBarTimer()
+        stopPositionTimer()
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            setupAndConnect()
+        }
+    }
+
+    private func podcastLaunchPrompt(startingAt startTime: TimeInterval = 0) -> String {
+        if startTime <= 1 {
+            return "Begin the podcast now. Start with your intro and dive deep into the content. You have \(targetPodcastMinutes) minutes."
+        }
+
+        let remainingSeconds = max(0, estimatedTotalDuration - startTime)
+        let remainingMinutes = max(1, Int(ceil(remainingSeconds / 60.0)))
+
+        return """
+        Continue this podcast from around \(formatTime(startTime)) into the episode.
+        Do not restart the introduction or repeat earlier sections.
+        Smoothly jump ahead as if the earlier part already played, and continue with the next major idea.
+        You have about \(remainingMinutes) minutes left in the episode.
+        """
+    }
+
     private func podcastReconnectWithNewVoice() {
         geminiService?.disconnect()
         geminiService = nil
@@ -3100,6 +3148,8 @@ struct MemorizePodcastPlayerView: View {
         playbackStartOffset = 0
         playbackStartDate = nil
         sliderMax = 0.1
+        currentAudioTimelineStart = 0
+        pendingPodcastLaunchPrompt = nil
         stopBarTimer()
         stopPositionTimer()
         isWaitingForSeekAudio = false
@@ -3184,7 +3234,9 @@ struct MemorizePodcastPlayerView: View {
                 listenerQuestionArmed = false
                 isAnsweringListenerQuestion = false
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                service.sendTextInput("Begin the podcast now. Start with your intro and dive deep into the content. You have \(targetMinutes) minutes.")
+                let launchPrompt = pendingPodcastLaunchPrompt ?? podcastLaunchPrompt()
+                pendingPodcastLaunchPrompt = nil
+                service.sendTextInput(launchPrompt)
             }
         }
 
@@ -3236,9 +3288,9 @@ struct MemorizePodcastPlayerView: View {
         // Accumulate raw PCM audio for seeking
         service.onAudioDelta = { (audioData: Data) in
             Task { @MainActor in
-                let wasAtEnd = playbackPosition >= totalDuration - 0.1
                 accumulatedAudio.append(audioData)
-                let availableDuration = totalDuration
+                let timelineEnd = availableTimelineEnd
+                let wasAtEnd = playbackPosition >= timelineEnd - 0.1
 
                 if !hasStartedPlaying {
                     hasStartedPlaying = true
@@ -3246,8 +3298,11 @@ struct MemorizePodcastPlayerView: View {
                 if isStreamDone { // Un-mark done since more audio arrived
                     isStreamDone = false
                 }
-                if let pendingSeek = seekTarget, pendingSeek <= availableDuration {
-                    let byteOffset = Int(pendingSeek * bytesPerSecond)
+                if let pendingSeek = seekTarget,
+                   pendingSeek >= currentAudioTimelineStart,
+                   pendingSeek <= timelineEnd {
+                    let localOffset = pendingSeek - currentAudioTimelineStart
+                    let byteOffset = Int(localOffset * bytesPerSecond)
                     let alignedOffset = byteOffset & ~1
                     service.seekAndPlay(audioData: accumulatedAudio, fromByteOffset: alignedOffset)
                     playbackPosition = pendingSeek
@@ -3304,7 +3359,7 @@ struct MemorizePodcastPlayerView: View {
                 }
 
                 continuationCount += 1
-                let elapsedMinutes = totalDuration / 60.0
+                let elapsedMinutes = availableTimelineEnd / 60.0
 
                 if elapsedMinutes < Double(targetMinutes) - 0.5 && continuationCount < maxContinuations {
                     // Not enough content yet — ask Gemini to continue
