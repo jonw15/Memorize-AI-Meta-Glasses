@@ -526,6 +526,7 @@
 "memorize.section_pages" = "%d pages";
 "memorize.back" = "Back";
 "memorize.sources" = "Sources";
+"memorize.sources_desc" = "Upload PDFs, notes, or photos for AI to study with you.";
 "memorize.study" = "Study";
 "memorize.add_source" = "Add a source";
 "memorize.add_source_title" = "Add a Source";

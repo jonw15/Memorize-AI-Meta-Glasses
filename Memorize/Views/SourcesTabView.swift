@@ -28,11 +28,13 @@ struct SourcesTabView: View {
             // Source list
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                    HStack {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text("memorize.sources".localized)
                             .font(AppTypography.headline)
                             .foregroundColor(.white)
-                        Spacer()
+                        Text("memorize.sources_desc".localized)
+                            .font(AppTypography.caption)
+                            .foregroundColor(Color.white.opacity(0.4))
                     }
                     .padding(.horizontal, AppSpacing.md)
                     .padding(.top, AppSpacing.md)

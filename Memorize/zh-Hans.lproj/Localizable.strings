@@ -527,6 +527,7 @@
 "memorize.section_pages" = "%d 页";
 "memorize.back" = "返回";
 "memorize.sources" = "来源";
+"memorize.sources_desc" = "上传 PDF、笔记或照片，让 AI 与你一起学习。";
 "memorize.study" = "学习";
 "memorize.add_source" = "添加来源";
 "memorize.add_source_title" = "添加来源";
