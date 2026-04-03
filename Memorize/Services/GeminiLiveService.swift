@@ -151,10 +151,20 @@ class GeminiLiveService: NSObject {
                 // Use .allowBluetoothHFP so audio routes to Bluetooth devices (glasses, AirPods via HFP)
                 // Use .defaultToSpeaker as fallback when no Bluetooth device is connected
                 try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
-                selectBluetoothRouteIfAvailable()
+                let hasBluetoothRoute = selectBluetoothRouteIfAvailable()
+                if !hasBluetoothRoute {
+                    try? audioSession.setPreferredInput(nil)
+                    try? audioSession.overrideOutputAudioPort(.speaker)
+                    print("📱 [Gemini] Playback-only mode using iPhone speaker fallback")
+                }
             } else {
-                try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetoothHFP])
-                selectBluetoothRouteIfAvailable()
+                try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetoothHFP])
+                let hasBluetoothRoute = selectBluetoothRouteIfAvailable()
+                if !hasBluetoothRoute {
+                    try? audioSession.setPreferredInput(nil)
+                    try? audioSession.overrideOutputAudioPort(.speaker)
+                    print("📱 [Gemini] Conversation mode using built-in mic + speaker fallback")
+                }
             }
             try audioSession.setActive(true, options: [.notifyOthersOnDeactivation])
 
@@ -170,11 +180,12 @@ class GeminiLiveService: NSObject {
         }
     }
 
-    private func selectBluetoothRouteIfAvailable() {
+    @discardableResult
+    private func selectBluetoothRouteIfAvailable() -> Bool {
         let session = AVAudioSession.sharedInstance()
         guard let inputs = session.availableInputs else {
             print("🎧 [Gemini] No available inputs")
-            return
+            return false
         }
         print("🎧 [Gemini] Available inputs: \(inputs.map { "\($0.portName) (\($0.portType.rawValue))" })")
         for input in inputs where input.portType == .bluetoothHFP {
@@ -184,9 +195,10 @@ class GeminiLiveService: NSObject {
             } catch {
                 print("⚠️ [Gemini] Failed to set preferred Bluetooth input: \(error)")
             }
-            return
+            return true
         }
         print("🎧 [Gemini] No Bluetooth HFP input found, using default")
+        return false
     }
 
     private func deactivateAudioSessionIfIdle() {

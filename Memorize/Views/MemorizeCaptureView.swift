@@ -3033,7 +3033,8 @@ struct MemorizePodcastPlayerView: View {
             guard isConnected, let service = geminiService else { return }
             if isMuted {
                 // Unmute — let user speak/ask questions
-                service.interruptPlayback()
+                service.interruptPlayback(expectServerInterruption: true)
+                service.sendSilentAudioToInterrupt()
                 service.isMicMuted = false
                 isMuted = false
                 listenerQuestionArmed = true
