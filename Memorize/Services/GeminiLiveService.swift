@@ -170,12 +170,12 @@ class GeminiLiveService: NSObject {
             }
             try audioSession.setActive(true, options: [.notifyOthersOnDeactivation])
 
-            // Prompt Voice Isolation if not already selected — suppresses other people's voices
-            if AVCaptureDevice.preferredMicrophoneMode != .voiceIsolation {
-                print("🎤 [Gemini] Voice Isolation not active (current: \(AVCaptureDevice.preferredMicrophoneMode.rawValue)), prompting user")
-                AVCaptureDevice.showSystemUserInterface(.microphoneModes)
-            } else {
+            // Keep conversation audio configured without forcing the system microphone-modes UI,
+            // which can interrupt the experience with a popup route/noise-cancellation chooser.
+            if AVCaptureDevice.preferredMicrophoneMode == .voiceIsolation {
                 print("🎤 [Gemini] Voice Isolation already active")
+            } else {
+                print("🎤 [Gemini] Voice Isolation not active (current: \(AVCaptureDevice.preferredMicrophoneMode.rawValue)); skipping system prompt")
             }
         } catch {
             print("⚠️ [Gemini] Audio session configuration failed: \(error)")
