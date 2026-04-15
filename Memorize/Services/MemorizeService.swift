@@ -867,37 +867,59 @@ struct YouTubeTranscriptImportService {
             return sentence.isEmpty ? nil : sentence
         }
 
-        if sentences.isEmpty {
-            return normalized
+        // If no sentence boundaries found (unpunctuated transcript),
+        // break into paragraphs by word count instead.
+        if sentences.count <= 1 {
+            return paragraphizeByWordCount(normalized, wordsPerParagraph: 50)
         }
 
         var paragraphs: [String] = []
         var currentSentences: [String] = []
-        var currentLength = 0
+        var currentWordCount = 0
 
         for sentence in sentences {
-            let sentenceLength = sentence.count
-            let projectedLength = currentLength + (currentSentences.isEmpty ? 0 : 1) + sentenceLength
+            let wordCount = sentence.split(separator: " ").count
+            let projectedWords = currentWordCount + wordCount
+
+            // Break every ~50 words or 2-3 sentences for readable paragraphs
             let shouldBreak =
                 !currentSentences.isEmpty &&
-                (
-                    currentSentences.count >= 3 ||
-                    projectedLength >= 360 ||
-                    (currentLength >= 180 && sentenceLength >= 120)
-                )
+                (projectedWords >= 50 || currentSentences.count >= 3)
 
             if shouldBreak {
                 paragraphs.append(currentSentences.joined(separator: " "))
                 currentSentences = [sentence]
-                currentLength = sentenceLength
+                currentWordCount = wordCount
             } else {
                 currentSentences.append(sentence)
-                currentLength = projectedLength
+                currentWordCount = projectedWords
             }
         }
 
         if !currentSentences.isEmpty {
             paragraphs.append(currentSentences.joined(separator: " "))
+        }
+
+        return paragraphs.joined(separator: "\n\n")
+    }
+
+    private func paragraphizeByWordCount(_ text: String, wordsPerParagraph: Int) -> String {
+        let words = text.split(separator: " ")
+        guard words.count > wordsPerParagraph else { return text }
+
+        var paragraphs: [String] = []
+        var currentWords: [Substring] = []
+
+        for word in words {
+            currentWords.append(word)
+            if currentWords.count >= wordsPerParagraph {
+                paragraphs.append(currentWords.joined(separator: " "))
+                currentWords = []
+            }
+        }
+
+        if !currentWords.isEmpty {
+            paragraphs.append(currentWords.joined(separator: " "))
         }
 
         return paragraphs.joined(separator: "\n\n")

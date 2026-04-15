@@ -2462,7 +2462,6 @@ struct MemorizeReadAloudView: View {
             Task { @MainActor in
                 isConnected = true
                 service.isMicMuted = true
-                service.startRecording()
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 // Send first chunk
                 sendNextChunk(service: service)
@@ -2600,6 +2599,10 @@ struct MemorizePodcastPlayerView: View {
     @State private var isMuted = true
     @State private var listenerQuestionArmed = false
     @State private var isAnsweringListenerQuestion = false
+    @State private var pendingListenerTranscript = ""
+    @State private var listenerTranscriptTask: Task<Void, Never>?
+    @State private var lastMicRearmTime: Date?
+    @State private var questionAnsweredAt: Date?
     @State private var errorMessage: String?
     @State private var micLevel: Float = 0
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
@@ -2692,137 +2695,19 @@ struct MemorizePodcastPlayerView: View {
         currentAudioTimelineStart + totalDuration
     }
 
+    private let tealAccent = Color(red: 0.18, green: 0.55, blue: 0.53)
+    private let coralAccent = Color(red: 0.89, green: 0.36, blue: 0.35)
+
     var body: some View {
         NavigationView {
-            VStack(spacing: AppSpacing.md) {
-                Spacer()
-
-                // Podcast artwork with soundwave bars
-                ZStack {
-                    Circle()
-                        .fill(podcastAccent.opacity(0.1))
-                        .frame(width: 200, height: 200)
-
-                    Circle()
-                        .fill(podcastAccent.opacity(0.18))
-                        .frame(width: 160, height: 160)
-
-                    Circle()
-                        .fill(podcastAccent.opacity(0.25))
-                        .frame(width: 120, height: 120)
-
-                    // Soundwave bars
-                    HStack(spacing: 5) {
-                        ForEach(0..<5, id: \.self) { i in
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(podcastAccent)
-                                .frame(width: 6, height: barHeights[i])
-                                .animation(.easeInOut(duration: 0.3), value: barHeights[i])
-                        }
-                    }
-                }
-
-                Text(bookTitle)
-                    .font(AppTypography.title2)
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .padding(.horizontal, AppSpacing.lg)
-
-                if !sectionTitle.isEmpty {
-                    Text(sectionTitle)
-                        .font(AppTypography.subheadline)
-                        .foregroundColor(AppColors.memorizeAccent)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                }
-
-                Text("memorize.podcast_header".localized)
-                    .font(AppTypography.subheadline)
-                    .foregroundColor(Color.white.opacity(0.6))
-
-                // Loading indicator
-                if !hasStartedPlaying {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .tint(.white)
-                            .scaleEffect(0.8)
-                        Text(startupLoadingText)
-                            .font(AppTypography.caption)
-                            .foregroundColor(Color.white.opacity(0.6))
-                    }
-                    .padding(AppSpacing.md)
-                }
-
-                if let errorMessage, !errorMessage.isEmpty {
-                    Text(errorMessage)
-                        .font(AppTypography.caption)
-                        .foregroundColor(.red.opacity(0.9))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, AppSpacing.md)
-                }
-
-                if isConnected && mode == .interactive {
-                    // Voice waveform — shows when mic is active
-                    if !isMuted {
-                        MicWaveformView(level: micLevel, accent: podcastAccent)
-                            .frame(height: 40)
-                            .padding(.horizontal, AppSpacing.xl)
-                            .padding(.top, AppSpacing.sm)
-                    }
-
-                    microphoneButton
-                }
-
-                Spacer()
-
-                // Playback controls (play/pause + skip, Play mode only)
-                if hasStartedPlaying && mode == .play {
-                    podcastPlaybackControls
-                        .padding(.horizontal, AppSpacing.md)
-                        .padding(.bottom, AppSpacing.xl)
-                }
-
-                // Done button
-                Button {
-                    disconnectAndDismiss()
-                } label: {
-                    Text("memorize.done".localized)
-                        .font(AppTypography.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(AppCornerRadius.md)
-                }
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.bottom, AppSpacing.lg)
+            if mode == .interactive {
+                interactiveBody
+            } else {
+                playBody
             }
-            .background(AppColors.memorizeBackground.ignoresSafeArea())
-            .navigationTitle("memorize.podcast".localized)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        disconnectAndDismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .foregroundColor(.white)
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showVoicePicker = true
-                    } label: {
-                        Image(systemName: "person.crop.circle")
-                            .foregroundColor(.white)
-                    }
-                }
-            }
-            .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .sheet(isPresented: $showVoicePicker) {
-            GeminiVoicePickerView(selectedVoice: $selectedVoice, accent: podcastAccent)
+            GeminiVoicePickerView(selectedVoice: $selectedVoice, accent: mode == .interactive ? tealAccent : podcastAccent)
                 .presentationDetents([.medium])
         }
         .onChange(of: selectedVoice) { newVoice in
@@ -2854,6 +2739,351 @@ struct MemorizePodcastPlayerView: View {
             stopPositionTimer()
             geminiService?.disconnect()
             geminiService = nil
+        }
+    }
+
+    // MARK: - Interactive Body
+
+    private var interactiveBody: some View {
+        VStack(spacing: AppSpacing.md) {
+            Spacer()
+
+            // "AI-Generated Summary" pill
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 12, weight: .medium))
+                Text("Interactive Podcast")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .foregroundColor(tealAccent)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(tealAccent.opacity(0.15))
+            .cornerRadius(20)
+
+            // Title
+            Text(bookTitle)
+                .font(AppTypography.title2)
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
+                .padding(.horizontal, AppSpacing.lg)
+
+            if !sectionTitle.isEmpty {
+                Text(sectionTitle)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(tealAccent)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+
+            // Loading indicator
+            if !hasStartedPlaying {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(0.8)
+                    Text(startupLoadingText)
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.6))
+                }
+                .padding(AppSpacing.md)
+            }
+
+            if let errorMessage, !errorMessage.isEmpty {
+                Text(errorMessage)
+                    .font(AppTypography.caption)
+                    .foregroundColor(.red.opacity(0.9))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, AppSpacing.md)
+            }
+
+            // Audio waveform visualization
+            if hasStartedPlaying {
+                interactiveWaveform
+                    .frame(height: 80)
+                    .padding(.horizontal, AppSpacing.xl)
+                    .padding(.top, AppSpacing.sm)
+            }
+
+            Spacer()
+
+            // Large circular "TAP TO INTERRUPT" button
+            interactiveMicButton
+
+            Spacer()
+
+            // Bottom playback controls
+            if hasStartedPlaying {
+                interactivePlaybackControls
+                    .padding(.bottom, AppSpacing.lg)
+            }
+
+            // Done button
+            Button {
+                disconnectAndDismiss()
+            } label: {
+                Text("memorize.done".localized)
+                    .font(AppTypography.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(AppCornerRadius.md)
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.bottom, AppSpacing.lg)
+        }
+        .background(AppColors.memorizeBackground.ignoresSafeArea())
+        .navigationTitle("memorize.podcast".localized)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    disconnectAndDismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .foregroundColor(.white)
+                }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showVoicePicker = true
+                } label: {
+                    Image(systemName: "person.crop.circle")
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+
+    // MARK: - Play Body (original dark theme)
+
+    private var playBody: some View {
+        VStack(spacing: AppSpacing.md) {
+            Spacer()
+
+            // Podcast artwork with soundwave bars
+            ZStack {
+                Circle()
+                    .fill(podcastAccent.opacity(0.1))
+                    .frame(width: 200, height: 200)
+
+                Circle()
+                    .fill(podcastAccent.opacity(0.18))
+                    .frame(width: 160, height: 160)
+
+                Circle()
+                    .fill(podcastAccent.opacity(0.25))
+                    .frame(width: 120, height: 120)
+
+                // Soundwave bars
+                HStack(spacing: 5) {
+                    ForEach(0..<5, id: \.self) { i in
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(podcastAccent)
+                            .frame(width: 6, height: barHeights[i])
+                            .animation(.easeInOut(duration: 0.3), value: barHeights[i])
+                    }
+                }
+            }
+
+            Text(bookTitle)
+                .font(AppTypography.title2)
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .padding(.horizontal, AppSpacing.lg)
+
+            if !sectionTitle.isEmpty {
+                Text(sectionTitle)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(AppColors.memorizeAccent)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+
+            Text("memorize.podcast_header".localized)
+                .font(AppTypography.subheadline)
+                .foregroundColor(Color.white.opacity(0.6))
+
+            // Loading indicator
+            if !hasStartedPlaying {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(0.8)
+                    Text(startupLoadingText)
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.6))
+                }
+                .padding(AppSpacing.md)
+            }
+
+            if let errorMessage, !errorMessage.isEmpty {
+                Text(errorMessage)
+                    .font(AppTypography.caption)
+                    .foregroundColor(.red.opacity(0.9))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, AppSpacing.md)
+            }
+
+            Spacer()
+
+            // Playback controls
+            if hasStartedPlaying {
+                podcastPlaybackControls
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.bottom, AppSpacing.xl)
+            }
+
+            // Done button
+            Button {
+                disconnectAndDismiss()
+            } label: {
+                Text("memorize.done".localized)
+                    .font(AppTypography.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(AppCornerRadius.md)
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.bottom, AppSpacing.lg)
+        }
+        .background(AppColors.memorizeBackground.ignoresSafeArea())
+        .navigationTitle("memorize.podcast".localized)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    disconnectAndDismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .foregroundColor(.white)
+                }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showVoicePicker = true
+                } label: {
+                    Image(systemName: "person.crop.circle")
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+
+    // MARK: - Interactive Waveform
+
+    private func waveformBarColor(at index: Int, of total: Int) -> Color {
+        let t = Double(index) / Double(total - 1)
+        // Coral (0.89, 0.36, 0.35) → Teal (0.18, 0.55, 0.53)
+        return Color(
+            red: 0.89 * (1.0 - t) + 0.18 * t,
+            green: 0.36 * (1.0 - t) + 0.55 * t,
+            blue: 0.35 * (1.0 - t) + 0.53 * t
+        )
+    }
+
+    private var interactiveWaveform: some View {
+        let totalBars = 25
+        return HStack(spacing: 2.5) {
+            ForEach(0..<totalBars, id: \.self) { i in
+                let barColor = waveformBarColor(at: i, of: totalBars)
+                // Height varies — taller in center, shorter at edges
+                let centerDistance = abs(CGFloat(i) - 12.0) / 12.0
+                let baseHeight: CGFloat = hasStartedPlaying && !isPaused ? (1.0 - centerDistance * 0.6) : 0.15
+                let randomFactor = barHeights[i % 5] / barMaxHeights[i % 5]
+                let height = max(6, baseHeight * randomFactor * 70)
+
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(barColor)
+                    .frame(width: 4, height: height)
+                    .animation(.easeInOut(duration: 0.3), value: barHeights[i % 5])
+            }
+        }
+    }
+
+    // MARK: - Interactive Mic Button
+
+    private var interactiveMicButton: some View {
+        Button {
+            guard isConnected, let service = geminiService else { return }
+            if listenerQuestionArmed && !isMuted {
+                // Already armed — mute
+                service.isMicMuted = true
+                service.activatePlaybackOnlyMode()
+                isRecording = false
+                isMuted = true
+                listenerQuestionArmed = false
+                pendingListenerTranscript = ""
+                listenerTranscriptTask?.cancel()
+            } else {
+                // Interrupt and arm mic — set isAnsweringListenerQuestion
+                // immediately so the onAudioDone from the interrupted
+                // podcast doesn't trigger the continuation path.
+                isAnsweringListenerQuestion = true
+                service.activateConversationMode(startRecordingIfNeeded: true)
+                service.interruptPlayback(expectServerInterruption: true)
+                service.sendSilentAudioToInterrupt()
+                rearmInteractivePodcastMic(service, activateConversation: false)
+            }
+        } label: {
+            ZStack {
+                // Outer glow rings
+                Circle()
+                    .fill(tealAccent.opacity(0.06))
+                    .frame(width: 200, height: 200)
+
+                Circle()
+                    .fill(tealAccent.opacity(0.10))
+                    .frame(width: 170, height: 170)
+
+                // Main circle
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [tealAccent.opacity(0.9), tealAccent.opacity(0.7)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: 140, height: 140)
+                    .shadow(color: tealAccent.opacity(0.4), radius: 16, y: 4)
+
+                // Ring
+                Circle()
+                    .stroke(tealAccent.opacity(0.5), lineWidth: 2)
+                    .frame(width: 142, height: 142)
+
+                // Icon + label
+                VStack(spacing: 8) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 28, weight: .medium))
+                        .foregroundColor(.white)
+
+                    Text(listenerQuestionArmed && !isMuted ? "LISTENING" : "TAP TO INTERRUPT")
+                        .font(.system(size: 11, weight: .bold))
+                        .tracking(1.2)
+                        .foregroundColor(.white.opacity(0.9))
+                }
+            }
+        }
+        .disabled(!isConnected || !hasStartedPlaying)
+        .opacity(!isConnected || !hasStartedPlaying ? 0.4 : 1.0)
+    }
+
+    // MARK: - Interactive Playback Controls
+
+    private var interactivePlaybackControls: some View {
+        Button { togglePodcastPlayPause() } label: {
+            Image(systemName: isPaused ? "play.circle.fill" : "pause.circle.fill")
+                .font(.system(size: 56, weight: .medium))
+                .foregroundColor(tealAccent)
         }
     }
 
@@ -3037,39 +3267,16 @@ struct MemorizePodcastPlayerView: View {
 
     // MARK: - Mic, Bars, Helpers
 
-    private var microphoneButton: some View {
-        Button {
-            guard isConnected, let service = geminiService else { return }
-            if isMuted {
-                // Unmute — let user speak/ask questions
-                service.activateConversationMode(startRecordingIfNeeded: true)
-                service.interruptPlayback(expectServerInterruption: true)
-                service.sendSilentAudioToInterrupt()
-                service.isMicMuted = false
-                isRecording = true
-                isMuted = false
-                listenerQuestionArmed = true
-            } else {
-                // Re-mute
-                service.isMicMuted = true
-                service.activatePlaybackOnlyMode()
-                isRecording = false
-                isMuted = true
-                listenerQuestionArmed = false
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: isMuted ? "mic.slash.fill" : "mic.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                Text(isMuted ? "memorize.podcast_unmute".localized : "memorize.podcast_mute".localized)
-                    .font(AppTypography.subheadline)
-            }
-            .foregroundColor(.white)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            .background(isMuted ? Color.white.opacity(0.15) : podcastAccent.opacity(0.5))
-            .cornerRadius(AppCornerRadius.md)
+    private func rearmInteractivePodcastMic(_ service: GeminiLiveService, activateConversation: Bool = true) {
+        guard mode == .interactive else { return }
+        if activateConversation {
+            service.activateConversationMode(startRecordingIfNeeded: true)
         }
+        service.isMicMuted = false
+        isRecording = true
+        isMuted = false
+        listenerQuestionArmed = true
+        lastMicRearmTime = Date()
     }
 
     private func startBarTimer() {
@@ -3175,9 +3382,9 @@ struct MemorizePodcastPlayerView: View {
     private func setupAndConnect() {
         let sourceContext = buildMemorizeLiveSourceContext(
             from: completedPages,
-            maxPages: 10,
-            maxCharsPerPage: 520,
-            maxTotalChars: 7200
+            maxPages: 20,
+            maxCharsPerPage: 8000,
+            maxTotalChars: 60000
         )
 
         if sourceContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -3195,14 +3402,12 @@ struct MemorizePodcastPlayerView: View {
         var continuationCount = 0
         let maxContinuations = max(1, targetMinutes / 2)  // ~2 min per response from Gemini
 
+        // Keep system prompt lean — source text goes in the launch prompt
+        // to avoid Gemini Live API system instruction size limits.
         let systemPrompt = """
         You are the host of an engaging educational podcast called "Deep Dive". You have a warm, enthusiastic personality.
 
-        Your task: Create a compelling podcast episode discussing the following reading material from "\(bookTitle)"\(sectionTitle.isEmpty ? "" : " — section: \(sectionTitle)").
-
-        ---
-        \(sourceContext)
-        ---
+        Your task: Create a compelling podcast episode discussing reading material that will be provided to you.
 
         Guidelines for your podcast:
         1. Start with a brief, energetic intro: "Welcome to Deep Dive! Today we're exploring..."
@@ -3214,15 +3419,15 @@ struct MemorizePodcastPlayerView: View {
         7. End with a brief wrap-up summarizing the main takeaways
 
         Speak naturally as if recording a real podcast episode. Be enthusiastic but not over the top.
-        The episode should be about \(targetMinutes) minutes long. Cover the material thoroughly.
         Do NOT mention that you are an AI. Speak as a human podcast host would.
         \(mode == .interactive ? """
 
         INTERACTIVE MODE RULES:
         - If the listener interrupts with a spoken question, immediately pause the podcast and answer the listener directly.
-        - Answer the question first in a concise, natural way.
-        - Do NOT continue the podcast automatically after answering a listener question.
-        - Only resume the podcast if the listener explicitly asks you to continue or resume.
+        - ALWAYS base your answer on the reading material. Search through the ENTIRE text to find the relevant information.
+        - If the listener asks about a specific item (e.g. "what is step 5", "the third mistake"), find and cite that exact content from the text.
+        - Answer in a concise, natural way.
+        - After answering, immediately resume the podcast from where you left off. Do not ask if the listener wants to continue — just smoothly transition back.
         """ : "")
         """
 
@@ -3240,14 +3445,32 @@ struct MemorizePodcastPlayerView: View {
         service.onConnected = { [service] in
             Task { @MainActor in
                 isConnected = true
-                let micMuted = true
+                // Start in playback-only for the launch prompt audio.
+                // For interactive mode the mic button shows "TAP TO INTERRUPT"
+                // from the start — it will fully arm once the user taps.
                 service.activatePlaybackOnlyMode()
-                service.isMicMuted = micMuted
+                service.isMicMuted = true
                 isRecording = false
-                isMuted = micMuted
+                isMuted = mode != .interactive
                 listenerQuestionArmed = false
                 isAnsweringListenerQuestion = false
+                pendingListenerTranscript = ""
+                listenerTranscriptTask?.cancel()
+                questionAnsweredAt = nil
                 try? await Task.sleep(nanoseconds: 300_000_000)
+                // Send the full source text as a regular message (not system prompt)
+                // to avoid Gemini Live API system instruction size limits.
+                service.sendTextInput("""
+                Here is the reading material from "\(bookTitle)"\(sectionTitle.isEmpty ? "" : " — section: \(sectionTitle)"):
+
+                ---
+                \(sourceContext)
+                ---
+
+                Memorize this entire text. You will need to reference ALL of it — including specific numbered items — when the listener asks questions.
+                The episode should be about \(targetMinutes) minutes long.
+                """)
+                try? await Task.sleep(nanoseconds: 500_000_000)
                 let launchPrompt = pendingPodcastLaunchPrompt ?? podcastLaunchPrompt()
                 pendingPodcastLaunchPrompt = nil
                 service.sendTextInput(launchPrompt)
@@ -3260,43 +3483,91 @@ struct MemorizePodcastPlayerView: View {
                 guard !trimmed.isEmpty else { return }
                 guard mode == .interactive, listenerQuestionArmed else { return }
 
-                let normalized = trimmed.lowercased()
-                let isResumeRequest =
-                    normalized == "continue"
-                    || normalized == "resume"
-                    || normalized.contains("continue the podcast")
-                    || normalized.contains("resume the podcast")
-                    || normalized.contains("keep going")
+                // Ignore transcripts that arrive shortly after a mic rearm —
+                // these are echo from the AI's own speech being picked up.
+                if let rearm = lastMicRearmTime, Date().timeIntervalSince(rearm) < 1.5 {
+                    print("🎙️ [Podcast] Ignoring likely echo transcript: \(trimmed)")
+                    return
+                }
 
-                service.isMicMuted = true
-                service.activatePlaybackOnlyMode()
-                isRecording = false
-                isMuted = true
-                listenerQuestionArmed = false
-                isAnsweringListenerQuestion = !isResumeRequest
+                // On the very first fragment, interrupt any in-progress AI
+                // audio and switch to playback-only so Gemini doesn't
+                // auto-respond to partial audio while we collect the full
+                // utterance.
+                // On first fragment: interrupt the podcast audio but keep
+                // the mic OPEN so Gemini hears the full question.
+                // The mic will be muted when the debounce fires.
+                if pendingListenerTranscript.isEmpty {
+                    service.interruptPlayback(expectServerInterruption: true)
+                    service.sendSilentAudioToInterrupt()
+                    isMuted = true
+                    isAnsweringListenerQuestion = true
+                }
 
-                if isResumeRequest {
-                    print("🎙️ [Podcast] Listener requested resume")
-                    service.sendTextInput(
-                        """
-                        Resume the podcast now from exactly where you left off before the listener interruption.
-                        Do not restart the episode or repeat the introduction.
-                        Continue naturally with the next idea from the reading.
-                        """
-                    )
-                } else {
-                    print("🎙️ [Podcast] Listener question captured: \(trimmed)")
-                    service.sendTextInput(
-                        """
-                        The listener interrupted the podcast with this question:
-                        "\(trimmed)"
+                // Accumulate streaming transcript fragments and debounce
+                // so the full utterance is captured before acting.
+                let needsSpace = !pendingListenerTranscript.isEmpty
+                    && !pendingListenerTranscript.hasSuffix(" ")
+                    && !trimmed.hasPrefix(" ")
+                pendingListenerTranscript += (needsSpace ? " " : "") + trimmed
 
-                        Pause the podcast and answer the listener directly in a concise, natural way.
-                        Base your answer on the reading material when possible.
-                        Do not continue the podcast after answering.
-                        Wait for the listener to explicitly ask you to continue or resume.
-                        """
-                    )
+                // Debounce: after 1.5s of silence, interrupt Gemini's
+                // voice-triggered response and re-send as a text prompt
+                // so the AI properly searches the full reading material.
+                listenerTranscriptTask?.cancel()
+                listenerTranscriptTask = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    guard !Task.isCancelled else { return }
+
+                    let fullQuestion = pendingListenerTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+                    pendingListenerTranscript = ""
+                    listenerQuestionArmed = false
+                    guard !fullQuestion.isEmpty else { return }
+
+                    // Now mute the mic and interrupt Gemini's voice response
+                    service.isMicMuted = true
+                    service.activatePlaybackOnlyMode()
+                    isRecording = false
+                    service.interruptPlayback(expectServerInterruption: true)
+                    service.sendSilentAudioToInterrupt()
+                    // Re-set the flag so the text prompt's onAudioDone
+                    // is handled correctly (the interrupted voice response
+                    // may have already consumed the first flag).
+                    isAnsweringListenerQuestion = true
+                    questionAnsweredAt = nil
+
+                    let normalized = fullQuestion.lowercased()
+                    let isResumeRequest =
+                        normalized == "continue"
+                        || normalized == "resume"
+                        || normalized.contains("continue the podcast")
+                        || normalized.contains("resume the podcast")
+                        || normalized.contains("keep going")
+
+                    if isResumeRequest {
+                        isAnsweringListenerQuestion = false
+                        print("🎙️ [Podcast] Listener requested resume")
+                        service.sendTextInput(
+                            """
+                            Resume the podcast now from exactly where you left off before the listener interruption.
+                            Do not restart the episode or repeat the introduction.
+                            Continue naturally with the next idea from the reading.
+                            """
+                        )
+                    } else {
+                        print("🎙️ [Podcast] Listener question: \(fullQuestion)")
+                        service.sendTextInput(
+                            """
+                            The listener asked: "\(fullQuestion)"
+
+                            IMPORTANT: Search through the ENTIRE reading material to find the answer.
+                            If the question asks about a numbered item (step, mistake, point, etc.), locate that exact item in the text and quote or paraphrase it.
+                            Answer directly and concisely based on the reading material.
+                            Do not say the information is not available if it exists in the text.
+                            After answering, immediately resume the podcast from exactly where you left off before the interruption. Transition smoothly back.
+                            """
+                        )
+                    }
                 }
             }
         }
@@ -3368,9 +3639,23 @@ struct MemorizePodcastPlayerView: View {
 
         service.onAudioDone = { [service] in
             Task { @MainActor in
+                // After answering a listener question, the AI auto-resumes
+                // the podcast. Clear the flag and fall through to the
+                // normal continuation path.
                 if mode == .interactive && isAnsweringListenerQuestion {
-                    print("🎙️ [Podcast] Finished answering listener question — holding before resume")
+                    print("🎙️ [Podcast] Finished answering + auto-resume segment")
                     isAnsweringListenerQuestion = false
+                    questionAnsweredAt = Date()
+                    // Fall through to continuation below
+                }
+
+                // Grace period: Gemini may fire a second turnComplete
+                // (one for the voice-input response, one for the text prompt).
+                // Absorb it so it doesn't trigger the continuation path.
+                if mode == .interactive, let answered = questionAnsweredAt,
+                   Date().timeIntervalSince(answered) < 3.0 {
+                    print("🎙️ [Podcast] Ignoring duplicate turnComplete within question grace period")
+                    questionAnsweredAt = nil
                     return
                 }
 
