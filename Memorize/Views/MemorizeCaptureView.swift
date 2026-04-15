@@ -4142,9 +4142,11 @@ struct MemorizeExplainView: View {
     @State private var isMuted = false
     @State private var loadingPulse = false
     @State private var hasDeliveredOpeningExplanation = false
+    @State private var userQuestionMuteTask: Task<Void, Never>?
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
     @State private var showVoicePicker = false
     private let explainAccent = Color(red: 0.94, green: 0.55, blue: 0.24)
+    private let questionEndMuteDelayNanoseconds: UInt64 = 450_000_000
 
     private var isStartingSummary: Bool {
         isConnected &&
@@ -4294,6 +4296,7 @@ struct MemorizeExplainView: View {
     }
 
     private func disconnectAndDismiss() {
+        userQuestionMuteTask?.cancel()
         geminiService?.disconnect()
         geminiService = nil
         dismiss()
@@ -4310,6 +4313,7 @@ struct MemorizeExplainView: View {
         currentUserText = ""
         isAIThinking = false
         hasDeliveredOpeningExplanation = false
+        userQuestionMuteTask?.cancel()
         errorMessage = nil
         setupAndConnect(summaryText: summaryText)
     }
@@ -4400,11 +4404,26 @@ struct MemorizeExplainView: View {
                 guard !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                 currentUserText += userText
                 isAIThinking = true
+
+                guard hasDeliveredOpeningExplanation, !isMuted else { return }
+
+                userQuestionMuteTask?.cancel()
+                userQuestionMuteTask = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: questionEndMuteDelayNanoseconds)
+                    guard !Task.isCancelled else { return }
+                    guard hasDeliveredOpeningExplanation, !isMuted else { return }
+                    guard !currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                    service.isMicMuted = true
+                    service.stopRecording()
+                    isRecording = false
+                    isMuted = true
+                }
             }
         }
 
         service.onTranscriptDelta = { (delta: String) in
             Task { @MainActor in
+                userQuestionMuteTask?.cancel()
                 let cleaned = delta.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !cleaned.isEmpty else { return }
                 if !currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -4430,6 +4449,7 @@ struct MemorizeExplainView: View {
 
         service.onTranscriptDone = { (fullText: String) in
             Task { @MainActor in
+                userQuestionMuteTask?.cancel()
                 let trimmed = (fullText.isEmpty ? currentAIText : fullText)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
@@ -4437,7 +4457,9 @@ struct MemorizeExplainView: View {
                     if !hasDeliveredOpeningExplanation {
                         hasDeliveredOpeningExplanation = true
                         try? await Task.sleep(nanoseconds: 250_000_000)
+                        service.activateConversationMode(startRecordingIfNeeded: true)
                         service.isMicMuted = false
+                        isRecording = true
                         isMuted = false
                     }
                 }
@@ -4454,7 +4476,9 @@ struct MemorizeExplainView: View {
 
         service.onSpeechStarted = {
             Task { @MainActor in
-                service.isMicMuted = true
+                if !hasDeliveredOpeningExplanation || isMuted {
+                    service.isMicMuted = true
+                }
             }
         }
 
@@ -4462,8 +4486,12 @@ struct MemorizeExplainView: View {
             Task { @MainActor in
                 guard hasDeliveredOpeningExplanation else { return }
                 try? await Task.sleep(nanoseconds: 250_000_000)
-                service.isMicMuted = false
-                isMuted = false
+                if !isMuted {
+                    service.activateConversationMode(startRecordingIfNeeded: true)
+                    service.isMicMuted = false
+                    isRecording = true
+                    isMuted = false
+                }
             }
         }
 
@@ -4650,15 +4678,21 @@ struct MemorizeExplainView: View {
             guard isConnected, let service = geminiService else { return }
             if isMuted {
                 // Unmute acts as a hard "stop and listen" command.
+                userQuestionMuteTask?.cancel()
                 currentAIText = ""
                 isAIThinking = false
                 service.interruptPlayback(expectServerInterruption: true)
                 service.sendSilentAudioToInterrupt()
+                service.activateConversationMode(startRecordingIfNeeded: true)
                 service.isMicMuted = false
+                isRecording = true
                 isMuted = false
             } else {
                 // Mute — stop sending audio to Gemini
+                userQuestionMuteTask?.cancel()
                 service.isMicMuted = true
+                service.stopRecording()
+                isRecording = false
                 isMuted = true
             }
         } label: {
@@ -5145,10 +5179,12 @@ struct MemorizeInteractView: View {
     @State private var isAIThinking = false
     @State private var errorMessage: String?
     @State private var isMuted = true
+    @State private var userQuestionMuteTask: Task<Void, Never>?
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
     @State private var showVoicePicker = false
 
     private let interactAccent = Color(red: 0.15, green: 0.72, blue: 0.52)
+    private let questionEndMuteDelayNanoseconds: UInt64 = 450_000_000
 
     private var isStartingConversation: Bool {
         isConnected &&
@@ -5242,6 +5278,7 @@ struct MemorizeInteractView: View {
     }
 
     private func disconnectAndDismiss() {
+        userQuestionMuteTask?.cancel()
         geminiService?.disconnect()
         geminiService = nil
         dismiss()
@@ -5256,6 +5293,7 @@ struct MemorizeInteractView: View {
         currentAIText = ""
         currentUserText = ""
         isAIThinking = false
+        userQuestionMuteTask?.cancel()
         errorMessage = nil
         setupAndConnect()
     }
@@ -5339,11 +5377,27 @@ struct MemorizeInteractView: View {
                 guard !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                 currentUserText += userText
                 isAIThinking = true
+
+                let isSummaryMode = customSystemPrompt != nil
+                guard isSummaryMode, !isMuted else { return }
+
+                userQuestionMuteTask?.cancel()
+                userQuestionMuteTask = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: questionEndMuteDelayNanoseconds)
+                    guard !Task.isCancelled else { return }
+                    guard customSystemPrompt != nil, !isMuted else { return }
+                    guard !currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                    service.isMicMuted = true
+                    service.stopRecording()
+                    isRecording = false
+                    isMuted = true
+                }
             }
         }
 
         service.onTranscriptDelta = { (delta: String) in
             Task { @MainActor in
+                userQuestionMuteTask?.cancel()
                 let cleaned = delta.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !cleaned.isEmpty else { return }
                 // Finalize the user message when the AI starts responding
@@ -5373,6 +5427,7 @@ struct MemorizeInteractView: View {
 
         service.onTranscriptDone = { (fullText: String) in
             Task { @MainActor in
+                userQuestionMuteTask?.cancel()
                 let trimmed = (fullText.isEmpty ? currentAIText : fullText)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
@@ -5391,14 +5446,20 @@ struct MemorizeInteractView: View {
 
         service.onSpeechStarted = {
             Task { @MainActor in
-                service.isMicMuted = true
+                // Only auto-mute if the user hasn't manually unmuted
+                if isMuted {
+                    service.isMicMuted = true
+                }
             }
         }
 
         service.onSpeechStopped = {
             Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                service.isMicMuted = false
+                // Only auto-unmute if the user hasn't manually unmuted
+                if isMuted {
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    service.isMicMuted = false
+                }
             }
         }
 
@@ -5541,14 +5602,20 @@ struct MemorizeInteractView: View {
         Button {
             guard isConnected, let service = geminiService else { return }
             if isMuted {
+                userQuestionMuteTask?.cancel()
                 currentAIText = ""
                 isAIThinking = false
                 service.interruptPlayback(expectServerInterruption: true)
                 service.sendSilentAudioToInterrupt()
+                service.activateConversationMode(startRecordingIfNeeded: true)
                 service.isMicMuted = false
+                isRecording = true
                 isMuted = false
             } else {
+                userQuestionMuteTask?.cancel()
                 service.isMicMuted = true
+                service.stopRecording()
+                isRecording = false
                 isMuted = true
             }
         } label: {
