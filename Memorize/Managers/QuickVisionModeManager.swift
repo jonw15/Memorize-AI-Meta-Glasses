@@ -6,7 +6,8 @@
 import Foundation
 import SwiftUI
 
-class QuickVisionModeManager: ObservableObject {
+@MainActor
+final class QuickVisionModeManager: ObservableObject {
     static let shared = QuickVisionModeManager()
 
     private let userDefaults = UserDefaults.standard
@@ -34,7 +35,7 @@ class QuickVisionModeManager: ObservableObject {
     }
 
     // Supported translation target languages
-    static let supportedLanguages: [(code: String, name: String)] = [
+    nonisolated static let supportedLanguages: [(code: String, name: String)] = [
         ("en-US", "English"),
         ("zh-CN", "Chinese"),
         ("ja-JP", "日本語"),
@@ -116,11 +117,22 @@ class QuickVisionModeManager: ObservableObject {
 
     // MARK: - Static Access (for non-SwiftUI contexts)
 
-    static var staticCurrentMode: QuickVisionMode {
-        return shared.currentMode
+    nonisolated static var staticCurrentMode: QuickVisionMode {
+        let savedMode = UserDefaults.standard.string(forKey: "quickVisionMode") ?? QuickVisionMode.standard.rawValue
+        return QuickVisionMode(rawValue: savedMode) ?? .standard
     }
 
-    static var staticPrompt: String {
-        return shared.getPrompt()
+    nonisolated static var staticPrompt: String {
+        switch staticCurrentMode {
+        case .custom:
+            return UserDefaults.standard.string(forKey: "quickVisionCustomPrompt") ?? "quickvision.custom.default".localized
+        case .translate:
+            let languageCode = UserDefaults.standard.string(forKey: "quickVisionTranslateTargetLanguage") ?? "en-US"
+            let languageName = supportedLanguages.first { $0.code == languageCode }?.name ?? "English"
+            let basePrompt = "prompt.quickvision.translate".localized
+            return basePrompt.replacingOccurrences(of: "{LANGUAGE}", with: languageName)
+        default:
+            return staticCurrentMode.prompt
+        }
     }
 }

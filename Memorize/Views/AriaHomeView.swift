@@ -248,7 +248,7 @@ struct FeatureCard: View {
                 )
             )
             .cornerRadius(AppCornerRadius.lg)
-            .shadow(color: AppShadow.medium(), radius: 10, x: 0, y: 5)
+            .shadow(color: AppShadow.medium, radius: 10, x: 0, y: 5)
         }
         .disabled(isPlaceholder)
         .buttonStyle(ScaleButtonStyle())
@@ -318,7 +318,7 @@ struct FeatureCardWide: View {
                 )
             )
             .cornerRadius(AppCornerRadius.lg)
-            .shadow(color: AppShadow.medium(), radius: 10, x: 0, y: 5)
+            .shadow(color: AppShadow.medium, radius: 10, x: 0, y: 5)
         }
         .buttonStyle(ScaleButtonStyle())
     }

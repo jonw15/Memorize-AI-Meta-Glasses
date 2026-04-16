@@ -7,7 +7,7 @@ import Foundation
 import PDFKit
 import UIKit
 
-class PDFImportService {
+final class PDFImportService: @unchecked Sendable {
 
     struct PDFImportResult {
         let title: String
@@ -16,7 +16,7 @@ class PDFImportService {
         let thumbnails: [(pageId: UUID, data: Data)]
     }
 
-    struct PDFImportProgress {
+    struct PDFImportProgress: Sendable {
         let currentPage: Int
         let totalPages: Int
     }
@@ -25,7 +25,7 @@ class PDFImportService {
 
     func importPDF(
         from url: URL,
-        progressHandler: @escaping (PDFImportProgress) -> Void
+        progressHandler: @escaping @Sendable (PDFImportProgress) -> Void
     ) async throws -> PDFImportResult {
         guard url.startAccessingSecurityScopedResource() else {
             throw PDFImportError.accessDenied

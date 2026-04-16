@@ -5,7 +5,8 @@
 
 import Foundation
 
-class QuickVisionStorage {
+@MainActor
+final class QuickVisionStorage {
     static let shared = QuickVisionStorage()
 
     private let userDefaults = UserDefaults.standard

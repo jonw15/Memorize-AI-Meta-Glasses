@@ -4782,14 +4782,14 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
     }
 
     // AVSpeechSynthesizerDelegate — enable buttons as soon as first word is spoken
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {
         Task { @MainActor in
             if !hasSpoken { hasSpoken = true }
         }
     }
 
     // Start listening after TTS finishes
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor in
             hasSpoken = true
             guard shouldListen, !hasTriggered else { return }

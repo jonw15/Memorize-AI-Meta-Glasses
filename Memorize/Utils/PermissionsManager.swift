@@ -8,7 +8,8 @@ import UIKit
 import AVFoundation
 import Photos
 
-class PermissionsManager: ObservableObject {
+@MainActor
+final class PermissionsManager: ObservableObject {
     static let shared = PermissionsManager()
 
     @Published var allPermissionsGranted = false

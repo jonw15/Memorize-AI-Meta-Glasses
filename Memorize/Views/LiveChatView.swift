@@ -197,7 +197,7 @@ struct LiveChatView: View {
                     .frame(width: 200, height: 200)
                     .background(Color.white)
                     .cornerRadius(AppCornerRadius.md)
-                    .shadow(color: AppShadow.medium(), radius: 10, x: 0, y: 5)
+                    .shadow(color: AppShadow.medium, radius: 10, x: 0, y: 5)
             }
 
             Text("livechat.scanning".localized)

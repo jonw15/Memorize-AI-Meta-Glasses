@@ -686,11 +686,6 @@ class MemorizeCaptureViewModel: ObservableObject {
         for task in processingProgressTasks.values {
             task.cancel()
         }
-        cancellables.removeAll()
-        let session = phoneCaptureSession
-        DispatchQueue.global(qos: .userInitiated).async {
-            if session.isRunning { session.stopRunning() }
-        }
     }
 }
 

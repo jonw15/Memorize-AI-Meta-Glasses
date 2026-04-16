@@ -14,7 +14,7 @@
 // without requiring physical Meta wearable devices.
 //
 
-#if DEBUG
+#if MOCK_DEVICE_ENABLED
 
 import SwiftUI
 

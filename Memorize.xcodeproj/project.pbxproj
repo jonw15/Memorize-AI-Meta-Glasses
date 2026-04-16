@@ -77,13 +77,13 @@
 		8FD96B8D2E6F0A9800F56AB1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8FD96B772E6F0A9800F56AB1 /* Assets.xcassets */; };
 		8FD96B952E6F0F7D00F56AB1 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8FD96B942E6F0F7D00F56AB1 /* MWDATCore */; };
 		8FD96B952E6F0F7D00F56AB2 /* MWDATCamera in Frameworks */ = {isa = PBXBuildFile; productRef = 8FD96B942E6F0F7D00F56AB2 /* MWDATCamera */; };
-		8FD96B952E6F0F7D00F56AB3 /* MWDATMockDevice in Frameworks */ = {isa = PBXBuildFile; productRef = 8FD96B942E6F0F7D00F56AB3 /* MWDATMockDevice */; };
+
 		A5C50340AFD334B459151AF1 /* QuickVisionIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 568E19B82D2116C7FE3B1829 /* QuickVisionIntent.swift */; };
 		B3F7AF9C18583263BE4D96A1 /* LanguageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0080AFEB87FC4CF85E53FE97 /* LanguageManager.swift */; };
 		BS0001000100010001 /* BookSectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BS1001000100010001 /* BookSectionsView.swift */; };
 		D83E4BD577765733E71A0068 /* QuickVisionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B037E0156E90DE2314A9F47 /* QuickVisionView.swift */; };
 		E699CCA12E8150670052C240 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = E699CCA42E8150670052C240 /* MWDATCore */; };
-		E699CCA22E8150670052C240 /* MWDATMockDevice in Frameworks */ = {isa = PBXBuildFile; productRef = E699CCA52E8150670052C240 /* MWDATMockDevice */; };
+
 		LA0001000100010001 /* AIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA1001000100010001 /* AIConfig.swift */; };
 		LA0002000200020002 /* AIConfigService.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA1002000200020002 /* AIConfigService.swift */; };
 		LC0001000100010001 /* LiveChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LC1001000100010001 /* LiveChatView.swift */; };
@@ -249,7 +249,7 @@
 			files = (
 				8FD96B952E6F0F7D00F56AB1 /* MWDATCore in Frameworks */,
 				8FD96B952E6F0F7D00F56AB2 /* MWDATCamera in Frameworks */,
-				8FD96B952E6F0F7D00F56AB3 /* MWDATMockDevice in Frameworks */,
+
 				4B69CCCA2F050E0000D1D025 /* HaishinKit in Frameworks */,
 				4B69CCCC2F050E0000D1D025 /* RTMPHaishinKit in Frameworks */,
 			);
@@ -260,7 +260,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E699CCA12E8150670052C240 /* MWDATCore in Frameworks */,
-				E699CCA22E8150670052C240 /* MWDATMockDevice in Frameworks */,
+
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -542,7 +542,7 @@
 			name = MemorizeTests;
 			packageProductDependencies = (
 				E699CCA42E8150670052C240 /* MWDATCore */,
-				E699CCA52E8150670052C240 /* MWDATMockDevice */,
+
 			);
 			productName = MemorizeTests;
 			productReference = E699CC952E8150670052C240 /* MemorizeTests.xctest */;
@@ -779,7 +779,8 @@
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
@@ -813,7 +814,8 @@
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
@@ -843,7 +845,8 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Memorize.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Memorize";
 			};
@@ -873,7 +876,8 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Memorize.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Memorize";
 			};
@@ -1042,7 +1046,7 @@
 			repositoryURL = "https://github.com/facebook/meta-wearables-dat-ios";
 			requirement = {
 				kind = exactVersion;
-				version = 0.3.0;
+				version = 0.4.0;
 			};
 		};
 		E47E9C962F2D4CA600BCAD53 /* XCRemoteSwiftPackageReference "arcore-ios-sdk" */ = {
@@ -1076,21 +1080,13 @@
 			package = 95F7F3332DEF0D91006D1C1A /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
 			productName = MWDATCamera;
 		};
-		8FD96B942E6F0F7D00F56AB3 /* MWDATMockDevice */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 95F7F3332DEF0D91006D1C1A /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
-			productName = MWDATMockDevice;
-		};
+
 		E699CCA42E8150670052C240 /* MWDATCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 95F7F3332DEF0D91006D1C1A /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
 			productName = MWDATCore;
 		};
-		E699CCA52E8150670052C240 /* MWDATMockDevice */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 95F7F3332DEF0D91006D1C1A /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
-			productName = MWDATMockDevice;
-		};
+
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = CCCCCCCCCCCCCCCCCCCCCC /* Project object */;

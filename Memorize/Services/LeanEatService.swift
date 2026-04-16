@@ -6,7 +6,7 @@
 import Foundation
 import UIKit
 
-class LeanEatService {
+final class LeanEatService: @unchecked Sendable {
     private let apiKey: String
     private let baseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
     private let model = "gemini-3-flash-preview"

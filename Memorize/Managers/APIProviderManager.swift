@@ -157,8 +157,8 @@ class APIProviderManager: ObservableObject {
 
     // MARK: - AI Configuration (fetched from server)
 
-    private static let defaultLiveAIWebSocketURL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
-    private static let defaultLiveAIModel = "gemini-2.5-flash-native-audio-preview-12-2025"
+    private nonisolated static let defaultLiveAIWebSocketURL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+    private nonisolated static let defaultLiveAIModel = "gemini-2.5-flash-native-audio-preview-12-2025"
 
     // Fetched config from server (set by AIConfigService)
     private(set) var fetchedAPIKey: String?

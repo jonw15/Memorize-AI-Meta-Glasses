@@ -1394,6 +1394,7 @@ private struct YouTubeCardWebPreview: UIViewRepresentable {
 
 /// Spawns WebKit sub-processes (GPU, WebContent, Networking) once so the first
 /// real WKWebView load is instant instead of waiting ~3 seconds.
+@MainActor
 private final class WKWebViewWarmer {
     static let shared = WKWebViewWarmer()
     private var warmerView: WKWebView?

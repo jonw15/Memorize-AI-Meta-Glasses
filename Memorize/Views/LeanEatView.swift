@@ -66,7 +66,7 @@ struct LeanEatView: View {
             .aspectRatio(contentMode: .fit)
             .frame(maxHeight: 250)
             .cornerRadius(AppCornerRadius.lg)
-            .shadow(color: AppShadow.medium(), radius: 8, x: 0, y: 4)
+            .shadow(color: AppShadow.medium, radius: 8, x: 0, y: 4)
     }
 
     // MARK: - Analyzing View
@@ -236,7 +236,7 @@ struct LeanEatView: View {
         .padding()
         .background(AppColors.tertiaryBackground)
         .cornerRadius(AppCornerRadius.xl)
-        .shadow(color: AppShadow.small(), radius: 4, x: 0, y: 2)
+        .shadow(color: AppShadow.small, radius: 4, x: 0, y: 2)
     }
 
     // MARK: - Total Nutrition Card
@@ -283,7 +283,7 @@ struct LeanEatView: View {
         .padding()
         .background(AppColors.tertiaryBackground)
         .cornerRadius(AppCornerRadius.xl)
-        .shadow(color: AppShadow.small(), radius: 4, x: 0, y: 2)
+        .shadow(color: AppShadow.small, radius: 4, x: 0, y: 2)
     }
 
     private func nutritionItem(icon: String, title: String, value: String, color: Color) -> some View {
@@ -366,7 +366,7 @@ struct LeanEatView: View {
         .padding()
         .background(AppColors.tertiaryBackground)
         .cornerRadius(AppCornerRadius.lg)
-        .shadow(color: AppShadow.small(), radius: 4, x: 0, y: 2)
+        .shadow(color: AppShadow.small, radius: 4, x: 0, y: 2)
     }
 
     private func miniNutritionItem(icon: String, value: String, unit: String, color: Color) -> some View {

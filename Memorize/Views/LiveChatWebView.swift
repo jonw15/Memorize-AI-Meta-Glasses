@@ -147,6 +147,16 @@ struct WebRTCWebView: UIViewRepresentable {
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
+    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        coordinator.frameTimer?.invalidate()
+        coordinator.frameTimer = nil
+        if let observer = coordinator.routeChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            coordinator.routeChangeObserver = nil
+        }
+        coordinator.webView = nil
+    }
+
     // MARK: - JavaScript Override
 
     /// Overrides navigator.mediaDevices.getUserMedia so that:
@@ -277,13 +287,6 @@ struct WebRTCWebView: UIViewRepresentable {
                 queue: .main
             ) { [weak self] _ in
                 self?.selectBluetoothRoute()
-            }
-        }
-
-        deinit {
-            frameTimer?.invalidate()
-            if let observer = routeChangeObserver {
-                NotificationCenter.default.removeObserver(observer)
             }
         }
 

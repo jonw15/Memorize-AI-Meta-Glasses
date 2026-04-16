@@ -9,7 +9,7 @@ import AVFoundation
 
 // MARK: - Service Class
 
-class LiveTranslateService: NSObject {
+final class LiveTranslateService: NSObject, @unchecked Sendable {
 
     // WebSocket
     private var webSocket: URLSessionWebSocketTask?

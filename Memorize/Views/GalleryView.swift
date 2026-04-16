@@ -100,7 +100,7 @@ struct PhotoGridItem: View {
                     RoundedRectangle(cornerRadius: AppCornerRadius.md)
                         .stroke(AppColors.textTertiary.opacity(0.1), lineWidth: 1)
                 )
-                .shadow(color: AppShadow.small(), radius: 4, x: 0, y: 2)
+                .shadow(color: AppShadow.small, radius: 4, x: 0, y: 2)
         }
         .aspectRatio(1, contentMode: .fit)
     }

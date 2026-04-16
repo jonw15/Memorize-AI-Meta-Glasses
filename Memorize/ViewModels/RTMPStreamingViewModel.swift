@@ -125,10 +125,6 @@ class RTMPStreamingViewModel: ObservableObject {
         logger.info("RTMPStreamingViewModel initialized")
     }
 
-    deinit {
-        statsTimer?.invalidate()
-    }
-
     // MARK: - Public Methods
 
     func setStreamViewModel(_ viewModel: StreamSessionViewModel) {

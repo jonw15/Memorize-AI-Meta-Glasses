@@ -15,7 +15,7 @@
 // comprehensive testing of streaming, photo capture, and error handling workflows.
 //
 
-#if DEBUG
+#if MOCK_DEVICE_ENABLED
 
 import MWDATMockDevice
 import SwiftUI

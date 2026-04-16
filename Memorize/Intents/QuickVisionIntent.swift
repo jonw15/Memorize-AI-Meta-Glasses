@@ -20,9 +20,9 @@ import SwiftUI
 
 @available(iOS 16.0, *)
 struct QuickVisionIntent: AppIntent {
-    static var title: LocalizedStringResource = "Quick Vision"
-    static var description = IntentDescription("Take a photo with Ray-Ban Meta glasses and recognize image content")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Quick Vision"
+    static let description = IntentDescription("Take a photo with Ray-Ban Meta glasses and recognize image content")
+    static let openAppWhenRun = false
 
     @Parameter(title: "Custom Prompt")
     var customPrompt: String?
@@ -39,9 +39,9 @@ struct QuickVisionIntent: AppIntent {
 
 @available(iOS 16.0, *)
 struct QuickVisionHealthIntent: AppIntent {
-    static var title: LocalizedStringResource = "Health Vision"
-    static var description = IntentDescription("Analyze the healthiness of food/beverages")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Health Vision"
+    static let description = IntentDescription("Analyze the healthiness of food/beverages")
+    static let openAppWhenRun = false
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
@@ -55,9 +55,9 @@ struct QuickVisionHealthIntent: AppIntent {
 
 @available(iOS 16.0, *)
 struct QuickVisionBlindIntent: AppIntent {
-    static var title: LocalizedStringResource = "Describe Environment"
-    static var description = IntentDescription("Describe the surrounding environment in detail for visually impaired users")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Describe Environment"
+    static let description = IntentDescription("Describe the surrounding environment in detail for visually impaired users")
+    static let openAppWhenRun = false
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
@@ -71,9 +71,9 @@ struct QuickVisionBlindIntent: AppIntent {
 
 @available(iOS 16.0, *)
 struct QuickVisionReadingIntent: AppIntent {
-    static var title: LocalizedStringResource = "Read Text"
-    static var description = IntentDescription("Recognize and read aloud text in images")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Read Text"
+    static let description = IntentDescription("Recognize and read aloud text in images")
+    static let openAppWhenRun = false
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
@@ -87,9 +87,9 @@ struct QuickVisionReadingIntent: AppIntent {
 
 @available(iOS 16.0, *)
 struct QuickVisionTranslateIntent: AppIntent {
-    static var title: LocalizedStringResource = "Translate Text"
-    static var description = IntentDescription("Recognize and translate foreign text in images")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Translate Text"
+    static let description = IntentDescription("Recognize and translate foreign text in images")
+    static let openAppWhenRun = false
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
@@ -103,9 +103,9 @@ struct QuickVisionTranslateIntent: AppIntent {
 
 @available(iOS 16.0, *)
 struct QuickVisionEncyclopediaIntent: AppIntent {
-    static var title: LocalizedStringResource = "Encyclopedia"
-    static var description = IntentDescription("Recognize objects and provide encyclopedia knowledge")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Encyclopedia"
+    static let description = IntentDescription("Recognize objects and provide encyclopedia knowledge")
+    static let openAppWhenRun = false
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {

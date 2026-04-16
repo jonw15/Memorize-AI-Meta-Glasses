@@ -6,7 +6,8 @@
 import Foundation
 import SwiftUI
 
-class LiveAIModeManager: ObservableObject {
+@MainActor
+final class LiveAIModeManager: ObservableObject {
     static let shared = LiveAIModeManager()
 
     private let userDefaults = UserDefaults.standard
@@ -34,7 +35,7 @@ class LiveAIModeManager: ObservableObject {
     }
 
     // Supported translation target languages
-    static let supportedLanguages: [(code: String, name: String)] = [
+    nonisolated static let supportedLanguages: [(code: String, name: String)] = [
         ("en-US", "English"),
         ("zh-CN", "Chinese"),
         ("ja-JP", "日本語"),
@@ -116,16 +117,27 @@ class LiveAIModeManager: ObservableObject {
 
     // MARK: - Static Access (for non-SwiftUI contexts)
 
-    static var staticCurrentMode: LiveAIMode {
-        return shared.currentMode
+    nonisolated static var staticCurrentMode: LiveAIMode {
+        let savedMode = UserDefaults.standard.string(forKey: "liveAIMode") ?? LiveAIMode.standard.rawValue
+        return LiveAIMode(rawValue: savedMode) ?? .standard
     }
 
-    static var staticSystemPrompt: String {
-        return shared.getSystemPrompt()
+    nonisolated static var staticSystemPrompt: String {
+        switch staticCurrentMode {
+        case .custom:
+            return UserDefaults.standard.string(forKey: "liveAICustomPrompt") ?? "liveai.custom.default".localized
+        case .translate:
+            let languageCode = UserDefaults.standard.string(forKey: "liveAITranslateTargetLanguage") ?? "en-US"
+            let languageName = supportedLanguages.first { $0.code == languageCode }?.name ?? "English"
+            let basePrompt = "prompt.liveai.translate".localized
+            return basePrompt.replacingOccurrences(of: "{LANGUAGE}", with: languageName)
+        default:
+            return staticCurrentMode.systemPrompt
+        }
     }
 
     /// Whether to automatically send an image when speech is triggered
-    static var staticAutoSendImageOnSpeech: Bool {
-        return shared.currentMode.autoSendImageOnSpeech
+    nonisolated static var staticAutoSendImageOnSpeech: Bool {
+        return staticCurrentMode.autoSendImageOnSpeech
     }
 }

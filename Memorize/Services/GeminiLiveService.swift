@@ -10,7 +10,7 @@ import AVFoundation
 
 // MARK: - Gemini Live Service
 
-class GeminiLiveService: NSObject {
+final class GeminiLiveService: NSObject, @unchecked Sendable {
     struct MultipleStepInstructionsPayload {
         let problem: String
         let brand: String
@@ -316,7 +316,7 @@ class GeminiLiveService: NSObject {
                     let key = APIProviderManager.staticLiveAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !key.isEmpty {
                         print("✅ [Gemini] API key became available after \(waited)s, connecting")
-                        DispatchQueue.main.async { self?.connect() }
+                        self?.connect()
                         return
                     }
                 }
@@ -325,7 +325,7 @@ class GeminiLiveService: NSObject {
                 print("⏳ [Gemini] API key still missing after 10s, re-fetching config...")
                 try? await AIConfigService.fetchConfig()
                 if Task.isCancelled { return }
-                DispatchQueue.main.async { self?.connect() }
+                self?.connect()
             }
             return
         }
@@ -456,12 +456,10 @@ Do not apologize.
             switch audioSession.recordPermission {
             case .undetermined:
                 audioSession.requestRecordPermission { [weak self] granted in
-                    DispatchQueue.main.async {
-                        if granted {
-                            self?.startRecording()
-                        } else {
-                            self?.onError?("Microphone permission denied")
-                        }
+                    if granted {
+                        self?.startRecording()
+                    } else {
+                        self?.onError?("Microphone permission denied")
                     }
                 }
                 return

@@ -15,7 +15,7 @@
 // Useful for testing without requiring physical Meta hardware.
 //
 
-#if DEBUG
+#if MOCK_DEVICE_ENABLED
 
 import SwiftUI
 

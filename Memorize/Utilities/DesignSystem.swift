@@ -91,15 +91,7 @@ struct AppCornerRadius {
 // MARK: - Shadows
 
 struct AppShadow {
-    static let small = {
-        return Color.black.opacity(0.05)
-    }
-
-    static let medium = {
-        return Color.black.opacity(0.1)
-    }
-
-    static let large = {
-        return Color.black.opacity(0.15)
-    }
+    static let small = Color.black.opacity(0.05)
+    static let medium = Color.black.opacity(0.1)
+    static let large = Color.black.opacity(0.15)
 }

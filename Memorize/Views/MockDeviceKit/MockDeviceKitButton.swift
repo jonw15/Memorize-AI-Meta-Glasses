@@ -12,7 +12,7 @@
 // Specialized button component for mock device controls in the debug interface.
 //
 
-#if DEBUG
+#if MOCK_DEVICE_ENABLED
 
 import SwiftUI
 

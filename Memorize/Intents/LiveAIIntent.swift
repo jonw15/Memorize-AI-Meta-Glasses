@@ -10,10 +10,10 @@ import UIKit
 
 @available(iOS 16.0, *)
 struct LiveAIIntent: AppIntent {
-    static var title: LocalizedStringResource = "Live AI"
-    static var description = IntentDescription("Start real-time multimodal conversation")
+    static let title: LocalizedStringResource = "Live AI"
+    static let description = IntentDescription("Start real-time multimodal conversation")
     // Must open app because iOS has system restrictions on background recording
-    static var openAppWhenRun: Bool = true
+    static let openAppWhenRun = true
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
@@ -27,9 +27,9 @@ struct LiveAIIntent: AppIntent {
 
 @available(iOS 16.0, *)
 struct StopLiveAIIntent: AppIntent {
-    static var title: LocalizedStringResource = "Stop Live AI"
-    static var description = IntentDescription("Stop the running Live AI session")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Stop Live AI"
+    static let description = IntentDescription("Stop the running Live AI session")
+    static let openAppWhenRun = false
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {

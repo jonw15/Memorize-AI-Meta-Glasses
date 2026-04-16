@@ -168,6 +168,6 @@ struct PermissionRow: View {
         .padding(AppSpacing.md)
         .background(Color.white)
         .cornerRadius(AppCornerRadius.md)
-        .shadow(color: AppShadow.small(), radius: 5, x: 0, y: 2)
+        .shadow(color: AppShadow.small, radius: 5, x: 0, y: 2)
     }
 }

@@ -277,6 +277,8 @@ class StreamSessionViewModel: ObservableObject {
       return "Audio streaming failed. Please try again."
     case .permissionDenied:
       return "Camera permission denied. Please grant permission in Settings."
+    case .hingesClosed:
+      return "Glasses hinges are closed. Please open them to stream."
     @unknown default:
       return "An unknown streaming error occurred."
     }

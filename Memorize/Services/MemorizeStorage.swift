@@ -5,7 +5,8 @@
 
 import Foundation
 
-class MemorizeStorage {
+@MainActor
+final class MemorizeStorage {
     static let shared = MemorizeStorage()
 
     private let userDefaults = UserDefaults.standard

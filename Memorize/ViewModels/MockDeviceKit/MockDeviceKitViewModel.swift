@@ -14,7 +14,7 @@
 // streaming, photo capture, and device management workflows without physical hardware.
 //
 
-#if DEBUG
+#if MOCK_DEVICE_ENABLED
 
 import Foundation
 import MWDATMockDevice

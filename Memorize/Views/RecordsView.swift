@@ -239,7 +239,7 @@ struct ConversationCell: View {
         .padding(AppSpacing.md)
         .background(AppColors.tertiaryBackground)
         .cornerRadius(AppCornerRadius.lg)
-        .shadow(color: AppShadow.small(), radius: 4, x: 0, y: 2)
+        .shadow(color: AppShadow.small, radius: 4, x: 0, y: 2)
     }
 }
 
@@ -439,6 +439,6 @@ struct QuickVisionRecordCell: View {
         .padding(AppSpacing.md)
         .background(AppColors.tertiaryBackground)
         .cornerRadius(AppCornerRadius.lg)
-        .shadow(color: AppShadow.small(), radius: 4, x: 0, y: 2)
+        .shadow(color: AppShadow.small, radius: 4, x: 0, y: 2)
     }
 }
