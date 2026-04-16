@@ -2819,20 +2819,7 @@ struct MemorizePodcastPlayerView: View {
                     .padding(.bottom, AppSpacing.lg)
             }
 
-            // Done button
-            Button {
-                disconnectAndDismiss()
-            } label: {
-                Text("memorize.done".localized)
-                    .font(AppTypography.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(AppCornerRadius.md)
-            }
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.bottom, AppSpacing.lg)
+            Spacer(minLength: AppSpacing.lg)
         }
         .background(AppColors.memorizeBackground.ignoresSafeArea())
         .navigationTitle("memorize.podcast".localized)
@@ -2938,20 +2925,7 @@ struct MemorizePodcastPlayerView: View {
                     .padding(.bottom, AppSpacing.xl)
             }
 
-            // Done button
-            Button {
-                disconnectAndDismiss()
-            } label: {
-                Text("memorize.done".localized)
-                    .font(AppTypography.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(AppCornerRadius.md)
-            }
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.bottom, AppSpacing.lg)
+            Spacer(minLength: AppSpacing.lg)
         }
         .background(AppColors.memorizeBackground.ignoresSafeArea())
         .navigationTitle("memorize.podcast".localized)
@@ -3897,18 +3871,7 @@ struct MemorizeVoiceSummaryView: View {
 
                 Spacer()
 
-                doneButton
-                    .padding(.horizontal, AppSpacing.md)
-
-                Button {
-                    speechRecognizer.stopListening()
-                    dismiss()
-                } label: {
-                    Text("memorize.pause_cancel".localized)
-                        .font(AppTypography.body)
-                        .foregroundColor(Color.white.opacity(0.65))
-                }
-                .padding(.bottom, AppSpacing.lg)
+                Spacer(minLength: AppSpacing.lg)
             }
             .background(AppColors.memorizeBackground.ignoresSafeArea())
                     .navigationTitle("memorize.voice_summary".localized)
@@ -4020,35 +3983,6 @@ struct MemorizeVoiceSummaryView: View {
                 : .easeOut(duration: 0.2),
             value: pulseAnimation
         )
-    }
-
-    private var doneButton: some View {
-        Button {
-            Task {
-                await gradeSummary()
-            }
-        } label: {
-            HStack(spacing: 8) {
-                if isGrading {
-                    ProgressView()
-                        .tint(.white)
-                        .scaleEffect(0.8)
-                } else {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 16, weight: .semibold))
-                }
-
-                Text(isGrading ? "memorize.grading_summary".localized : "memorize.done".localized)
-                    .font(AppTypography.headline)
-            }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(voiceAccent)
-            .cornerRadius(AppCornerRadius.md)
-        }
-        .disabled(isGrading || speechRecognizer.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        .opacity((isGrading || speechRecognizer.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? 0.5 : 1.0)
     }
 
     private func gradeCard(_ result: MemorizeService.VoiceSummaryEvaluation) -> some View {
@@ -4223,14 +4157,7 @@ struct MemorizeExplainView: View {
                     .padding(.horizontal, AppSpacing.md)
                 }
 
-                Button {
-                    disconnectAndDismiss()
-                } label: {
-                    Text("memorize.done".localized)
-                        .font(AppTypography.body)
-                        .foregroundColor(Color.white.opacity(0.65))
-                        .padding(.bottom, AppSpacing.lg)
-                }
+                Spacer(minLength: AppSpacing.lg)
             }
             .background(AppColors.memorizeBackground.ignoresSafeArea())
             .navigationTitle("memorize.explain".localized)
@@ -5179,6 +5106,7 @@ struct MemorizeInteractView: View {
     @State private var isAIThinking = false
     @State private var errorMessage: String?
     @State private var isMuted = true
+    @State private var isUserMuted = false
     @State private var userQuestionMuteTask: Task<Void, Never>?
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
     @State private var showVoicePicker = false
@@ -5196,6 +5124,10 @@ struct MemorizeInteractView: View {
 
     private var shouldShowStartupCard: Bool {
         !isConnected || isStartingConversation
+    }
+
+    private var isSummaryMode: Bool {
+        customSystemPrompt != nil
     }
 
     var body: some View {
@@ -5231,14 +5163,7 @@ struct MemorizeInteractView: View {
                         .padding(.horizontal, AppSpacing.md)
                 }
 
-                Button {
-                    disconnectAndDismiss()
-                } label: {
-                    Text("memorize.pause_cancel".localized)
-                        .font(AppTypography.body)
-                        .foregroundColor(Color.white.opacity(0.65))
-                        .padding(.bottom, AppSpacing.lg)
-                }
+                Spacer(minLength: AppSpacing.lg)
             }
             .background(AppColors.memorizeBackground.ignoresSafeArea())
             .navigationTitle("memorize.interact".localized)
@@ -5289,6 +5214,7 @@ struct MemorizeInteractView: View {
         geminiService = nil
         isConnected = false
         isRecording = false
+        isUserMuted = isSummaryMode
         messages = []
         currentAIText = ""
         currentUserText = ""
@@ -5349,13 +5275,13 @@ struct MemorizeInteractView: View {
         service.onConnected = { [service] in
             Task { @MainActor in
                 isConnected = true
-                let isSummaryMode = customSystemPrompt != nil
-                // Summary mode: mute mic so AI can summarize uninterrupted
-                // Conversation mode: mic live for hands-free
-                service.isMicMuted = isSummaryMode
+                isUserMuted = isSummaryMode
+                // Keep the mic muted during the opening response so Gemini
+                // does not hear its own greeting through the local speaker route.
+                service.isMicMuted = true
                 service.startRecording()
                 isRecording = true
-                isMuted = isSummaryMode
+                isMuted = true
                 isAIThinking = true
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 service.startPlaybackEngineIfNeeded()
@@ -5378,7 +5304,6 @@ struct MemorizeInteractView: View {
                 currentUserText += userText
                 isAIThinking = true
 
-                let isSummaryMode = customSystemPrompt != nil
                 guard isSummaryMode, !isMuted else { return }
 
                 userQuestionMuteTask?.cancel()
@@ -5446,20 +5371,17 @@ struct MemorizeInteractView: View {
 
         service.onSpeechStarted = {
             Task { @MainActor in
-                // Only auto-mute if the user hasn't manually unmuted
-                if isMuted {
-                    service.isMicMuted = true
-                }
+                service.isMicMuted = true
+                isMuted = true
             }
         }
 
         service.onSpeechStopped = {
             Task { @MainActor in
-                // Only auto-unmute if the user hasn't manually unmuted
-                if isMuted {
-                    try? await Task.sleep(nanoseconds: 250_000_000)
-                    service.isMicMuted = false
-                }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                let shouldStayMuted = isSummaryMode || isUserMuted
+                service.isMicMuted = shouldStayMuted
+                isMuted = shouldStayMuted
             }
         }
 
@@ -5603,6 +5525,7 @@ struct MemorizeInteractView: View {
             guard isConnected, let service = geminiService else { return }
             if isMuted {
                 userQuestionMuteTask?.cancel()
+                isUserMuted = false
                 currentAIText = ""
                 isAIThinking = false
                 service.interruptPlayback(expectServerInterruption: true)
@@ -5613,6 +5536,7 @@ struct MemorizeInteractView: View {
                 isMuted = false
             } else {
                 userQuestionMuteTask?.cancel()
+                isUserMuted = true
                 service.isMicMuted = true
                 service.stopRecording()
                 isRecording = false

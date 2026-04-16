@@ -819,7 +819,6 @@ Do not apologize.
         webSocket?.send(message) { error in
             if let error = error {
                 if self.shouldSuppressSocketError(error) {
-                    print("ℹ️ [Gemini] Ignoring expected send teardown error: \(error.localizedDescription)")
                     return
                 }
                 print("❌ [Gemini] Failed to send: \(error.localizedDescription)")
@@ -934,7 +933,6 @@ Do not apologize.
 
             case .failure(let error):
                 if self?.shouldSuppressSocketError(error) == true {
-                    print("ℹ️ [Gemini] Ignoring expected receive teardown error: \(error.localizedDescription)")
                     return
                 }
                 print("❌ [Gemini] Failed to receive message: \(error.localizedDescription)")
