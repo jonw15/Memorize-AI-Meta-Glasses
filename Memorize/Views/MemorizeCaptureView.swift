@@ -758,8 +758,8 @@ private final class CaptureVoiceCommandController: NSObject, ObservableObject {
             return
         }
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { buffer, _ in
+            request.append(buffer)
         }
 
         audioEngine.prepare()
@@ -1139,7 +1139,7 @@ struct MemorizePostCaptureActionsView: View {
             case .popQuiz:
                 viewModel.generateQuiz()
             case .voiceSummary:
-                showVoiceSummary = true
+                break // Voice summary temporarily disabled
             case .podcast:
                 viewModel.startPodcast()
             case .readAloud:
@@ -1213,8 +1213,6 @@ struct MemorizePostCaptureActionsView: View {
                         popQuizButton
                             .padding(.horizontal, AppSpacing.md)
 
-                        voiceSummaryButton
-                            .padding(.horizontal, AppSpacing.md)
 
                         if let podcastError = viewModel.podcastErrorMessage, !podcastError.isEmpty {
                             Text(podcastError)
@@ -2821,6 +2819,7 @@ struct MemorizePodcastPlayerView: View {
 
             Spacer(minLength: AppSpacing.lg)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColors.memorizeBackground.ignoresSafeArea())
         .navigationTitle("memorize.podcast".localized)
         .navigationBarTitleDisplayMode(.inline)
@@ -2843,6 +2842,8 @@ struct MemorizePodcastPlayerView: View {
             }
         }
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(AppColors.memorizeBackground, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
     }
 
     // MARK: - Play Body (original dark theme)
@@ -2927,6 +2928,7 @@ struct MemorizePodcastPlayerView: View {
 
             Spacer(minLength: AppSpacing.lg)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColors.memorizeBackground.ignoresSafeArea())
         .navigationTitle("memorize.podcast".localized)
         .navigationBarTitleDisplayMode(.inline)
@@ -2949,6 +2951,8 @@ struct MemorizePodcastPlayerView: View {
             }
         }
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(AppColors.memorizeBackground, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
     }
 
     // MARK: - Interactive Waveform
@@ -3721,13 +3725,16 @@ private final class VoiceSummarySpeechRecognizer: NSObject, ObservableObject {
     @Published var isListening: Bool = false
     @Published var speechPermissionDenied: Bool = false
     @Published var micPermissionDenied: Bool = false
+    @Published var permissionsResolved: Bool = false
 
-    private var audioEngine = AVAudioEngine()
+    private nonisolated(unsafe) var audioEngine = AVAudioEngine()
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: Locale.preferredLanguages.first ?? "en-US"))
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
+    private nonisolated(unsafe) var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private nonisolated(unsafe) var recognitionTask: SFSpeechRecognitionTask?
 
     func requestPermissionsIfNeeded() async {
+        permissionsResolved = false
+
         let speechAuthorized: Bool = await withCheckedContinuation { continuation in
             let status = SFSpeechRecognizer.authorizationStatus()
             if status == .authorized {
@@ -3752,11 +3759,29 @@ private final class VoiceSummarySpeechRecognizer: NSObject, ObservableObject {
             }
         }
         micPermissionDenied = !micAuthorized
+        permissionsResolved = true
     }
 
     func startListening() throws {
-        guard !speechPermissionDenied, !micPermissionDenied else { return }
-        guard !isListening else { return }
+        print("🎤 [SpeechRec] startListening() entered")
+        guard permissionsResolved else {
+            throw NSError(
+                domain: "VoiceSummarySpeechRecognizer",
+                code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "Permissions are still loading. Please try again."]
+            )
+        }
+        guard !speechPermissionDenied, !micPermissionDenied else {
+            throw NSError(
+                domain: "VoiceSummarySpeechRecognizer",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "Microphone and speech permissions are required."]
+            )
+        }
+        guard !isListening else {
+            print("🎤 [SpeechRec] Already listening, returning")
+            return
+        }
 
         transcript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -3764,10 +3789,13 @@ private final class VoiceSummarySpeechRecognizer: NSObject, ObservableObject {
         recognitionTask = nil
         recognitionRequest = nil
 
+        print("🎤 [SpeechRec] Configuring audio session...")
         let audioSession = AVAudioSession.sharedInstance()
         try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
-        try audioSession.setCategory(.record, mode: .measurement, options: [.duckOthers, .allowBluetoothHFP])
+        try audioSession.setCategory(.record, mode: .default, options: [.duckOthers])
+        try? audioSession.setPreferredInput(nil)
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+        print("🎤 [SpeechRec] Audio session configured")
 
         // Fresh engine to avoid stale input node after Gemini session
         audioEngine = AVAudioEngine()
@@ -3786,6 +3814,7 @@ private final class VoiceSummarySpeechRecognizer: NSObject, ObservableObject {
 
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.inputFormat(forBus: 0)
+        print("🎤 [SpeechRec] Input format: rate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
             throw NSError(
                 domain: "VoiceSummarySpeechRecognizer",
@@ -3794,21 +3823,26 @@ private final class VoiceSummarySpeechRecognizer: NSObject, ObservableObject {
             )
         }
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
+        let capturedRequest = request
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { buffer, _ in
+            capturedRequest.append(buffer)
         }
 
+        print("🎤 [SpeechRec] Starting audio engine...")
         audioEngine.prepare()
         try audioEngine.start()
+        print("🎤 [SpeechRec] Audio engine started successfully")
         isListening = true
 
         recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
-            guard let self else { return }
-            if let result {
-                self.transcript = result.bestTranscription.formattedString
-            }
-            if error != nil || (result?.isFinal ?? false) {
-                self.stopListening()
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let result {
+                    self.transcript = result.bestTranscription.formattedString
+                }
+                if error != nil || (result?.isFinal ?? false) {
+                    self.stopListening()
+                }
             }
         }
     }
@@ -3927,15 +3961,20 @@ struct MemorizeVoiceSummaryView: View {
     private var microphoneButton: some View {
         Button {
             errorMessage = nil
+            print("🎤 [VoiceSummary] Mic button tapped, isListening=\(speechRecognizer.isListening)")
             if speechRecognizer.isListening {
+                print("🎤 [VoiceSummary] Stopping listening...")
                 speechRecognizer.stopListening()
                 Task {
                     await gradeSummary()
                 }
             } else {
                 do {
+                    print("🎤 [VoiceSummary] Starting listening...")
                     try speechRecognizer.startListening()
+                    print("🎤 [VoiceSummary] startListening() succeeded")
                 } catch {
+                    print("❌ [VoiceSummary] startListening() failed: \(error)")
                     errorMessage = error.localizedDescription
                 }
             }
@@ -3968,8 +4007,8 @@ struct MemorizeVoiceSummaryView: View {
                     .foregroundColor(.white)
             }
         }
-        .disabled(isGrading || speechRecognizer.speechPermissionDenied || speechRecognizer.micPermissionDenied)
-        .opacity((isGrading || speechRecognizer.speechPermissionDenied || speechRecognizer.micPermissionDenied) ? 0.5 : 1.0)
+        .opacity((isGrading || !speechRecognizer.permissionsResolved || speechRecognizer.speechPermissionDenied || speechRecognizer.micPermissionDenied) ? 0.5 : 1.0)
+        .disabled(isGrading || !speechRecognizer.permissionsResolved || speechRecognizer.speechPermissionDenied || speechRecognizer.micPermissionDenied)
         .onChange(of: speechRecognizer.isListening) { isListening in
             if isListening {
                 pulseAnimation = true
@@ -4650,7 +4689,6 @@ struct MemorizeInteractMessage: Identifiable {
 
 // MARK: - Post-Capture Voice Menu Controller
 
-@MainActor
 private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     enum MenuCommand {
         case interact
@@ -4663,12 +4701,12 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
     }
 
     private let synthesizer = AVSpeechSynthesizer()
-    private var audioEngine = AVAudioEngine()
+    private nonisolated(unsafe) var audioEngine = AVAudioEngine()
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: Locale.preferredLanguages.first ?? "en-US"))
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
+    private nonisolated(unsafe) var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private nonisolated(unsafe) var recognitionTask: SFSpeechRecognitionTask?
     private var onCommand: ((MenuCommand) -> Void)?
-    @Published var hasSpoken = false
+    @MainActor @Published var hasSpoken = false
     private var hasTriggered = false
     private var shouldListen = false
     private var restartTask: Task<Void, Never>?
@@ -4771,8 +4809,9 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
             return
         }
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
+        let capturedRequest = request
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { buffer, _ in
+            capturedRequest.append(buffer)
         }
 
         audioEngine.prepare()
@@ -4787,16 +4826,17 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
         print("🎤 [VoiceMenu] Listening for menu command...")
 
         recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
-            guard let self else { return }
+            let transcriptText = result?.bestTranscription.formattedString
+            let isFinalResult = result?.isFinal ?? false
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if hasTriggered {
                     print("🎤 [VoiceMenu] Ignoring (already triggered)")
                     return
                 }
-                if let text = result?.bestTranscription.formattedString {
+                if let text = transcriptText {
                     let lower = text.lowercased()
-                    print("🎤 [VoiceMenu] Heard: \"\(text)\" (isFinal: \(result?.isFinal ?? false))")
+                    print("🎤 [VoiceMenu] Heard: \"\(text)\" (isFinal: \(isFinalResult))")
                     if let command = parseMenuCommand(from: lower) {
                         print("✅ [VoiceMenu] Matched command: \(command)")
                         hasTriggered = true
@@ -4809,7 +4849,7 @@ private final class PostCaptureVoiceMenuController: NSObject, ObservableObject, 
                     print("⚠️ [VoiceMenu] Recognition error: \(error.localizedDescription)")
                     stopListeningInternal()
                     scheduleRestart()
-                } else if result?.isFinal ?? false {
+                } else if isFinalResult {
                     print("ℹ️ [VoiceMenu] Final result, no match — restarting")
                     stopListeningInternal()
                     scheduleRestart()
@@ -5131,62 +5171,71 @@ struct MemorizeInteractView: View {
     }
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: AppSpacing.md) {
-                Text("memorize.interact_prompt".localized)
-                    .font(AppTypography.subheadline)
-                    .foregroundColor(Color.white.opacity(0.7))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, AppSpacing.md)
+        ZStack {
+            AppColors.memorizeBackground
+                .ignoresSafeArea()
 
-                Text(sectionTitle.isEmpty ? bookTitle : "\(bookTitle) — \(sectionTitle)")
-                    .font(AppTypography.caption)
-                    .foregroundColor(Color.white.opacity(0.55))
-                    .lineLimit(2)
-                    .padding(.horizontal, AppSpacing.md)
-
-                if shouldShowStartupCard {
-                    startupStatusCard(text: isStartingConversation ? "memorize.interact_starting".localized : "memorize.interact_connecting".localized)
-                        .padding(.horizontal, AppSpacing.md)
-                } else {
-                    conversationCard
-                        .padding(.horizontal, AppSpacing.md)
-                }
-
-                microphoneButton
-
-                if let errorMessage, !errorMessage.isEmpty {
-                    Text(errorMessage)
-                        .font(AppTypography.caption)
-                        .foregroundColor(.red.opacity(0.9))
+            NavigationView {
+                VStack(spacing: AppSpacing.md) {
+                    Text("memorize.interact_prompt".localized)
+                        .font(AppTypography.subheadline)
+                        .foregroundColor(Color.white.opacity(0.7))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, AppSpacing.md)
-                }
 
-                Spacer(minLength: AppSpacing.lg)
-            }
-            .background(AppColors.memorizeBackground.ignoresSafeArea())
-            .navigationTitle("memorize.interact".localized)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        disconnectAndDismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .foregroundColor(.white)
+                    Text(sectionTitle.isEmpty ? bookTitle : "\(bookTitle) — \(sectionTitle)")
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.55))
+                        .lineLimit(2)
+                        .padding(.horizontal, AppSpacing.md)
+
+                    if shouldShowStartupCard {
+                        startupStatusCard(text: isStartingConversation ? "memorize.interact_starting".localized : "memorize.interact_connecting".localized)
+                            .padding(.horizontal, AppSpacing.md)
+                    } else {
+                        conversationCard
+                            .padding(.horizontal, AppSpacing.md)
+                    }
+
+                    microphoneButton
+
+                    if let errorMessage, !errorMessage.isEmpty {
+                        Text(errorMessage)
+                            .font(AppTypography.caption)
+                            .foregroundColor(.red.opacity(0.9))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, AppSpacing.md)
+                    }
+
+                    Spacer(minLength: AppSpacing.lg)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(Color.clear)
+                .navigationTitle("memorize.interact".localized)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button {
+                            disconnectAndDismiss()
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .foregroundColor(.white)
+                        }
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            showVoicePicker = true
+                        } label: {
+                            Image(systemName: "person.crop.circle")
+                                .foregroundColor(.white)
+                        }
                     }
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showVoicePicker = true
-                    } label: {
-                        Image(systemName: "person.crop.circle")
-                            .foregroundColor(.white)
-                    }
-                }
+                .toolbarColorScheme(.dark, for: .navigationBar)
+                .toolbarBackground(AppColors.memorizeBackground, for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .background(Color.clear)
         }
         .sheet(isPresented: $showVoicePicker) {
             GeminiVoicePickerView(selectedVoice: $selectedVoice, accent: interactAccent)

@@ -106,15 +106,6 @@ struct StudyTabView: View {
                         viewModel.generateQuiz()
                     }
 
-                    // Voice Summary
-                    studyActionButton(
-                        title: "memorize.voice_summary".localized,
-                        subtitle: "memorize.voice_summary_subtitle".localized,
-                        icon: "mic.fill",
-                        gradient: [Color(red: 0.4, green: 0.6, blue: 0.9), Color(red: 0.3, green: 0.5, blue: 0.8)]
-                    ) {
-                        showVoiceSummary = true
-                    }
 
                     if let error = viewModel.podcastErrorMessage, !error.isEmpty {
                         Text(error)
