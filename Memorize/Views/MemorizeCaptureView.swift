@@ -4116,10 +4116,12 @@ struct MemorizeExplainView: View {
     @State private var loadingPulse = false
     @State private var hasDeliveredOpeningExplanation = false
     @State private var userQuestionMuteTask: Task<Void, Never>?
+    @State private var ignoreUserTranscriptUntil: Date?
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
     @State private var showVoicePicker = false
     private let explainAccent = Color(red: 0.94, green: 0.55, blue: 0.24)
     private let questionEndMuteDelayNanoseconds: UInt64 = 450_000_000
+    private let postUnmuteTranscriptIgnoreInterval: TimeInterval = 0.6
 
     private var isStartingSummary: Bool {
         isConnected &&
@@ -4368,6 +4370,10 @@ struct MemorizeExplainView: View {
         service.onUserTranscript = { (userText: String) in
             Task { @MainActor in
                 guard !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                if let ignoreUntil = ignoreUserTranscriptUntil, Date() < ignoreUntil {
+                    print("🎙️ [MemorizeExplain] Ignoring stale transcript right after unmute: \(userText)")
+                    return
+                }
                 currentUserText += userText
                 isAIThinking = true
 
@@ -4382,7 +4388,6 @@ struct MemorizeExplainView: View {
                     service.isMicMuted = true
                     service.stopRecording()
                     isRecording = false
-                    isMuted = true
                 }
             }
         }
@@ -4424,6 +4429,7 @@ struct MemorizeExplainView: View {
                         hasDeliveredOpeningExplanation = true
                         try? await Task.sleep(nanoseconds: 250_000_000)
                         service.activateConversationMode(startRecordingIfNeeded: true)
+                        ignoreUserTranscriptUntil = Date().addingTimeInterval(postUnmuteTranscriptIgnoreInterval)
                         service.isMicMuted = false
                         isRecording = true
                         isMuted = false
@@ -4454,6 +4460,7 @@ struct MemorizeExplainView: View {
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 if !isMuted {
                     service.activateConversationMode(startRecordingIfNeeded: true)
+                    ignoreUserTranscriptUntil = Date().addingTimeInterval(postUnmuteTranscriptIgnoreInterval)
                     service.isMicMuted = false
                     isRecording = true
                     isMuted = false
@@ -4645,17 +4652,20 @@ struct MemorizeExplainView: View {
             if isMuted {
                 // Unmute acts as a hard "stop and listen" command.
                 userQuestionMuteTask?.cancel()
+                currentUserText = ""
                 currentAIText = ""
                 isAIThinking = false
                 service.interruptPlayback(expectServerInterruption: true)
                 service.sendSilentAudioToInterrupt()
                 service.activateConversationMode(startRecordingIfNeeded: true)
+                ignoreUserTranscriptUntil = Date().addingTimeInterval(postUnmuteTranscriptIgnoreInterval)
                 service.isMicMuted = false
                 isRecording = true
                 isMuted = false
             } else {
                 // Mute — stop sending audio to Gemini
                 userQuestionMuteTask?.cancel()
+                ignoreUserTranscriptUntil = nil
                 service.isMicMuted = true
                 service.stopRecording()
                 isRecording = false
@@ -5421,16 +5431,22 @@ struct MemorizeInteractView: View {
         service.onSpeechStarted = {
             Task { @MainActor in
                 service.isMicMuted = true
-                isMuted = true
+                if !isSummaryMode {
+                    isMuted = true
+                }
             }
         }
 
         service.onSpeechStopped = {
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 250_000_000)
-                let shouldStayMuted = isSummaryMode || isUserMuted
+                let shouldStayMuted = isUserMuted
                 service.isMicMuted = shouldStayMuted
                 isMuted = shouldStayMuted
+                if !shouldStayMuted {
+                    service.activateConversationMode(startRecordingIfNeeded: true)
+                    isRecording = true
+                }
             }
         }
 
