@@ -16,6 +16,7 @@ struct ProjectDetailView: View {
     @State private var showRenameAlert = false
     @State private var renameText = ""
     @State private var showTutor = false
+    @State private var isDeletingProject = false
 
     enum ProjectTab {
         case sources, tutor, study
@@ -69,7 +70,7 @@ struct ProjectDetailView: View {
                             Label("Rename", systemImage: "pencil")
                         }
                         Button(role: .destructive) {
-                            onDeleteProject(viewModel.book.id)
+                            deleteProject()
                         } label: {
                             Label("memorize.delete_session_confirm".localized, systemImage: "trash")
                         }
@@ -110,6 +111,18 @@ struct ProjectDetailView: View {
         }
         .fullScreenCover(isPresented: $showTutor) {
             TutorTabView(viewModel: viewModel)
+        }
+    }
+
+    private func deleteProject() {
+        guard !isDeletingProject else { return }
+        isDeletingProject = true
+        let bookID = viewModel.book.id
+        dismiss()
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            onDeleteProject(bookID)
         }
     }
 

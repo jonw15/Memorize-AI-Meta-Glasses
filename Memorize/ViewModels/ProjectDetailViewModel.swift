@@ -27,12 +27,14 @@ class ProjectDetailViewModel: ObservableObject {
     @Published var showExplain = false
     @Published var explanationPersona: MemorizeExplainPersona = .likeIAm5
     @Published var explanationText: String = ""
+    @Published private(set) var isDeleted = false
 
     private let storage = MemorizeStorage.shared
     private let memorizeService = MemorizeService()
     private let pdfImportService = PDFImportService()
     private let youtubeTranscriptImportService = YouTubeTranscriptImportService()
     private let wordsPerQuizQuestion = 85.0
+    private let youtubeTranscriptChunkTargetChars = 2600
 
     var allCompletedPages: [PageCapture] {
         book.allPages.filter { $0.status == .completed }
@@ -162,6 +164,62 @@ class ProjectDetailViewModel: ObservableObject {
         addSource(source)
     }
 
+    private func makeTranscriptPages(from transcript: String) -> [PageCapture] {
+        let pageTexts = splitTranscriptIntoChunks(transcript, targetChars: youtubeTranscriptChunkTargetChars)
+        let texts = pageTexts.isEmpty ? [transcript.trimmingCharacters(in: .whitespacesAndNewlines)] : pageTexts
+
+        return texts.enumerated().compactMap { index, text in
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            return PageCapture(pageNumber: index + 1, extractedText: trimmed, status: .completed)
+        }
+    }
+
+    private func splitTranscriptIntoChunks(_ transcript: String, targetChars: Int) -> [String] {
+        let normalized = transcript
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "[ \t]+", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !normalized.isEmpty else { return [] }
+        guard normalized.count > targetChars else { return [normalized] }
+
+        var chunks: [String] = []
+        var remaining = normalized[...]
+
+        while remaining.count > targetChars {
+            let maxEnd = remaining.index(remaining.startIndex, offsetBy: targetChars)
+            let prefix = remaining[..<maxEnd]
+
+            let paragraphBreak = prefix.range(of: "\n\n", options: .backwards)?.lowerBound
+            let sentenceBreak = prefix.lastIndex(where: { ".!?".contains($0) }).map { remaining.index(after: $0) }
+            let wordBreak = prefix.lastIndex(of: " ")
+
+            let splitIndex = [paragraphBreak, sentenceBreak, wordBreak]
+                .compactMap { $0 }
+                .first(where: { remaining.distance(from: remaining.startIndex, to: $0) > targetChars / 2 })
+                ?? maxEnd
+
+            let chunk = String(remaining[..<splitIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !chunk.isEmpty {
+                chunks.append(chunk)
+            }
+
+            remaining = remaining[splitIndex...]
+            while let first = remaining.first, first.isWhitespace || first.isNewline {
+                remaining = remaining.dropFirst()
+            }
+        }
+
+        let finalChunk = String(remaining).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !finalChunk.isEmpty {
+            chunks.append(finalChunk)
+        }
+
+        return chunks
+    }
+
     func importPDF(from url: URL) async {
         isImportingPDF = true
         pdfImportError = nil
@@ -205,10 +263,10 @@ class ProjectDetailViewModel: ObservableObject {
 
         do {
             let result = try await youtubeTranscriptImportService.importTranscript(from: trimmed)
-            let page = PageCapture(pageNumber: 1, extractedText: result.transcript, status: .completed)
-            let source = Source(name: result.videoTitle, sourceType: .youtube, pages: [page])
+            let pages = makeTranscriptPages(from: result.transcript)
+            let source = Source(name: result.videoTitle, sourceType: .youtube, pages: pages)
             addSource(source)
-            print("📺 [ProjectDetail] YouTube transcript imported: \(result.videoTitle) (\(result.videoID))")
+            print("📺 [ProjectDetail] YouTube transcript imported: \(result.videoTitle) (\(result.videoID)) — \(pages.count) pages")
         } catch {
             youtubeImportError = error.localizedDescription
             print("❌ [ProjectDetail] YouTube transcript import failed: \(error)")
@@ -278,19 +336,24 @@ class ProjectDetailViewModel: ObservableObject {
 
     func reload() {
         let books = storage.loadBooks()
-        if let updated = books.first(where: { $0.id == book.id }) {
-            book = updated
-            // Load thumbnails but don't drop pages that lack them (text-only sources are valid)
-            for i in book.pages.indices {
-                if let data = storage.loadThumbnail(for: book.pages[i].id) {
-                    book.pages[i].thumbnailData = data
-                }
+        guard let updated = books.first(where: { $0.id == book.id }) else {
+            isDeleted = true
+            print("📚 [ProjectDetail] Reload skipped — book no longer exists: \(book.id)")
+            return
+        }
+
+        isDeleted = false
+        book = updated
+        // Load thumbnails but don't drop pages that lack them (text-only sources are valid)
+        for i in book.pages.indices {
+            if let data = storage.loadThumbnail(for: book.pages[i].id) {
+                book.pages[i].thumbnailData = data
             }
-            for i in book.sources.indices {
-                for j in book.sources[i].pages.indices {
-                    if let data = storage.loadThumbnail(for: book.sources[i].pages[j].id) {
-                        book.sources[i].pages[j].thumbnailData = data
-                    }
+        }
+        for i in book.sources.indices {
+            for j in book.sources[i].pages.indices {
+                if let data = storage.loadThumbnail(for: book.sources[i].pages[j].id) {
+                    book.sources[i].pages[j].thumbnailData = data
                 }
             }
         }

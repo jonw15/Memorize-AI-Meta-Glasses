@@ -1302,12 +1302,13 @@ private final class HomeVoiceController: NSObject, ObservableObject {
     }
 
     func resumeListening() {
+        guard onCommand != nil else { return }
         shouldListen = true
         beginListeningIfNeeded()
     }
 
     private func beginListeningIfNeeded() {
-        guard shouldListen else { return }
+        guard shouldListen, onCommand != nil else { return }
         guard !speechPermissionDenied, !micPermissionDenied else { return }
         guard recognitionTask == nil else { return }
 
