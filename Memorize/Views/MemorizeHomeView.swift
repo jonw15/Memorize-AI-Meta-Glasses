@@ -154,7 +154,8 @@ struct MemorizeHomeView: View {
         }) { book in
             ProjectDetailView(
                 book: book,
-                streamViewModel: streamViewModel
+                streamViewModel: streamViewModel,
+                onDeleteProject: deleteBook
             )
             .onAppear {
                 lastOpenedProjectId = book.id
@@ -219,7 +220,7 @@ struct MemorizeHomeView: View {
                 title: Text("memorize.delete_session_title".localized),
                 message: Text(String(format: "memorize.delete_session_message".localized, book.title.isEmpty ? "memorize.untitled".localized : book.title)),
                 primaryButton: .destructive(Text("memorize.delete_session_confirm".localized)) {
-                    viewModel.deleteBook(book.id)
+                    deleteBook(book.id)
                 },
                 secondaryButton: .cancel(Text("memorize.cancel".localized))
             )
@@ -458,6 +459,26 @@ struct MemorizeHomeView: View {
         if book.hasSections { return "\u{1F4DA}" } // books
         if !book.pages.isEmpty { return "\u{1F4F7}" } // camera
         return "\u{1F4D3}" // notebook
+    }
+
+    private func deleteBook(_ id: UUID) {
+        if selectedProjectBook?.id == id {
+            selectedProjectBook = nil
+        }
+        if selectedParentBook?.id == id {
+            selectedParentBook = nil
+        }
+        if selectedBook?.id == id {
+            selectedBook = nil
+        }
+        if pendingDeleteBook?.id == id {
+            pendingDeleteBook = nil
+        }
+        if lastOpenedProjectId == id {
+            lastOpenedProjectId = nil
+        }
+
+        viewModel.deleteBook(id)
     }
 
     private func statusIcon(for book: Book) -> String {

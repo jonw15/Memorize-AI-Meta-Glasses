@@ -7,7 +7,7 @@ data class ConversationRecord(
     val id: String = UUID.randomUUID().toString(),
     val timestamp: Long = System.currentTimeMillis(),
     val messages: List<ConversationMessage> = emptyList(),
-    val aiModel: String = "gemini-2.5-flash-native-audio-preview-12-2025",
+    val aiModel: String = "gemini-3.1-flash-live-preview",
     val language: String = "en-US"
 ) {
     val title: String

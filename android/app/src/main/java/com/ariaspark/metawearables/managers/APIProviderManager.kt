@@ -44,7 +44,7 @@ enum class APIProvider(val id: String) {
 
     val defaultModel: String
         get() = when (this) {
-            GOOGLE -> "gemini-2.5-flash"
+            GOOGLE -> "gemini-3-flash-preview"
             OPENROUTER -> "google/gemini-3-flash-preview"
         }
 
@@ -129,19 +129,14 @@ data class GoogleVisionModel(
     companion object {
         val availableModels = listOf(
             GoogleVisionModel(
-                "gemini-2.5-flash",
-                "Gemini 2.5 Flash",
-                "Default, fast responses"
+                "gemini-3-flash-preview",
+                "Gemini 3 Flash",
+                "Frontier-class multimodal Flash model"
             ),
             GoogleVisionModel(
-                "gemini-2.5-pro",
-                "Gemini 2.5 Pro",
-                "Most capable model"
-            ),
-            GoogleVisionModel(
-                "gemini-2.0-flash",
-                "Gemini 2.0 Flash",
-                "Legacy model"
+                "gemini-3.1-flash-lite-preview",
+                "Gemini 3.1 Flash-Lite",
+                "Fastest, lowest-cost Flash model"
             )
         )
     }
@@ -157,7 +152,7 @@ class APIProviderManager private constructor(context: Context) {
         private const val KEY_SELECTED_MODEL = "selected_vision_model"
 
         // AI Configuration — defaults (overridden by server fetch)
-        private const val DEFAULT_LIVE_AI_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
+        private const val DEFAULT_LIVE_AI_MODEL = "gemini-3.1-flash-live-preview"
         private const val DEFAULT_LIVE_AI_WS_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
 
         // Dynamic values set by AIConfigService
@@ -177,6 +172,28 @@ class APIProviderManager private constructor(context: Context) {
         @Volatile
         private var instance: APIProviderManager? = null
 
+        private fun normalizeLiveModel(model: String): String {
+            return when (model) {
+                "gemini-2.5-flash-native-audio-preview-12-2025" -> "gemini-3.1-flash-live-preview"
+                else -> model
+            }
+        }
+
+        private fun normalizeVisionModel(model: String?, provider: APIProvider): String? {
+            if (model == null) return null
+
+            return when (provider) {
+                APIProvider.GOOGLE -> when (model) {
+                    "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-3-pro-preview" -> "gemini-3-flash-preview"
+                    else -> model
+                }
+                APIProvider.OPENROUTER -> when (model) {
+                    "google/gemini-2.5-flash", "google/gemini-2.5-pro", "google/gemini-2.0-flash", "google/gemini-3-pro-preview" -> "google/gemini-3-flash-preview"
+                    else -> model
+                }
+            }
+        }
+
         fun getInstance(context: Context): APIProviderManager {
             return instance ?: synchronized(this) {
                 instance ?: APIProviderManager(context.applicationContext).also { instance = it }
@@ -194,8 +211,10 @@ class APIProviderManager private constructor(context: Context) {
 
         val staticCurrentModel: String
             get() {
-                return prefs?.getString(KEY_SELECTED_MODEL, null)
-                    ?: staticCurrentProvider.defaultModel
+                return normalizeVisionModel(
+                    prefs?.getString(KEY_SELECTED_MODEL, null),
+                    staticCurrentProvider
+                ) ?: staticCurrentProvider.defaultModel
             }
 
         val staticBaseURL: String
@@ -218,6 +237,13 @@ class APIProviderManager private constructor(context: Context) {
         if (savedProvider == "alibaba") {
             prefs.edit().putString(KEY_PROVIDER, "google").apply()
         }
+
+        val provider = APIProvider.fromId(prefs.getString(KEY_PROVIDER, "google") ?: "google")
+        val savedModel = prefs.getString(KEY_SELECTED_MODEL, null)
+        val normalizedModel = normalizeVisionModel(savedModel, provider)
+        if (normalizedModel != null && normalizedModel != savedModel) {
+            prefs.edit().putString(KEY_SELECTED_MODEL, normalizedModel).apply()
+        }
     }
 
     // Vision API Provider
@@ -227,7 +253,10 @@ class APIProviderManager private constructor(context: Context) {
     val currentProvider: StateFlow<APIProvider> = _currentProvider
 
     private val _selectedModel = MutableStateFlow(
-        prefs.getString(KEY_SELECTED_MODEL, null) ?: APIProvider.GOOGLE.defaultModel
+        normalizeVisionModel(
+            prefs.getString(KEY_SELECTED_MODEL, null),
+            APIProvider.fromId(prefs.getString(KEY_PROVIDER, "google") ?: "google")
+        ) ?: APIProvider.GOOGLE.defaultModel
     )
     val selectedModel: StateFlow<String> = _selectedModel
 
@@ -272,7 +301,7 @@ class APIProviderManager private constructor(context: Context) {
     fun applyFetchedConfig(key: String, url: String, model: String) {
         fetchedAPIKey = key
         liveAIFetchedURL = url
-        liveAIFetchedModel = model
+        liveAIFetchedModel = normalizeLiveModel(model)
     }
 
     // MARK: - Get Current Configuration

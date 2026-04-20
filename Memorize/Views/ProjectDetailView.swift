@@ -10,6 +10,7 @@ struct ProjectDetailView: View {
     @ObservedObject var streamViewModel: StreamSessionViewModel
     @StateObject private var viewModel: ProjectDetailViewModel
     @Environment(\.dismiss) private var dismiss
+    private let onDeleteProject: (UUID) -> Void
 
     @State private var selectedTab: ProjectTab = .sources
     @State private var showRenameAlert = false
@@ -20,9 +21,14 @@ struct ProjectDetailView: View {
         case sources, tutor, study
     }
 
-    init(book: Book, streamViewModel: StreamSessionViewModel) {
+    init(
+        book: Book,
+        streamViewModel: StreamSessionViewModel,
+        onDeleteProject: @escaping (UUID) -> Void = { _ in }
+    ) {
         self.streamViewModel = streamViewModel
         self._viewModel = StateObject(wrappedValue: ProjectDetailViewModel(book: book))
+        self.onDeleteProject = onDeleteProject
     }
 
     var body: some View {
@@ -63,8 +69,7 @@ struct ProjectDetailView: View {
                             Label("Rename", systemImage: "pencil")
                         }
                         Button(role: .destructive) {
-                            MemorizeStorage.shared.deleteBook(viewModel.book.id)
-                            dismiss()
+                            onDeleteProject(viewModel.book.id)
                         } label: {
                             Label("memorize.delete_session_confirm".localized, systemImage: "trash")
                         }

@@ -28,7 +28,7 @@ enum APIProvider: String, CaseIterable, Codable {
 
     var defaultModel: String {
         switch self {
-        case .google: return "gemini-2.5-flash"
+        case .google: return "gemini-3-flash-preview"
         case .openrouter: return "google/gemini-3-flash-preview"
         }
     }
@@ -152,13 +152,17 @@ class APIProviderManager: ObservableObject {
         self.currentProvider = provider
 
         let savedModel = UserDefaults.standard.string(forKey: selectedModelKey)
-        self.selectedModel = savedModel ?? provider.defaultModel
+        let normalizedModel = Self.normalizedVisionModel(savedModel, provider: provider)
+        self.selectedModel = normalizedModel ?? provider.defaultModel
+        if normalizedModel != savedModel {
+            UserDefaults.standard.set(self.selectedModel, forKey: selectedModelKey)
+        }
     }
 
     // MARK: - AI Configuration (fetched from server)
 
     private nonisolated static let defaultLiveAIWebSocketURL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
-    private nonisolated static let defaultLiveAIModel = "gemini-2.5-flash-native-audio-preview-12-2025"
+    private nonisolated static let defaultLiveAIModel = "gemini-3.1-flash-live-preview"
 
     // Fetched config from server (set by AIConfigService)
     private(set) var fetchedAPIKey: String?
@@ -188,7 +192,7 @@ class APIProviderManager: ObservableObject {
     func applyFetchedConfig(key: String, url: String, model: String) {
         fetchedAPIKey = key
         liveAIFetchedURL = url
-        liveAIFetchedModel = model
+        liveAIFetchedModel = Self.normalizedLiveModel(model)
         updateStaticCache()
     }
 
@@ -276,6 +280,36 @@ class APIProviderManager: ObservableObject {
 // MARK: - Static Helpers for Non-MainActor Access
 
 extension APIProviderManager {
+    private nonisolated static func normalizedLiveModel(_ model: String) -> String {
+        switch model {
+        case "gemini-2.5-flash-native-audio-preview-12-2025":
+            return "gemini-3.1-flash-live-preview"
+        default:
+            return model
+        }
+    }
+
+    private nonisolated static func normalizedVisionModel(_ savedModel: String?, provider: APIProvider) -> String? {
+        guard let savedModel else { return nil }
+
+        switch provider {
+        case .google:
+            switch savedModel {
+            case "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-3-pro-preview":
+                return "gemini-3-flash-preview"
+            default:
+                return savedModel
+            }
+        case .openrouter:
+            switch savedModel {
+            case "google/gemini-2.5-flash", "google/gemini-2.5-pro", "google/gemini-2.0-flash", "google/gemini-3-pro-preview":
+                return "google/gemini-3-flash-preview"
+            default:
+                return savedModel
+            }
+        }
+    }
+
     nonisolated static var staticCurrentProvider: APIProvider {
         let savedProvider = UserDefaults.standard.string(forKey: "api_provider") ?? "google"
         if savedProvider == "alibaba" { return .google }
@@ -284,7 +318,7 @@ extension APIProviderManager {
 
     nonisolated static var staticCurrentModel: String {
         let savedModel = UserDefaults.standard.string(forKey: "selected_vision_model")
-        return savedModel ?? staticCurrentProvider.defaultModel
+        return normalizedVisionModel(savedModel, provider: staticCurrentProvider) ?? staticCurrentProvider.defaultModel
     }
 
     nonisolated static var staticBaseURL: String {

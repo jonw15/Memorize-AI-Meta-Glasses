@@ -37,7 +37,7 @@ class VisionAPIService(
         const val OPENROUTER_URL = "https://openrouter.ai/api/v1"
 
         // Default Models
-        const val DEFAULT_GOOGLE_MODEL = "gemini-2.5-flash"
+        const val DEFAULT_GOOGLE_MODEL = "gemini-3-flash-preview"
         const val DEFAULT_OPENROUTER_MODEL = "google/gemini-3-flash-preview"
     }
 

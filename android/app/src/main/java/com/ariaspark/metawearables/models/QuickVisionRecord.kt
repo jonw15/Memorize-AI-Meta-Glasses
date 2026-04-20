@@ -13,7 +13,7 @@ data class QuickVisionRecord(
     val prompt: String,               // The prompt/question used
     val result: String,               // AI analysis result
     val mode: QuickVisionMode = QuickVisionMode.STANDARD,
-    val visionModel: String = "gemini-2.5-flash"
+    val visionModel: String = "gemini-3-flash-preview"
 ) {
     val title: String
         get() = result.take(30).ifEmpty { "Quick Vision" }

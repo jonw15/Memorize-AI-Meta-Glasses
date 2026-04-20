@@ -19,7 +19,7 @@ class LeanEatService(private val apiKey: String) {
 
     companion object {
         private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-        private const val MODEL = "gemini-2.5-flash"
+        private const val MODEL = "gemini-3-flash-preview"
 
         private val NUTRITION_PROMPT = """
 请分析这张图片中的食物，并以JSON格式返回营养分析结果。

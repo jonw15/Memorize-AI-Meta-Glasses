@@ -24,7 +24,7 @@ struct SettingsView: View {
     @State private var showLiveTranslateSettings = false
     @ObservedObject var quickVisionModeManager = QuickVisionModeManager.shared
     @ObservedObject var liveAIModeManager = LiveAIModeManager.shared
-    @State private var selectedModel = "gemini-2.5-flash-native-audio-preview-12-2025"
+    @State private var selectedModel = "gemini-3.1-flash-live-preview"
     @State private var selectedLanguage = "en-US" // Default English
     @State private var selectedQuality = UserDefaults.standard.string(forKey: "video_quality") ?? "medium"
     @State private var hasAPIKey = false // Changed to State variable
@@ -520,7 +520,7 @@ struct VisionModelSettingsView: View {
     private var googleModelList: some View {
         let models = [
             ("gemini-3-flash-preview", "Gemini 3 Flash", "settings.model.gemini3flash.desc".localized),
-            ("gemini-3-pro-preview", "Gemini 3 Pro", "settings.model.gemini3pro.desc".localized)
+            ("gemini-3.1-flash-lite-preview", "Gemini 3.1 Flash-Lite", "settings.model.gemini31flashlite.desc".localized)
         ]
 
         return List {

@@ -41,7 +41,7 @@ struct ConversationRecord: Identifiable, Codable {
         id: UUID = UUID(),
         timestamp: Date = Date(),
         messages: [ConversationMessage],
-        aiModel: String = "gemini-2.5-flash-native-audio-preview-12-2025",
+        aiModel: String = "gemini-3.1-flash-live-preview",
         language: String = "en-US",
         projectContext: ProjectContextSnapshot? = nil
     ) {

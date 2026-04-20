@@ -143,7 +143,7 @@ class APIKeyManager(context: Context) {
     }
 
     fun getAIModel(): String {
-        return sharedPreferences.getString(KEY_AI_MODEL, "gemini-2.5-flash-native-audio-preview-12-2025") ?: "gemini-2.5-flash-native-audio-preview-12-2025"
+        return sharedPreferences.getString(KEY_AI_MODEL, "gemini-3.1-flash-live-preview") ?: "gemini-3.1-flash-live-preview"
     }
 
     // Output Language

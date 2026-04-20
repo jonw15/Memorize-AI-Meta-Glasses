@@ -157,6 +157,7 @@
 "settings.model.openrouter" = "OpenRouter Models";
 "settings.model.gemini3flash.desc" = "Fast and efficient vision model";
 "settings.model.gemini3pro.desc" = "Most capable vision model";
+"settings.model.gemini31flashlite.desc" = "Fastest, lowest-cost Flash model";
 "settings.model.search" = "Search models...";
 "settings.model.visiononly" = "Show vision-capable models only";
 "settings.model.loading" = "Loading models...";
