@@ -1320,7 +1320,13 @@ struct MemorizePostCaptureActionsView: View {
             MemorizeInfographicsView(
                 pages: completedPages,
                 bookTitle: bookTitle,
-                sectionTitle: sectionTitle
+                sectionTitle: sectionTitle,
+                sourceBundles: [
+                    InfographicSourceBundle(
+                        title: "memorize.source_camera".localized,
+                        pages: completedPages
+                    )
+                ]
             )
         }
         .task {
@@ -1562,84 +1568,390 @@ struct MemorizePostCaptureActionsView: View {
     }
 }
 
-// MARK: - Infographics View (Gemini Image Generation)
+// MARK: - Infographics View (Nano Banana Image Generation)
+
+struct InfographicSourceBundle: Identifiable {
+    let id = UUID()
+    let title: String
+    let pages: [PageCapture]
+}
+
+private enum InfographicOrientation: String, CaseIterable, Identifiable {
+    case landscape
+    case portrait
+    case square
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .landscape: return "memorize.infographic_landscape"
+        case .portrait: return "memorize.infographic_portrait"
+        case .square: return "memorize.infographic_square"
+        }
+    }
+
+    var aspectRatio: String {
+        switch self {
+        case .landscape: return "16:9"
+        case .portrait: return "9:16"
+        case .square: return "1:1"
+        }
+    }
+
+    var promptDescription: String {
+        switch self {
+        case .landscape:
+            return "landscape orientation with a 16:9 aspect ratio"
+        case .portrait:
+            return "portrait orientation with a 9:16 aspect ratio optimized for mobile viewing"
+        case .square:
+            return "square orientation with a 1:1 aspect ratio"
+        }
+    }
+}
+
+private enum InfographicLanguage: String, CaseIterable, Identifiable {
+    case english
+    case simplifiedChinese
+    case spanish
+    case french
+    case japanese
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .english: return "memorize.infographic_english_default"
+        case .simplifiedChinese: return "memorize.infographic_chinese_simplified"
+        case .spanish: return "memorize.infographic_spanish"
+        case .french: return "memorize.infographic_french"
+        case .japanese: return "memorize.infographic_japanese"
+        }
+    }
+
+    var promptInstruction: String {
+        switch self {
+        case .english: return "English"
+        case .simplifiedChinese: return "Simplified Chinese"
+        case .spanish: return "Spanish"
+        case .french: return "French"
+        case .japanese: return "Japanese"
+        }
+    }
+}
 
 struct MemorizeInfographicsView: View {
     let pages: [PageCapture]
     let bookTitle: String
     let sectionTitle: String
+    let sourceBundles: [InfographicSourceBundle]
 
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var isPromptFocused: Bool
     @State private var infographics: [UIImage] = []
     @State private var isGenerating = false
+    @State private var hasStartedGeneration = false
     @State private var errorMessage: String?
     @State private var progress: Int = 0
     @State private var totalToGenerate: Int = 0
+    @State private var orientation: InfographicOrientation = .portrait
+    @State private var selectedSourceIDs: Set<UUID>
+    @State private var customPrompt: String = ""
+    @State private var language: InfographicLanguage = .english
 
     private let infographicsAccent = Color(red: 0.93, green: 0.35, blue: 0.47)
+    private let nanoBananaModel = "gemini-3.1-flash-image-preview"
+
+    init(
+        pages: [PageCapture],
+        bookTitle: String,
+        sectionTitle: String,
+        sourceBundles: [InfographicSourceBundle]? = nil
+    ) {
+        self.pages = pages
+        self.bookTitle = bookTitle
+        self.sectionTitle = sectionTitle
+
+        let completedFallback = pages.filter { $0.status == .completed }
+        let providedBundles = sourceBundles?
+            .map { bundle in
+                InfographicSourceBundle(
+                    title: bundle.title,
+                    pages: bundle.pages.filter { $0.status == .completed }
+                )
+            }
+            .filter { !$0.pages.isEmpty } ?? []
+
+        let normalizedBundles: [InfographicSourceBundle]
+        if providedBundles.isEmpty {
+            normalizedBundles = [
+                InfographicSourceBundle(
+                    title: "memorize.sources".localized,
+                    pages: completedFallback
+                )
+            ].filter { !$0.pages.isEmpty }
+        } else {
+            normalizedBundles = providedBundles
+        }
+
+        self.sourceBundles = normalizedBundles
+        _selectedSourceIDs = State(initialValue: Set(normalizedBundles.prefix(1).map(\.id)))
+    }
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                if isGenerating && infographics.isEmpty {
-                    // Loading state
-                    Spacer()
-                    VStack(spacing: AppSpacing.md) {
-                        ProgressView()
-                            .tint(.white)
-                            .scaleEffect(1.5)
-                        Text("memorize.infographics_generating".localized)
-                            .font(AppTypography.headline)
-                            .foregroundColor(.white)
-                        if totalToGenerate > 0 {
-                            Text("\(progress)/\(totalToGenerate)")
-                                .font(AppTypography.caption)
-                                .foregroundColor(.white.opacity(0.6))
-                        }
-                    }
-                    Spacer()
-                } else if infographics.isEmpty && !isGenerating {
-                    // Error or empty state
-                    Spacer()
-                    VStack(spacing: AppSpacing.md) {
-                        Image(systemName: "chart.bar.doc.horizontal")
-                            .font(.system(size: 48))
-                            .foregroundColor(.white.opacity(0.3))
-                        if let errorMessage {
-                            Text(errorMessage)
-                                .font(AppTypography.body)
-                                .foregroundColor(.white.opacity(0.7))
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, AppSpacing.lg)
-                        }
-                    }
-                    Spacer()
-                } else {
-                    // Infographics scroll view
-                    ScrollView {
-                        LazyVStack(spacing: AppSpacing.md) {
-                            ForEach(Array(infographics.enumerated()), id: \.offset) { index, image in
-                                ZoomableImageView(image: image, accent: infographicsAccent)
-                                    .padding(.horizontal, AppSpacing.md)
-                            }
+        ZStack(alignment: .topTrailing) {
+            AppColors.memorizeBackground.ignoresSafeArea()
 
-                            if isGenerating {
-                                HStack(spacing: 8) {
-                                    ProgressView()
-                                        .tint(.white)
-                                        .scaleEffect(0.8)
-                                    Text("memorize.infographics_generating_more".localized)
-                                        .font(AppTypography.caption)
-                                        .foregroundColor(.white.opacity(0.6))
-                                }
-                                .padding(AppSpacing.md)
-                            }
+            if hasStartedGeneration {
+                generationView
+            } else {
+                customizationView
+            }
+
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundColor(.white.opacity(0.88))
+                    .frame(width: 48, height: 48)
+            }
+            .padding(.trailing, AppSpacing.lg)
+            .padding(.top, AppSpacing.xl)
+        }
+    }
+
+    private var customizationView: some View {
+        GeometryReader { proxy in
+            let compact = proxy.size.height < 760
+            let sectionSpacing: CGFloat = compact ? 12 : 16
+            let labelSpacing: CGFloat = compact ? 8 : 10
+            let controlHeight: CGFloat = compact ? 44 : 48
+
+            VStack(alignment: .leading, spacing: sectionSpacing) {
+                VStack(spacing: AppSpacing.lg) {
+                    Image(systemName: "wand.and.sparkles")
+                        .font(.system(size: compact ? 24 : 28, weight: .semibold))
+                        .foregroundColor(AppColors.memorizeAccent)
+                        .frame(width: compact ? 70 : 82, height: compact ? 70 : 82)
+                        .background(Color.black.opacity(0.22))
+                        .clipShape(Circle())
+
+                    Text("memorize.customize_infographic".localized)
+                        .font(.system(size: compact ? 28 : 31, weight: .regular, design: .rounded))
+                        .foregroundColor(.white.opacity(0.92))
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.75)
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(.top, compact ? 70 : 82)
+                .padding(.bottom, compact ? 4 : 8)
+
+                VStack(alignment: .leading, spacing: labelSpacing) {
+                    Text("memorize.infographic_orientation".localized)
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.9))
+
+                    HStack(spacing: 10) {
+                        ForEach(InfographicOrientation.allCases) { option in
+                            orientationButton(option, height: controlHeight)
                         }
-                        .padding(.vertical, AppSpacing.md)
                     }
                 }
 
-                // Done button
+                VStack(alignment: .leading, spacing: labelSpacing) {
+                    Text("memorize.infographic_sources".localized)
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.9))
+
+                    Menu {
+                        ForEach(sourceBundles) { source in
+                            Button {
+                                toggleSourceSelection(source)
+                            } label: {
+                                HStack {
+                                    Text(source.title)
+                                    if selectedSourceIDs.contains(source.id) {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "folder")
+                                .font(.system(size: 16, weight: .medium))
+                            Text("\(selectedSourceCount)")
+                                .font(.system(size: 19, weight: .semibold, design: .rounded))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 12, weight: .bold))
+                        }
+                        .foregroundColor(.white.opacity(0.86))
+                        .padding(.horizontal, 20)
+                        .frame(height: controlHeight)
+                        .background(Color.black.opacity(0.22))
+                        .clipShape(Capsule())
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: labelSpacing) {
+                    Text("memorize.infographic_prompt".localized)
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.9))
+
+                    ZStack(alignment: .topLeading) {
+                        if customPrompt.isEmpty {
+                            Text("memorize.infographic_prompt_placeholder".localized)
+                                .font(.system(size: compact ? 16 : 17, weight: .regular, design: .rounded))
+                                .foregroundColor(.white.opacity(0.42))
+                                .lineSpacing(5)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 16)
+                                .allowsHitTesting(false)
+                        }
+
+                        TextEditor(text: $customPrompt)
+                            .font(.system(size: compact ? 16 : 17, weight: .regular, design: .rounded))
+                            .foregroundColor(.white.opacity(0.9))
+                            .lineSpacing(5)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .scrollContentBackground(.hidden)
+                            .background(Color.clear)
+                            .focused($isPromptFocused)
+                    }
+                    .frame(height: compact ? 104 : 118)
+                    .background(AppColors.memorizeBackground.opacity(0.7))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(isPromptFocused ? AppColors.memorizeAccent : Color.white.opacity(0.14), lineWidth: isPromptFocused ? 2.5 : 1)
+                    )
+                }
+
+                VStack(alignment: .leading, spacing: labelSpacing) {
+                    Text("memorize.infographic_language".localized)
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.9))
+
+                    Menu {
+                        ForEach(InfographicLanguage.allCases) { option in
+                            Button(option.titleKey.localized) {
+                                language = option
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 14) {
+                            Text(language.titleKey.localized)
+                                .font(.system(size: 19, weight: .semibold, design: .rounded))
+                                .lineLimit(1)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 12, weight: .bold))
+                        }
+                        .foregroundColor(.white.opacity(0.86))
+                        .padding(.horizontal, 22)
+                        .frame(height: controlHeight)
+                        .background(Color.black.opacity(0.22))
+                        .clipShape(Capsule())
+                    }
+                }
+
+                Button {
+                    startGeneration()
+                } label: {
+                    Text("memorize.generate".localized)
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: compact ? 58 : 64)
+                        .background(AppColors.memorizeAccent)
+                        .clipShape(Capsule())
+                }
+                .disabled(selectedPages.isEmpty)
+                .opacity(selectedPages.isEmpty ? 0.55 : 1)
+                .padding(.horizontal, 44)
+                .padding(.top, compact ? 2 : 6)
+            }
+            .padding(.horizontal, AppSpacing.lg)
+            .padding(.bottom, AppSpacing.lg)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+        }
+    }
+
+    private var generationView: some View {
+        VStack(spacing: 0) {
+            if isGenerating && infographics.isEmpty {
+                Spacer()
+                VStack(spacing: AppSpacing.md) {
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(1.5)
+                    Text("memorize.infographics_generating".localized)
+                        .font(AppTypography.headline)
+                        .foregroundColor(.white)
+                    if totalToGenerate > 0 {
+                        Text("\(progress)/\(totalToGenerate)")
+                            .font(AppTypography.caption)
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                }
+                Spacer()
+            } else if infographics.isEmpty && !isGenerating {
+                Spacer()
+                VStack(spacing: AppSpacing.md) {
+                    Image(systemName: "chart.bar.doc.horizontal")
+                        .font(.system(size: 48))
+                        .foregroundColor(.white.opacity(0.3))
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(AppTypography.body)
+                            .foregroundColor(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, AppSpacing.lg)
+                    }
+                }
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: AppSpacing.md) {
+                        ForEach(Array(infographics.enumerated()), id: \.offset) { _, image in
+                            ZoomableImageView(image: image, accent: infographicsAccent)
+                                .padding(.horizontal, AppSpacing.md)
+                        }
+
+                        if isGenerating {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .tint(.white)
+                                    .scaleEffect(0.8)
+                                Text("memorize.infographics_generating_more".localized)
+                                    .font(AppTypography.caption)
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                            .padding(AppSpacing.md)
+                        }
+                    }
+                    .padding(.top, 88)
+                    .padding(.bottom, AppSpacing.md)
+                }
+            }
+
+            HStack(spacing: AppSpacing.md) {
+                if !isGenerating && infographics.isEmpty {
+                    Button {
+                        hasStartedGeneration = false
+                    } label: {
+                        Text("memorize.back".localized)
+                            .font(AppTypography.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(AppCornerRadius.md)
+                    }
+                }
+
                 Button {
                     dismiss()
                 } label: {
@@ -1651,39 +1963,84 @@ struct MemorizeInfographicsView: View {
                         .background(Color.white.opacity(0.1))
                         .cornerRadius(AppCornerRadius.md)
                 }
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.bottom, AppSpacing.lg)
             }
-            .background(AppColors.memorizeBackground.ignoresSafeArea())
-            .navigationTitle("memorize.infographics".localized)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .foregroundColor(.white)
-                    }
-                }
-            }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.bottom, AppSpacing.lg)
         }
-        .task {
+    }
+
+    private func orientationButton(_ option: InfographicOrientation, height: CGFloat) -> some View {
+        Button {
+            orientation = option
+        } label: {
+            HStack(spacing: 8) {
+                if orientation == option {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+                Text(option.titleKey.localized)
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundColor(.white.opacity(0.88))
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .background(orientation == option ? Color.black.opacity(0.22) : Color.clear)
+            .overlay(
+                Capsule()
+                    .stroke(orientation == option ? Color.clear : Color.white.opacity(0.72), lineWidth: 1.5)
+            )
+            .clipShape(Capsule())
+        }
+    }
+
+    private var selectedSourceCount: Int {
+        selectedSourceIDs.count
+    }
+
+    private var selectedSourceBundles: [InfographicSourceBundle] {
+        sourceBundles.filter { selectedSourceIDs.contains($0.id) }
+    }
+
+    private var selectedPages: [PageCapture] {
+        selectedSourceBundles
+            .flatMap(\.pages)
+            .filter { $0.status == .completed }
+    }
+
+    private func toggleSourceSelection(_ source: InfographicSourceBundle) {
+        if selectedSourceIDs.contains(source.id) {
+            guard selectedSourceIDs.count > 1 else { return }
+            selectedSourceIDs.remove(source.id)
+        } else {
+            selectedSourceIDs.insert(source.id)
+        }
+    }
+
+    private func startGeneration() {
+        guard !isGenerating else { return }
+        infographics = []
+        errorMessage = nil
+        progress = 0
+        totalToGenerate = 0
+        hasStartedGeneration = true
+
+        Task {
             await generateInfographics()
         }
     }
 
     private func generateInfographics() async {
-        let completedPages = pages.filter { $0.status == .completed }
+        let completedPages = selectedPages
 
         guard !completedPages.isEmpty else {
-            errorMessage = "No text content available."
+            errorMessage = "memorize.infographic_no_text_error".localized
             return
         }
 
         // Scale infographic count by page count:
-        // 1-5 pages → 1-2, 6-10 → 2-3, 11-20 → 3-6, 20-40 → 5-10
+        // 1-5 pages: 1-2, 6-10: 2-3, 11-20: 3-6, 20-40: 5-10
         let pageCount = completedPages.count
         let infographicCount: Int
         switch pageCount {
@@ -1715,25 +2072,13 @@ struct MemorizeInfographicsView: View {
         for (index, sectionText) in sections.enumerated() {
             progress = index + 1
 
-            let prompt = """
-            Create a visually striking infographic image in portrait orientation (9:16 aspect ratio) for mobile viewing.
+            let prompt = infographicPrompt(sectionText: sectionText, index: index, total: sections.count)
 
-            Topic: \(bookTitle)\(sectionTitle.isEmpty ? "" : " — \(sectionTitle)")
-
-            Content to visualize (section \(index + 1) of \(sections.count)):
-            \(sectionText)
-
-            Design requirements:
-            - Portrait/vertical layout optimized for mobile phone screens
-            - Bold, clear typography with key facts and figures highlighted
-            - Use icons, charts, diagrams, or illustrations to represent concepts visually
-            - Professional color scheme with good contrast for readability
-            - Organize information in a clear visual hierarchy
-            - Include a section title or heading at the top
-            - Make it educational and visually engaging
-            """
-
-            if let image = await callGeminiImageGeneration(prompt: prompt, apiKey: apiKey) {
+            if let image = await callNanoBananaImageGeneration(
+                prompt: prompt,
+                apiKey: apiKey,
+                aspectRatio: orientation.aspectRatio
+            ) {
                 infographics.append(image)
             }
         }
@@ -1741,11 +2086,39 @@ struct MemorizeInfographicsView: View {
         isGenerating = false
 
         if infographics.isEmpty {
-            errorMessage = "Could not generate infographics. Please try again."
+            errorMessage = "memorize.infographic_empty_error".localized
         }
     }
 
-    /// Group pages into chunks of N pages each, returning combined text per chunk
+    private func infographicPrompt(sectionText: String, index: Int, total: Int) -> String {
+        let trimmedCustomPrompt = customPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let styleGuidance = trimmedCustomPrompt.isEmpty ? "Use a polished educational visual style with strong contrast and a clear hierarchy." : trimmedCustomPrompt
+        let sourceNames = selectedSourceBundles.map(\.title).joined(separator: ", ")
+
+        return """
+        Create a visually striking educational infographic image.
+
+        Topic: \(bookTitle)\(sectionTitle.isEmpty ? "" : " - \(sectionTitle)")
+        Sources included: \(sourceNames)
+        Output layout: \(orientation.promptDescription), aspect ratio \(orientation.aspectRatio).
+        Language: Write all visible infographic text in \(language.promptInstruction).
+
+        Content to visualize (section \(index + 1) of \(total)):
+        \(sectionText)
+
+        User style guidance:
+        \(styleGuidance)
+
+        Design requirements:
+        - Bold, legible typography with the most important facts and figures highlighted.
+        - Use icons, charts, diagrams, timelines, or labeled illustrations to make the study material visual.
+        - Keep text concise and accurate; do not invent facts beyond the provided content.
+        - Organize the information in a clear visual hierarchy with a strong title.
+        - Make it useful as a study aid on a phone screen.
+        """
+    }
+
+    /// Group pages into chunks of N pages each, returning combined text per chunk.
     private func groupPagesByChunk(_ pages: [PageCapture], pagesPerChunk: Int) -> [String] {
         var sections: [String] = []
         let chunkSize = max(1, pagesPerChunk)
@@ -1765,9 +2138,8 @@ struct MemorizeInfographicsView: View {
         return sections
     }
 
-    private func callGeminiImageGeneration(prompt: String, apiKey: String) async -> UIImage? {
-        let model = "gemini-3.1-flash-image-preview"
-        let urlString = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
+    private func callNanoBananaImageGeneration(prompt: String, apiKey: String, aspectRatio: String) async -> UIImage? {
+        let urlString = "https://generativelanguage.googleapis.com/v1beta/models/\(nanoBananaModel):generateContent?key=\(apiKey)"
 
         guard let url = URL(string: urlString) else { return nil }
 
@@ -1784,7 +2156,11 @@ struct MemorizeInfographicsView: View {
                 ]
             ],
             "generationConfig": [
-                "responseModalities": ["TEXT", "IMAGE"]
+                "responseModalities": ["IMAGE"],
+                "imageConfig": [
+                    "aspectRatio": aspectRatio,
+                    "imageSize": "2K"
+                ]
             ]
         ]
 
@@ -1808,13 +2184,12 @@ struct MemorizeInfographicsView: View {
                 return nil
             }
 
-            // Find the image part in the response
             for part in parts {
-                if let inlineData = part["inlineData"] as? [String: Any],
-                   let base64String = inlineData["data"] as? String,
+                let inlineData = (part["inlineData"] as? [String: Any]) ?? (part["inline_data"] as? [String: Any])
+                if let base64String = inlineData?["data"] as? String,
                    let imageData = Data(base64Encoded: base64String),
                    let image = UIImage(data: imageData) {
-                    print("✅ [Infographics] Generated image: \(image.size)")
+                    print("✅ [Infographics] Generated image with Nano Banana: \(image.size)")
                     return image
                 }
             }

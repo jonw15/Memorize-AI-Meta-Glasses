@@ -89,6 +89,16 @@ struct StudyTabView: View {
                         viewModel.startPodcast()
                     }
 
+                    // Infographics
+                    studyActionButton(
+                        title: "memorize.infographics".localized,
+                        subtitle: "memorize.infographics_subtitle".localized,
+                        icon: "chart.bar.doc.horizontal.fill",
+                        gradient: [Color(red: 0.93, green: 0.35, blue: 0.47), Color(red: 0.80, green: 0.22, blue: 0.35)]
+                    ) {
+                        showInfographics = true
+                    }
+
                     Text("memorize.test_mode_prompt".localized)
                         .font(AppTypography.subheadline)
                         .foregroundColor(Color.white.opacity(0.7))
@@ -211,9 +221,41 @@ struct StudyTabView: View {
             MemorizeInfographicsView(
                 pages: completedPages,
                 bookTitle: bookTitle,
-                sectionTitle: sectionTitle
+                sectionTitle: sectionTitle,
+                sourceBundles: infographicSourceBundles
             )
         }
+    }
+
+    private var infographicSourceBundles: [InfographicSourceBundle] {
+        var bundles: [InfographicSourceBundle] = []
+
+        let legacyPages = viewModel.book.pages.filter { $0.status == .completed }
+        if !legacyPages.isEmpty {
+            bundles.append(
+                InfographicSourceBundle(
+                    title: "memorize.source_camera".localized,
+                    pages: legacyPages
+                )
+            )
+        }
+
+        for source in viewModel.book.sources {
+            let completed = source.pages.filter { $0.status == .completed }
+            guard !completed.isEmpty else { continue }
+            bundles.append(InfographicSourceBundle(title: source.name, pages: completed))
+        }
+
+        if bundles.isEmpty && !completedPages.isEmpty {
+            bundles.append(
+                InfographicSourceBundle(
+                    title: "memorize.sources".localized,
+                    pages: completedPages
+                )
+            )
+        }
+
+        return bundles
     }
 
     private func studyActionButton(title: String, subtitle: String, icon: String, gradient: [Color], action: @escaping () -> Void) -> some View {
