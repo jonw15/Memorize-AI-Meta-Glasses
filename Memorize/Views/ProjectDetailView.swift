@@ -760,7 +760,7 @@ If the user asks about something you cannot see clearly, say what is unclear and
     }
 
     private var liveControls: some View {
-        HStack(spacing: AppSpacing.md) {
+        HStack {
             Button {
                 if aiViewModel.isRecording {
                     aiViewModel.stopRecording()
@@ -776,19 +776,8 @@ If the user asks about something you cannot see clearly, say what is unclear and
                     .clipShape(Circle())
             }
             .disabled(!aiViewModel.isConnected)
-
-            Button {
-                dismiss()
-            } label: {
-                Text("memorize.live_mode_close".localized)
-                    .font(AppTypography.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(Color.white.opacity(0.12))
-                    .cornerRadius(AppCornerRadius.lg)
-            }
         }
+        .frame(maxWidth: .infinity)
         .padding(AppSpacing.md)
         .background(AppColors.memorizeCard)
     }

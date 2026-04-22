@@ -104,6 +104,18 @@ final class GeminiLiveService: NSObject, @unchecked Sendable {
     /// Gemini voice name used in session config. Set before calling connect().
     var voiceName: String = "Aoede"
 
+    /// While the AI is playing audio, mic buffers below this RMS are assumed to be
+    /// acoustic echo (speaker → mic bleed-through) and dropped before being sent to
+    /// Gemini. Buffers at or above this level are treated as a real barge-in: local
+    /// playback is cut and the audio is forwarded so Gemini picks up the new turn.
+    var bargeInRMSThreshold: Float = 0.15
+    /// Master switch for the echo gate. Set to false to forward every mic buffer.
+    var echoSuppressionEnabled: Bool = true
+    /// Keep gating mic buffers for this long after the last playback buffer drains,
+    /// to catch residual reverb/speaker-decay tail.
+    private let postPlaybackGateDuration: TimeInterval = 0.25
+    private var lastPlaybackActiveAt: Date?
+
     init(
         apiKey: String,
         model: String? = nil,
@@ -694,6 +706,27 @@ Do not apologize.
         print("🔊 [Gemini] Restored .voiceChat mode after overlay video")
     }
 
+    /// True while the AI is actively playing audio, or within the brief tail window
+    /// right after playback drains (to catch residual echo/reverb).
+    private func isAIAudioActive() -> Bool {
+        if isCollectingAudio || hasStartedPlaying { return true }
+        if playerNode?.isPlaying == true && pendingPlaybackBufferCount > 0 { return true }
+        if let last = lastPlaybackActiveAt,
+           Date().timeIntervalSince(last) < postPlaybackGateDuration {
+            return true
+        }
+        return false
+    }
+
+    /// True when audio is routed to the phone's built-in loudspeaker. That route uses
+    /// `.default` mode (no hardware AEC), so the AI's own playback bleeds back into
+    /// the mic at high RMS — barge-in via threshold isn't safe. On HFP/AirPods the
+    /// Voice Processing I/O unit handles AEC and threshold-based barge-in works.
+    private func isBuiltInSpeakerRoute() -> Bool {
+        let route = AVAudioSession.sharedInstance().currentRoute
+        return route.outputs.contains { $0.portType == .builtInSpeaker || $0.portType == .builtInReceiver }
+    }
+
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat) {
         guard !isMicMuted else { return }
         guard let recordConverter, let recordTargetFormat else { return }
@@ -724,25 +757,47 @@ Do not apologize.
         let frameLength = Int(converted.frameLength)
         let channel = floatChannelData.pointee
 
+        // Compute RMS once — used for both mic-level UI and the echo gate.
+        var sumOfSquares: Float = 0
+        for i in 0..<frameLength {
+            let sample = channel[i]
+            sumOfSquares += sample * sample
+        }
+        let rms = sqrt(sumOfSquares / Float(max(frameLength, 1)))
+
+        if let onMicLevel {
+            let normalized = min(rms * 3.0, 1.0)
+            DispatchQueue.main.async {
+                onMicLevel(normalized)
+            }
+        }
+
+        // Echo gate: while the AI is playing (or just finished), the speaker's
+        // audio bleeds back into the mic. Forwarding those buffers makes Gemini's
+        // server VAD self-interrupt and makes `input_audio_transcription` return
+        // the AI's own words as the user's transcript.
+        //
+        // Built-in speaker route has no hardware AEC — echo RMS regularly exceeds
+        // any user-threshold, so barge-in misfires and the AI can't finish a turn.
+        // There, fully gate the mic while the AI is speaking. On HFP/AirPods where
+        // Voice Processing I/O handles AEC, drop quiet buffers but let loud speech
+        // through as a real barge-in.
+        if echoSuppressionEnabled && isAIAudioActive() {
+            if isBuiltInSpeakerRoute() {
+                return
+            }
+            if rms >= bargeInRMSThreshold {
+                interruptPlayback(expectServerInterruption: true)
+            } else {
+                return
+            }
+        }
+
         var int16Data = [Int16](repeating: 0, count: frameLength)
         for i in 0..<frameLength {
             let sample = channel[i]
             let clampedSample = max(-1.0, min(1.0, sample))
             int16Data[i] = Int16(clampedSample * 32767.0)
-        }
-
-        // Calculate RMS audio level for waveform visualization
-        if let onMicLevel {
-            var sumOfSquares: Float = 0
-            for i in 0..<frameLength {
-                let sample = channel[i]
-                sumOfSquares += sample * sample
-            }
-            let rms = sqrt(sumOfSquares / Float(max(frameLength, 1)))
-            let normalized = min(rms * 3.0, 1.0)  // Amplify for better visual response
-            DispatchQueue.main.async {
-                onMicLevel(normalized)
-            }
         }
 
         let data = Data(bytes: int16Data, count: frameLength * MemoryLayout<Int16>.size)
@@ -1441,10 +1496,12 @@ Do not apologize.
         }
 
         pendingPlaybackBufferCount += 1
+        lastPlaybackActiveAt = Date()
         playerNode.scheduleBuffer(pcmBuffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.pendingPlaybackBufferCount = max(0, self.pendingPlaybackBufferCount - 1)
+                self.lastPlaybackActiveAt = Date()
                 self.notifyPlaybackFinishedIfDrained()
             }
         }
