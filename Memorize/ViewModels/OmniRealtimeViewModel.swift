@@ -46,10 +46,21 @@ class OmniRealtimeViewModel: ObservableObject {
     @Published var imageSendInterval: TimeInterval = LiveAIConfig.imageSendIntervalSeconds
     private var lastUserTranscript = ""
     private var lastAssistantTranscript = ""
+    private let initialGreetingPrompt: String
 
-    init(apiKey: String) {
+    init(
+        apiKey: String,
+        systemPrompt: String? = nil,
+        includeTools: Bool = true,
+        initialGreetingPrompt: String = "Greet the user briefly and ask what they'd like to know about or help with today. Keep it to one short sentence."
+    ) {
         self.apiKey = apiKey
-        self.geminiService = GeminiLiveService(apiKey: apiKey)
+        self.initialGreetingPrompt = initialGreetingPrompt
+        self.geminiService = GeminiLiveService(
+            apiKey: apiKey,
+            systemPrompt: systemPrompt,
+            includeTools: includeTools
+        )
         setupCallbacks()
     }
 
@@ -62,7 +73,7 @@ class OmniRealtimeViewModel: ObservableObject {
             Task { @MainActor in
                 self?.isConnected = true
                 // Send an initial prompt so the AI greets the user first
-                self?.geminiService?.sendTextInput("Greet the user briefly and ask what they'd like to know about or help with today. Keep it to one short sentence.")
+                self?.geminiService?.sendTextInput(self?.initialGreetingPrompt ?? "")
             }
         }
 

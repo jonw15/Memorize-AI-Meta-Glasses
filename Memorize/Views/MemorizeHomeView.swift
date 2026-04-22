@@ -16,6 +16,7 @@ struct MemorizeHomeView: View {
 
     @StateObject private var viewModel = MemorizeHomeViewModel()
     @State private var showNewSessionForm = false
+    @State private var showLiveMode = false
     @State private var newSessionDetent: PresentationDetent = .medium
     @State private var selectedBook: Book?
     @State private var selectedParentBook: Book?
@@ -47,6 +48,10 @@ struct MemorizeHomeView: View {
     var body: some View {
         VStack(spacing: 0) {
             homeHeaderSection
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.top, AppSpacing.sm)
+
+            liveModeBanner
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.top, AppSpacing.sm)
 
@@ -121,6 +126,16 @@ struct MemorizeHomeView: View {
             } else {
                 homeVoice.resumeListening()
             }
+        }
+        .onChange(of: showLiveMode) { _, isShowing in
+            if isShowing {
+                homeVoice.suspendListening()
+            } else {
+                homeVoice.resumeListening()
+            }
+        }
+        .fullScreenCover(isPresented: $showLiveMode) {
+            ProjectLiveModeView(streamViewModel: streamViewModel)
         }
         .fullScreenCover(item: $selectedBook, onDismiss: {
             viewModel.loadBooks()
@@ -280,6 +295,42 @@ struct MemorizeHomeView: View {
 
             Spacer()
         }
+    }
+
+    private var liveModeBanner: some View {
+        Button {
+            showLiveMode = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "camera.viewfinder")
+                    .font(.system(size: 21, weight: .semibold))
+                    .foregroundColor(.black)
+                    .frame(width: 42, height: 42)
+                    .background(AppColors.memorizeAccent)
+                    .cornerRadius(AppCornerRadius.sm)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("memorize.live_mode".localized)
+                        .font(AppTypography.headline)
+                        .foregroundColor(.white)
+
+                    Text("memorize.live_mode_desc".localized)
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.6))
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Color.white.opacity(0.35))
+            }
+            .padding(AppSpacing.md)
+            .background(AppColors.memorizeCard)
+            .cornerRadius(AppCornerRadius.lg)
+        }
+        .buttonStyle(.plain)
     }
 
     private func projectCard(book: Book) -> some View {

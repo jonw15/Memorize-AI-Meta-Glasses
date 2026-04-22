@@ -5,6 +5,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import AVFoundation
 
 struct ProjectDetailView: View {
     @ObservedObject var streamViewModel: StreamSessionViewModel
@@ -16,6 +17,7 @@ struct ProjectDetailView: View {
     @State private var showRenameAlert = false
     @State private var renameText = ""
     @State private var showTutor = false
+    @State private var showLiveMode = false
     @State private var isDeletingProject = false
     @State private var tutorStartedAt: Date?
     private let minimumNoteGenerationDuration: TimeInterval = 10
@@ -78,6 +80,9 @@ struct ProjectDetailView: View {
             .overlay {
                 noteGenerationOverlay
             }
+            .fullScreenCover(isPresented: $showLiveMode) {
+                ProjectLiveModeView(streamViewModel: streamViewModel)
+            }
             .fullScreenCover(isPresented: $showTutor, onDismiss: {
                 finishTutorSessionForNotes()
             }) {
@@ -93,6 +98,7 @@ struct ProjectDetailView: View {
     private var navigationContainer: some View {
         NavigationView {
             VStack(spacing: 0) {
+                liveModeBanner
                 tabContent
                 bottomTabBar
             }
@@ -129,6 +135,44 @@ struct ProjectDetailView: View {
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
+    }
+
+    private var liveModeBanner: some View {
+        Button {
+            showLiveMode = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "camera.viewfinder")
+                    .font(.system(size: 21, weight: .semibold))
+                    .foregroundColor(.black)
+                    .frame(width: 42, height: 42)
+                    .background(AppColors.memorizeAccent)
+                    .cornerRadius(AppCornerRadius.sm)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("memorize.live_mode".localized)
+                        .font(AppTypography.headline)
+                        .foregroundColor(.white)
+                    Text("memorize.live_mode_desc".localized)
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.6))
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Color.white.opacity(0.35))
+            }
+            .padding(AppSpacing.md)
+            .background(AppColors.memorizeCard)
+            .cornerRadius(AppCornerRadius.lg)
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, AppSpacing.sm)
+            .padding(.bottom, AppSpacing.xs)
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -423,6 +467,541 @@ struct ProjectDetailView: View {
             }
             .foregroundColor(selectedTab == tab ? AppColors.memorizeAccent : Color.white.opacity(0.5))
             .frame(maxWidth: .infinity)
+        }
+    }
+}
+
+// MARK: - Project Live Mode
+
+struct ProjectLiveModeView: View {
+    @ObservedObject var streamViewModel: StreamSessionViewModel
+    @StateObject private var aiViewModel: OmniRealtimeViewModel
+    @StateObject private var phoneCamera = ProjectLivePhoneCameraModel()
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var selectedDevice: CaptureDevice?
+    @State private var frameTimer: Timer?
+
+    init(streamViewModel: StreamSessionViewModel) {
+        self.streamViewModel = streamViewModel
+        let apiKey = APIProviderManager.staticLiveAIAPIKey
+        _aiViewModel = StateObject(
+            wrappedValue: OmniRealtimeViewModel(
+                apiKey: apiKey,
+                systemPrompt: """
+You are Aria, a concise live visual assistant. The user is sharing a live camera view from either Ray-Ban Meta glasses or an iPhone camera.
+Answer questions about what is visible in the scene. Be brief, practical, and conversational.
+If the user asks about something you cannot see clearly, say what is unclear and ask them to point the camera closer or from another angle.
+""",
+                includeTools: false,
+                initialGreetingPrompt: "Greet the user briefly and tell them they can ask about what the camera sees. Keep it to one short sentence."
+            )
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            AppColors.memorizeBackground.ignoresSafeArea()
+
+            if let selectedDevice {
+                liveCameraView(for: selectedDevice)
+            } else {
+                devicePicker
+            }
+        }
+        .onChange(of: aiViewModel.isConnected) { _, isConnected in
+            guard isConnected, !aiViewModel.isRecording else { return }
+            aiViewModel.startRecording()
+        }
+        .alert("error".localized, isPresented: liveErrorPresented) {
+            Button("ok".localized, role: .cancel) {
+                aiViewModel.dismissError()
+                phoneCamera.errorMessage = nil
+            }
+        } message: {
+            Text(aiViewModel.errorMessage ?? phoneCamera.errorMessage ?? "")
+        }
+        .onDisappear {
+            stopLiveMode()
+        }
+    }
+
+    private var devicePicker: some View {
+        VStack(spacing: AppSpacing.lg) {
+            HStack {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(width: 40, height: 40)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(AppCornerRadius.sm)
+                }
+
+                Spacer()
+            }
+
+            Spacer()
+
+            VStack(spacing: AppSpacing.sm) {
+                Image(systemName: "camera.viewfinder")
+                    .font(.system(size: 44, weight: .semibold))
+                    .foregroundColor(AppColors.memorizeAccent)
+
+                Text("memorize.live_mode_select_device".localized)
+                    .font(AppTypography.title2)
+                    .foregroundColor(.white)
+
+                Text("memorize.live_mode_select_device_desc".localized)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(Color.white.opacity(0.62))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .padding(.horizontal, AppSpacing.lg)
+            }
+
+            VStack(spacing: AppSpacing.md) {
+                liveDeviceButton(
+                    device: .glasses,
+                    subtitle: streamViewModel.hasActiveDevice
+                        ? "memorize.live_mode_glasses_desc".localized
+                        : "memorize.live_mode_glasses_unavailable".localized,
+                    isEnabled: streamViewModel.hasActiveDevice
+                )
+
+                liveDeviceButton(
+                    device: .phone,
+                    subtitle: "memorize.live_mode_phone_desc".localized,
+                    isEnabled: true
+                )
+            }
+
+            Spacer()
+        }
+        .padding(AppSpacing.lg)
+    }
+
+    private func liveDeviceButton(device: CaptureDevice, subtitle: String, isEnabled: Bool) -> some View {
+        Button {
+            startLiveMode(with: device)
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: device.iconName)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(isEnabled ? .black : Color.white.opacity(0.35))
+                    .frame(width: 44, height: 44)
+                    .background(isEnabled ? AppColors.memorizeAccent : Color.white.opacity(0.08))
+                    .cornerRadius(AppCornerRadius.sm)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(device.rawValue)
+                        .font(AppTypography.headline)
+                        .foregroundColor(isEnabled ? .white : Color.white.opacity(0.42))
+
+                    Text(subtitle)
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(isEnabled ? 0.58 : 0.34))
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Color.white.opacity(isEnabled ? 0.38 : 0.18))
+            }
+            .padding(AppSpacing.md)
+            .frame(maxWidth: .infinity)
+            .background(AppColors.memorizeCard)
+            .cornerRadius(AppCornerRadius.lg)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+    }
+
+    private func liveCameraView(for device: CaptureDevice) -> some View {
+        VStack(spacing: 0) {
+            liveHeader(for: device)
+
+            ZStack {
+                livePreview(for: device)
+
+                VStack {
+                    Spacer()
+                    liveStatusPill
+                }
+                .padding(.bottom, AppSpacing.md)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 360)
+            .clipped()
+
+            conversationPanel
+
+            liveControls
+        }
+    }
+
+    private func liveHeader(for device: CaptureDevice) -> some View {
+        HStack(spacing: 12) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(AppCornerRadius.sm)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("memorize.live_mode".localized)
+                    .font(AppTypography.headline)
+                    .foregroundColor(.white)
+                Text(device.rawValue)
+                    .font(AppTypography.caption)
+                    .foregroundColor(Color.white.opacity(0.5))
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, AppSpacing.md)
+        .padding(.vertical, AppSpacing.sm)
+        .background(AppColors.memorizeBackground)
+    }
+
+    @ViewBuilder
+    private func livePreview(for device: CaptureDevice) -> some View {
+        switch device {
+        case .phone:
+            PhoneCameraPreviewView(session: phoneCamera.session)
+                .ignoresSafeArea(edges: .horizontal)
+                .overlay {
+                    if let error = phoneCamera.errorMessage {
+                        liveMessageOverlay(systemImage: "camera.fill", message: error)
+                    }
+                }
+        case .glasses:
+            if let frame = streamViewModel.currentVideoFrame {
+                Image(uiImage: frame)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                liveMessageOverlay(
+                    systemImage: "eyeglasses",
+                    message: streamViewModel.streamingStatus == .streaming
+                        ? "stream.waiting".localized
+                        : "stream.connecting".localized
+                )
+            }
+        }
+    }
+
+    private var liveStatusPill: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(aiViewModel.isRecording ? Color.green : Color.orange)
+                .frame(width: 8, height: 8)
+
+            Text(statusText)
+                .font(AppTypography.caption)
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(0.58))
+        .cornerRadius(AppCornerRadius.sm)
+    }
+
+    private var statusText: String {
+        if aiViewModel.isRecording {
+            return "memorize.live_mode_listening".localized
+        }
+        if aiViewModel.isConnected {
+            return "memorize.live_mode_ready".localized
+        }
+        return "memorize.live_mode_connecting_ai".localized
+    }
+
+    private var conversationPanel: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                if aiViewModel.conversationHistory.isEmpty && aiViewModel.currentTranscript.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("memorize.live_mode_scene_prompt".localized)
+                            .font(AppTypography.headline)
+                            .foregroundColor(.white)
+                        Text("memorize.live_mode_scene_prompt_desc".localized)
+                            .font(AppTypography.subheadline)
+                            .foregroundColor(Color.white.opacity(0.58))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(AppSpacing.md)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(AppColors.memorizeCard)
+                    .cornerRadius(AppCornerRadius.lg)
+                } else {
+                    ForEach(aiViewModel.conversationHistory.suffix(8)) { message in
+                        LiveConversationBubble(message: message)
+                    }
+
+                    if !aiViewModel.currentTranscript.isEmpty {
+                        LiveTranscriptBubble(text: aiViewModel.currentTranscript)
+                    }
+                }
+            }
+            .padding(AppSpacing.md)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var liveControls: some View {
+        HStack(spacing: AppSpacing.md) {
+            Button {
+                if aiViewModel.isRecording {
+                    aiViewModel.stopRecording()
+                } else {
+                    aiViewModel.startRecording()
+                }
+            } label: {
+                Image(systemName: aiViewModel.isRecording ? "mic.fill" : "mic.slash.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.black)
+                    .frame(width: 56, height: 56)
+                    .background(aiViewModel.isRecording ? AppColors.memorizeAccent : Color.white.opacity(0.82))
+                    .clipShape(Circle())
+            }
+            .disabled(!aiViewModel.isConnected)
+
+            Button {
+                dismiss()
+            } label: {
+                Text("memorize.live_mode_close".localized)
+                    .font(AppTypography.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(Color.white.opacity(0.12))
+                    .cornerRadius(AppCornerRadius.lg)
+            }
+        }
+        .padding(AppSpacing.md)
+        .background(AppColors.memorizeCard)
+    }
+
+    private func liveMessageOverlay(systemImage: String, message: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundColor(Color.white.opacity(0.42))
+
+            Text(message)
+                .font(AppTypography.subheadline)
+                .foregroundColor(Color.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, AppSpacing.lg)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
+    }
+
+    private var liveErrorPresented: Binding<Bool> {
+        Binding(
+            get: { aiViewModel.showError || phoneCamera.errorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    aiViewModel.dismissError()
+                    phoneCamera.errorMessage = nil
+                }
+            }
+        )
+    }
+
+    private func startLiveMode(with device: CaptureDevice) {
+        selectedDevice = device
+        aiViewModel.setImageSendInterval(1.5)
+        aiViewModel.connect()
+        startFrameForwarding()
+
+        switch device {
+        case .phone:
+            phoneCamera.start()
+        case .glasses:
+            Task {
+                await streamViewModel.handleStartStreaming()
+            }
+        }
+    }
+
+    private func startFrameForwarding() {
+        frameTimer?.invalidate()
+        frameTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
+            Task { @MainActor in
+                if selectedDevice == .phone, let frame = phoneCamera.currentFrame {
+                    aiViewModel.updateVideoFrame(frame)
+                } else if selectedDevice == .glasses, let frame = streamViewModel.currentVideoFrame {
+                    aiViewModel.updateVideoFrame(frame)
+                }
+            }
+        }
+    }
+
+    private func stopLiveMode() {
+        frameTimer?.invalidate()
+        frameTimer = nil
+        aiViewModel.disconnect()
+        phoneCamera.stop()
+
+        if selectedDevice == .glasses, streamViewModel.isStreaming {
+            Task {
+                await streamViewModel.stopSession()
+            }
+        }
+    }
+}
+
+private struct LiveConversationBubble: View {
+    let message: ConversationMessage
+
+    var body: some View {
+        HStack {
+            if message.role == .assistant {
+                bubble
+                Spacer(minLength: 44)
+            } else {
+                Spacer(minLength: 44)
+                bubble
+            }
+        }
+    }
+
+    private var bubble: some View {
+        Text(message.content)
+            .font(AppTypography.subheadline)
+            .foregroundColor(.white)
+            .lineSpacing(3)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(message.role == .assistant ? AppColors.memorizeCard : AppColors.memorizeAccent.opacity(0.88))
+            .cornerRadius(AppCornerRadius.md)
+    }
+}
+
+private struct LiveTranscriptBubble: View {
+    let text: String
+
+    var body: some View {
+        HStack {
+            Text(text)
+                .font(AppTypography.subheadline)
+                .foregroundColor(Color.white.opacity(0.84))
+                .lineSpacing(3)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(AppColors.memorizeCard.opacity(0.86))
+                .cornerRadius(AppCornerRadius.md)
+            Spacer(minLength: 44)
+        }
+    }
+}
+
+private final class ProjectLivePhoneCameraModel: NSObject, @unchecked Sendable, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+    @Published var currentFrame: UIImage?
+    @Published var errorMessage: String?
+
+    let session = AVCaptureSession()
+
+    private let sessionQueue = DispatchQueue(label: "com.ariaspark.memorize.livephone.session")
+    private let outputQueue = DispatchQueue(label: "com.ariaspark.memorize.livephone.output")
+    private let videoOutput = AVCaptureVideoDataOutput()
+    private let ciContext = CIContext()
+    private var isConfigured = false
+
+    func start() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            configureAndStart()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                if granted {
+                    self?.configureAndStart()
+                } else {
+                    DispatchQueue.main.async {
+                        self?.errorMessage = "memorize.live_mode_camera_denied".localized
+                    }
+                }
+            }
+        default:
+            errorMessage = "memorize.live_mode_camera_denied".localized
+        }
+    }
+
+    func stop() {
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+            if self.session.isRunning {
+                self.session.stopRunning()
+            }
+        }
+    }
+
+    private func configureAndStart() {
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+
+            if !self.isConfigured {
+                self.session.beginConfiguration()
+                self.session.sessionPreset = .medium
+
+                guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+                      let input = try? AVCaptureDeviceInput(device: camera) else {
+                    self.session.commitConfiguration()
+                    DispatchQueue.main.async {
+                        self.errorMessage = "memorize.live_mode_camera_unavailable".localized
+                    }
+                    return
+                }
+
+                if self.session.canAddInput(input) {
+                    self.session.addInput(input)
+                }
+
+                self.videoOutput.alwaysDiscardsLateVideoFrames = true
+                self.videoOutput.videoSettings = [
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+                ]
+                self.videoOutput.setSampleBufferDelegate(self, queue: self.outputQueue)
+
+                if self.session.canAddOutput(self.videoOutput) {
+                    self.session.addOutput(self.videoOutput)
+                }
+
+                self.session.commitConfiguration()
+                self.isConfigured = true
+            }
+
+            if !self.session.isRunning {
+                self.session.startRunning()
+            }
+        }
+    }
+
+    func captureOutput(
+        _ output: AVCaptureOutput,
+        didOutput sampleBuffer: CMSampleBuffer,
+        from connection: AVCaptureConnection
+    ) {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(.right)
+        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
+        let image = UIImage(cgImage: cgImage)
+
+        DispatchQueue.main.async { [weak self] in
+            self?.currentFrame = image
         }
     }
 }
