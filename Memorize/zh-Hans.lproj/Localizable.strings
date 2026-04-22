@@ -214,6 +214,95 @@
 "tab.gallery" = "图库";
 "tab.settings" = "我的";
 
+// MARK: - Memorize Tutor
+"memorize.tutor.title" = "AI 导师";
+"memorize.tutor.subtitle" = "使用成熟学习方法的语音引导学习";
+"memorize.tutor.no_content" = "请先添加资料，再开始辅导学习";
+"memorize.tutor.choose_method" = "选择学习方法";
+"memorize.tutor.session_steps" = "学习步骤";
+"memorize.tutor.start_session" = "开始学习";
+"memorize.tutor.end" = "结束";
+"memorize.tutor.preparing" = "导师正在准备...";
+"memorize.tutor.connecting" = "正在连接 AI 导师...";
+"memorize.tutor.mute" = "静音";
+"memorize.tutor.unmute" = "取消静音";
+"memorize.tutor.next" = "下一步";
+"memorize.tutor.finish" = "完成";
+"memorize.tutor.thinking" = "导师正在思考...";
+
+"memorize.tutor.method.guided.title" = "引导学习";
+"memorize.tutor.method.guided.subtitle" = "完整学习流程";
+"memorize.tutor.method.guided.goal" = "从专注、预览、学习到回忆、讲授和复盘。";
+"memorize.tutor.method.explain.title" = "讲清楚模式";
+"memorize.tutor.method.explain.subtitle" = "费曼学习法";
+"memorize.tutor.method.explain.goal" = "通过清楚解释、发现漏洞、再次解释来理解。";
+"memorize.tutor.method.test.title" = "考考我模式";
+"memorize.tutor.method.test.subtitle" = "主动回忆";
+"memorize.tutor.method.test.goal" = "先凭记忆回答，再检查答案，强化记忆。";
+"memorize.tutor.method.repeat.title" = "重复强化模式";
+"memorize.tutor.method.repeat.subtitle" = "单次学习间隔重复";
+"memorize.tutor.method.repeat.goal" = "短暂切换任务后再回忆同一概念，提高保持率。";
+
+"memorize.tutor.step.focus.title" = "专注";
+"memorize.tutor.step.focus.desc" = "进入学习状态";
+"memorize.tutor.step.preview.title" = "预览";
+"memorize.tutor.step.preview.desc" = "建立知识地图";
+"memorize.tutor.step.learn.title" = "学习";
+"memorize.tutor.step.learn.desc" = "一次一个概念";
+"memorize.tutor.step.explain.title" = "解释";
+"memorize.tutor.step.explain.desc" = "用自己的话说出来";
+"memorize.tutor.step.recall.title" = "回忆";
+"memorize.tutor.step.recall.desc" = "测试你的记忆";
+"memorize.tutor.step.teach.title" = "讲授";
+"memorize.tutor.step.teach.desc" = "像教别人一样表达";
+"memorize.tutor.step.review.title" = "复盘";
+"memorize.tutor.step.review.desc" = "回顾并计划下一步";
+
+"memorize.tutor.step.choose_concept.title" = "选择概念";
+"memorize.tutor.step.choose_concept.desc" = "挑一个要学的概念";
+"memorize.tutor.step.simple_explain.title" = "简单解释";
+"memorize.tutor.step.simple_explain.desc" = "用简单语言说明";
+"memorize.tutor.step.find_gaps.title" = "发现漏洞";
+"memorize.tutor.step.find_gaps.desc" = "找出不清楚的部分";
+"memorize.tutor.step.review_gaps.title" = "复习漏洞";
+"memorize.tutor.step.review_gaps.desc" = "学习模糊的地方";
+"memorize.tutor.step.explain_again.title" = "再次解释";
+"memorize.tutor.step.explain_again.desc" = "让解释更清楚";
+"memorize.tutor.step.one_sentence.title" = "一句话总结";
+"memorize.tutor.step.one_sentence.desc" = "压缩核心意思";
+"memorize.tutor.step.real_example.title" = "现实例子";
+"memorize.tutor.step.real_example.desc" = "应用到真实情境";
+
+"memorize.tutor.step.read_once.title" = "读一遍";
+"memorize.tutor.step.read_once.desc" = "先学习一次资料";
+"memorize.tutor.step.hide_material.title" = "隐藏资料";
+"memorize.tutor.step.hide_material.desc" = "不看笔记来回答";
+"memorize.tutor.step.memory_questions.title" = "记忆问题";
+"memorize.tutor.step.memory_questions.desc" = "从记忆中提取答案";
+"memorize.tutor.step.check_answers.title" = "检查答案";
+"memorize.tutor.step.check_answers.desc" = "与原资料对照";
+"memorize.tutor.step.correct_mistakes.title" = "纠正错误";
+"memorize.tutor.step.correct_mistakes.desc" = "修正薄弱答案";
+"memorize.tutor.step.retry_memory.title" = "凭记忆重试";
+"memorize.tutor.step.retry_memory.desc" = "再次回答同样问题";
+"memorize.tutor.step.mastery_loop.title" = "掌握循环";
+"memorize.tutor.step.mastery_loop.desc" = "重复直到答对";
+
+"memorize.tutor.step.brief_study.title" = "简短学习";
+"memorize.tutor.step.brief_study.desc" = "快速学习一个概念";
+"memorize.tutor.step.first_recall.title" = "第一次回忆";
+"memorize.tutor.step.first_recall.desc" = "立刻回忆出来";
+"memorize.tutor.step.first_correct.title" = "检查并纠正";
+"memorize.tutor.step.first_correct.desc" = "修正第一次回忆";
+"memorize.tutor.step.switch_topic.title" = "切换主题";
+"memorize.tutor.step.switch_topic.desc" = "转到不同任务";
+"memorize.tutor.step.return_recall.title" = "返回回忆";
+"memorize.tutor.step.return_recall.desc" = "回来再次提取";
+"memorize.tutor.step.second_correct.title" = "再次纠正";
+"memorize.tutor.step.second_correct.desc" = "强化修正内容";
+"memorize.tutor.step.repeat_cycle.title" = "重复循环";
+"memorize.tutor.step.repeat_cycle.desc" = "多轮回忆练习";
+
 // MARK: - Errors
 "error.network" = "网络错误，请检查网络连接";
 "error.api" = "API 错误";

@@ -1,57 +1,350 @@
 /*
  * Tutor Tab View
- * Interactive AI-guided voice study session using a 7-step learning technique
+ * Interactive AI-guided voice study session with selectable learning methods
  * Uses GeminiLiveService for real-time voice conversation
  */
 
 import SwiftUI
 import AVFoundation
 
-// MARK: - Study Steps
+// MARK: - Learning Methods
 
-enum TutorStep: Int, CaseIterable {
-    case focus = 0
-    case preview
-    case learn
-    case explain
-    case recall
-    case teach
-    case review
+struct TutorSessionStep: Identifiable, Equatable {
+    let id: Int
+    let titleKey: String
+    let promptTitle: String
+    let icon: String
+    let descriptionKey: String
+    let instruction: String
 
-    var title: String {
+    var title: String { titleKey.localized }
+    var description: String { descriptionKey.localized }
+}
+
+enum TutorLearningMethod: String, CaseIterable, Identifiable {
+    case guidedStudy
+    case explainIt
+    case testMe
+    case repeatReinforce
+
+    var id: String { rawValue }
+
+    var title: String { titleKey.localized }
+    var subtitle: String { subtitleKey.localized }
+    var goal: String { goalKey.localized }
+
+    private var titleKey: String {
         switch self {
-        case .focus: return "Focus"
-        case .preview: return "Preview"
-        case .learn: return "Learn"
-        case .explain: return "Explain"
-        case .recall: return "Recall"
-        case .teach: return "Teach"
-        case .review: return "Review"
+        case .guidedStudy: return "memorize.tutor.method.guided.title"
+        case .explainIt: return "memorize.tutor.method.explain.title"
+        case .testMe: return "memorize.tutor.method.test.title"
+        case .repeatReinforce: return "memorize.tutor.method.repeat.title"
+        }
+    }
+
+    private var subtitleKey: String {
+        switch self {
+        case .guidedStudy: return "memorize.tutor.method.guided.subtitle"
+        case .explainIt: return "memorize.tutor.method.explain.subtitle"
+        case .testMe: return "memorize.tutor.method.test.subtitle"
+        case .repeatReinforce: return "memorize.tutor.method.repeat.subtitle"
+        }
+    }
+
+    private var goalKey: String {
+        switch self {
+        case .guidedStudy: return "memorize.tutor.method.guided.goal"
+        case .explainIt: return "memorize.tutor.method.explain.goal"
+        case .testMe: return "memorize.tutor.method.test.goal"
+        case .repeatReinforce: return "memorize.tutor.method.repeat.goal"
+        }
+    }
+
+    var promptName: String {
+        switch self {
+        case .guidedStudy: return "Guided Study"
+        case .explainIt: return "Feynman Technique, also called Explain It Mode"
+        case .testMe: return "Active Recall, also called Test Me Mode"
+        case .repeatReinforce: return "Single-session Spaced Repetition, also called Repeat & Reinforce Mode"
+        }
+    }
+
+    var promptGoal: String {
+        switch self {
+        case .guidedStudy:
+            return "Build understanding with a complete guided study flow."
+        case .explainIt:
+            return "Help the student understand by explaining clearly, finding gaps, reviewing them, and explaining again."
+        case .testMe:
+            return "Strengthen memory by making the student retrieve answers from memory before checking or correcting."
+        case .repeatReinforce:
+            return "Improve retention inside one session by alternating study, recall, correction, a different task, and delayed recall."
         }
     }
 
     var icon: String {
         switch self {
-        case .focus: return "target"
-        case .preview: return "map"
-        case .learn: return "book.fill"
-        case .explain: return "text.bubble.fill"
-        case .recall: return "brain.head.profile"
-        case .teach: return "person.2.fill"
-        case .review: return "checkmark.circle.fill"
+        case .guidedStudy: return "graduationcap.fill"
+        case .explainIt: return "text.bubble.fill"
+        case .testMe: return "brain.head.profile"
+        case .repeatReinforce: return "repeat.circle.fill"
         }
     }
 
-    var description: String {
+    var accent: Color {
         switch self {
-        case .focus: return "Get into learning mode"
-        case .preview: return "Build your mental map"
-        case .learn: return "One concept at a time"
-        case .explain: return "Say it in your own words"
-        case .recall: return "Test your memory"
-        case .teach: return "Teach it to someone else"
-        case .review: return "Review and plan ahead"
+        case .guidedStudy: return Color(red: 0.55, green: 0.35, blue: 0.85)
+        case .explainIt: return Color(hex: "36D1DC")
+        case .testMe: return Color(hex: "4A7BF7")
+        case .repeatReinforce: return Color(hex: "00C853")
         }
+    }
+
+    var steps: [TutorSessionStep] {
+        switch self {
+        case .guidedStudy:
+            return [
+                TutorSessionStep(
+                    id: 0,
+                    titleKey: "memorize.tutor.step.focus.title",
+                    promptTitle: "Focus",
+                    icon: "target",
+                    descriptionKey: "memorize.tutor.step.focus.desc",
+                    instruction: "Ask the student one question at a time: what they are studying today, why it matters to them, and how confident they feel from 1 to 10. Get them mentally ready."
+                ),
+                TutorSessionStep(
+                    id: 1,
+                    titleKey: "memorize.tutor.step.preview.title",
+                    promptTitle: "Preview",
+                    icon: "map",
+                    descriptionKey: "memorize.tutor.step.preview.desc",
+                    instruction: "Give a quick overview of the material: the main topic, 3-5 key concepts, and important vocabulary. Make it scannable."
+                ),
+                TutorSessionStep(
+                    id: 2,
+                    titleKey: "memorize.tutor.step.learn.title",
+                    promptTitle: "Learn",
+                    icon: "book.fill",
+                    descriptionKey: "memorize.tutor.step.learn.desc",
+                    instruction: "Present one concept from the material at a time with a short summary and a concrete example or analogy. Ask if they understand before continuing."
+                ),
+                TutorSessionStep(
+                    id: 3,
+                    titleKey: "memorize.tutor.step.explain.title",
+                    promptTitle: "Explain",
+                    icon: "text.bubble.fill",
+                    descriptionKey: "memorize.tutor.step.explain.desc",
+                    instruction: "Ask the student to explain what they just learned in their own words. Give feedback on what was good and what they missed."
+                ),
+                TutorSessionStep(
+                    id: 4,
+                    titleKey: "memorize.tutor.step.recall.title",
+                    promptTitle: "Recall",
+                    icon: "brain.head.profile",
+                    descriptionKey: "memorize.tutor.step.recall.desc",
+                    instruction: "Hide the notes. Ask specific memory questions such as main ideas or definitions. Give feedback after each answer."
+                ),
+                TutorSessionStep(
+                    id: 5,
+                    titleKey: "memorize.tutor.step.teach.title",
+                    promptTitle: "Teach",
+                    icon: "person.2.fill",
+                    descriptionKey: "memorize.tutor.step.teach.desc",
+                    instruction: "Challenge the student to teach the concept as if explaining to a friend or a 10-year-old. Evaluate clarity, accuracy, and simplicity."
+                ),
+                TutorSessionStep(
+                    id: 6,
+                    titleKey: "memorize.tutor.step.review.title",
+                    promptTitle: "Review",
+                    icon: "checkmark.circle.fill",
+                    descriptionKey: "memorize.tutor.step.review.desc",
+                    instruction: "Summarize key takeaways, what the student did well, areas to review, and suggest spaced repetition timing."
+                )
+            ]
+        case .explainIt:
+            return [
+                TutorSessionStep(
+                    id: 0,
+                    titleKey: "memorize.tutor.step.choose_concept.title",
+                    promptTitle: "Choose a Concept",
+                    icon: "target",
+                    descriptionKey: "memorize.tutor.step.choose_concept.desc",
+                    instruction: "Help the student choose one concept from the source material to learn. If they are unsure, suggest 2-3 strong options from the source and ask them to pick one."
+                ),
+                TutorSessionStep(
+                    id: 1,
+                    titleKey: "memorize.tutor.step.simple_explain.title",
+                    promptTitle: "Simple Explanation",
+                    icon: "quote.bubble.fill",
+                    descriptionKey: "memorize.tutor.step.simple_explain.desc",
+                    instruction: "Ask the student to explain the chosen concept in simple terms, as if speaking to someone new to the topic. Do not lecture first unless they are stuck."
+                ),
+                TutorSessionStep(
+                    id: 2,
+                    titleKey: "memorize.tutor.step.find_gaps.title",
+                    promptTitle: "Find Gaps",
+                    icon: "questionmark.circle.fill",
+                    descriptionKey: "memorize.tutor.step.find_gaps.desc",
+                    instruction: "Identify the parts of the student's explanation that are unclear, missing, too vague, or hard for them to explain. Name the gaps kindly and specifically."
+                ),
+                TutorSessionStep(
+                    id: 3,
+                    titleKey: "memorize.tutor.step.review_gaps.title",
+                    promptTitle: "Review Gaps",
+                    icon: "magnifyingglass",
+                    descriptionKey: "memorize.tutor.step.review_gaps.desc",
+                    instruction: "Review the unclear parts using the source material. Give short explanations, examples, and checks for understanding."
+                ),
+                TutorSessionStep(
+                    id: 4,
+                    titleKey: "memorize.tutor.step.explain_again.title",
+                    promptTitle: "Explain Again",
+                    icon: "arrow.clockwise.circle.fill",
+                    descriptionKey: "memorize.tutor.step.explain_again.desc",
+                    instruction: "Ask the student to explain the same concept again more clearly. Compare it to their first attempt and reinforce the improvement."
+                ),
+                TutorSessionStep(
+                    id: 5,
+                    titleKey: "memorize.tutor.step.one_sentence.title",
+                    promptTitle: "One-Sentence Summary",
+                    icon: "textformat.size",
+                    descriptionKey: "memorize.tutor.step.one_sentence.desc",
+                    instruction: "Ask the student to summarize the concept in one sentence. Help them compress the idea without losing accuracy."
+                ),
+                TutorSessionStep(
+                    id: 6,
+                    titleKey: "memorize.tutor.step.real_example.title",
+                    promptTitle: "Real-World Example",
+                    icon: "lightbulb.fill",
+                    descriptionKey: "memorize.tutor.step.real_example.desc",
+                    instruction: "Ask for or provide a real-world example that shows the concept in action. Check that the example actually fits the concept."
+                )
+            ]
+        case .testMe:
+            return [
+                TutorSessionStep(
+                    id: 0,
+                    titleKey: "memorize.tutor.step.read_once.title",
+                    promptTitle: "Read Once",
+                    icon: "doc.text.fill",
+                    descriptionKey: "memorize.tutor.step.read_once.desc",
+                    instruction: "Give the student a brief, focused reading pass over the most important source material. Tell them this is their only look before recall."
+                ),
+                TutorSessionStep(
+                    id: 1,
+                    titleKey: "memorize.tutor.step.hide_material.title",
+                    promptTitle: "Hide the Material",
+                    icon: "eye.slash.fill",
+                    descriptionKey: "memorize.tutor.step.hide_material.desc",
+                    instruction: "Tell the student to stop looking at the material. Set the rule that answers should come from memory, even if imperfect."
+                ),
+                TutorSessionStep(
+                    id: 2,
+                    titleKey: "memorize.tutor.step.memory_questions.title",
+                    promptTitle: "Memory Questions",
+                    icon: "questionmark.bubble.fill",
+                    descriptionKey: "memorize.tutor.step.memory_questions.desc",
+                    instruction: "Ask specific questions from the material one at a time. Require the student to answer from memory before you reveal anything."
+                ),
+                TutorSessionStep(
+                    id: 3,
+                    titleKey: "memorize.tutor.step.check_answers.title",
+                    promptTitle: "Check Answers",
+                    icon: "checkmark.seal.fill",
+                    descriptionKey: "memorize.tutor.step.check_answers.desc",
+                    instruction: "Check the student's answers against the source material. Mark what is correct, incomplete, or incorrect."
+                ),
+                TutorSessionStep(
+                    id: 4,
+                    titleKey: "memorize.tutor.step.correct_mistakes.title",
+                    promptTitle: "Correct Mistakes",
+                    icon: "pencil.and.outline",
+                    descriptionKey: "memorize.tutor.step.correct_mistakes.desc",
+                    instruction: "Correct mistakes clearly and briefly. Explain why the correction is right, then ask the student to restate the corrected answer."
+                ),
+                TutorSessionStep(
+                    id: 5,
+                    titleKey: "memorize.tutor.step.retry_memory.title",
+                    promptTitle: "Retry From Memory",
+                    icon: "arrow.uturn.backward.circle.fill",
+                    descriptionKey: "memorize.tutor.step.retry_memory.desc",
+                    instruction: "Ask the same missed or weak questions again from memory. Do not accept vague answers; coach toward accurate retrieval."
+                ),
+                TutorSessionStep(
+                    id: 6,
+                    titleKey: "memorize.tutor.step.mastery_loop.title",
+                    promptTitle: "Mastery Loop",
+                    icon: "flag.checkered",
+                    descriptionKey: "memorize.tutor.step.mastery_loop.desc",
+                    instruction: "Repeat the question, answer, check, and correction cycle until the student can answer everything correctly. End with a concise mastery summary."
+                )
+            ]
+        case .repeatReinforce:
+            return [
+                TutorSessionStep(
+                    id: 0,
+                    titleKey: "memorize.tutor.step.brief_study.title",
+                    promptTitle: "Brief Study",
+                    icon: "timer",
+                    descriptionKey: "memorize.tutor.step.brief_study.desc",
+                    instruction: "Guide the student through a brief study pass on one concept. Keep it short and focused."
+                ),
+                TutorSessionStep(
+                    id: 1,
+                    titleKey: "memorize.tutor.step.first_recall.title",
+                    promptTitle: "First Recall",
+                    icon: "brain.head.profile",
+                    descriptionKey: "memorize.tutor.step.first_recall.desc",
+                    instruction: "Ask the student to recall the concept from memory immediately. Let them struggle productively before helping."
+                ),
+                TutorSessionStep(
+                    id: 2,
+                    titleKey: "memorize.tutor.step.first_correct.title",
+                    promptTitle: "Check and Correct",
+                    icon: "checkmark.circle.fill",
+                    descriptionKey: "memorize.tutor.step.first_correct.desc",
+                    instruction: "Check the recalled answer and correct it using the source material. Make the correction simple enough to remember."
+                ),
+                TutorSessionStep(
+                    id: 3,
+                    titleKey: "memorize.tutor.step.switch_topic.title",
+                    promptTitle: "Switch Topics",
+                    icon: "shuffle",
+                    descriptionKey: "memorize.tutor.step.switch_topic.desc",
+                    instruction: "Switch to a different topic, micro-task, or related concept for a short interval so the original concept leaves working memory."
+                ),
+                TutorSessionStep(
+                    id: 4,
+                    titleKey: "memorize.tutor.step.return_recall.title",
+                    promptTitle: "Return and Recall",
+                    icon: "arrowshape.turn.up.backward.fill",
+                    descriptionKey: "memorize.tutor.step.return_recall.desc",
+                    instruction: "Return to the original concept and ask the student to recall it again from memory. Compare this recall with the first attempt."
+                ),
+                TutorSessionStep(
+                    id: 5,
+                    titleKey: "memorize.tutor.step.second_correct.title",
+                    promptTitle: "Correct Again",
+                    icon: "wrench.adjustable.fill",
+                    descriptionKey: "memorize.tutor.step.second_correct.desc",
+                    instruction: "Check and correct the second recall. Emphasize what improved and what still needs reinforcement."
+                ),
+                TutorSessionStep(
+                    id: 6,
+                    titleKey: "memorize.tutor.step.repeat_cycle.title",
+                    promptTitle: "Repeat Cycle",
+                    icon: "repeat.circle.fill",
+                    descriptionKey: "memorize.tutor.step.repeat_cycle.desc",
+                    instruction: "Repeat the cycle multiple times: brief review, recall, correction, switch away, return, and recall again. End with a retention-focused summary."
+                )
+            ]
+        }
+    }
+
+    var stepInstructionsForPrompt: String {
+        steps
+            .map { "\($0.id + 1). \($0.promptTitle.uppercased()): \($0.instruction)" }
+            .joined(separator: "\n")
     }
 }
 
@@ -60,7 +353,8 @@ enum TutorStep: Int, CaseIterable {
 struct TutorTabView: View {
     @ObservedObject var viewModel: ProjectDetailViewModel
 
-    @State private var currentStep: TutorStep = .focus
+    @State private var selectedMethod: TutorLearningMethod = .guidedStudy
+    @State private var currentStepIndex = 0
     @State private var hasStartedSession = false
     @State private var geminiService: GeminiLiveService?
     @State private var isConnected = false
@@ -81,7 +375,19 @@ struct TutorTabView: View {
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
     @State private var showVoicePicker = false
 
-    private let tutorAccent = Color(red: 0.55, green: 0.35, blue: 0.85)
+    private var tutorAccent: Color { selectedMethod.accent }
+
+    private var currentSteps: [TutorSessionStep] {
+        selectedMethod.steps
+    }
+
+    private var currentStep: TutorSessionStep {
+        currentSteps[min(currentStepIndex, max(currentSteps.count - 1, 0))]
+    }
+
+    private var isLastStep: Bool {
+        currentStepIndex >= currentSteps.count - 1
+    }
 
     private var sourceContext: String {
         buildMemorizeLiveSourceContext(
@@ -110,7 +416,7 @@ struct TutorTabView: View {
                 }
             }
             .background(AppColors.memorizeBackground.ignoresSafeArea())
-            .navigationTitle("AI Tutor")
+            .navigationTitle("memorize.tutor.title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -128,7 +434,7 @@ struct TutorTabView: View {
                             endSession()
                             dismiss()
                         } label: {
-                            Text("End")
+                            Text("memorize.tutor.end".localized)
                                 .font(AppTypography.subheadline)
                                 .foregroundColor(Color.white.opacity(0.6))
                         }
@@ -155,7 +461,7 @@ struct TutorTabView: View {
             Image(systemName: "graduationcap")
                 .font(.system(size: 40))
                 .foregroundColor(Color.white.opacity(0.3))
-            Text("Add sources first to start a tutoring session")
+            Text("memorize.tutor.no_content".localized)
                 .font(AppTypography.subheadline)
                 .foregroundColor(Color.white.opacity(0.5))
                 .multilineTextAlignment(.center)
@@ -167,70 +473,139 @@ struct TutorTabView: View {
 
     private var sessionStartView: some View {
         VStack(spacing: 0) {
-            Spacer()
-
-            VStack(spacing: AppSpacing.lg) {
-                Image(systemName: "graduationcap.fill")
-                    .font(.system(size: 48))
-                    .foregroundColor(tutorAccent)
-
-                Text("AI Tutor")
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundColor(.white)
-
-                Text("A voice-guided study session using proven learning techniques")
-                    .font(AppTypography.subheadline)
-                    .foregroundColor(Color.white.opacity(0.5))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, AppSpacing.xl)
-            }
-
-            // Steps overview
-            VStack(spacing: AppSpacing.xs) {
-                ForEach(TutorStep.allCases, id: \.self) { step in
-                    HStack(spacing: 12) {
-                        Image(systemName: step.icon)
-                            .font(.system(size: 14))
+            ScrollView {
+                VStack(spacing: AppSpacing.lg) {
+                    VStack(spacing: AppSpacing.md) {
+                        Image(systemName: selectedMethod.icon)
+                            .font(.system(size: 48))
                             .foregroundColor(tutorAccent)
-                            .frame(width: 28)
 
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(step.title)
-                                .font(AppTypography.subheadline)
-                                .foregroundColor(.white)
-                            Text(step.description)
-                                .font(AppTypography.caption)
-                                .foregroundColor(Color.white.opacity(0.4))
-                        }
-                        Spacer()
+                        Text("memorize.tutor.title".localized)
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.white)
+
+                        Text("memorize.tutor.subtitle".localized)
+                            .font(AppTypography.subheadline)
+                            .foregroundColor(Color.white.opacity(0.5))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, AppSpacing.xl)
                     }
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, AppSpacing.sm)
-                }
-            }
-            .padding(AppSpacing.md)
-            .background(AppColors.memorizeCard)
-            .cornerRadius(AppCornerRadius.lg)
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.top, AppSpacing.lg)
+                    .padding(.top, AppSpacing.xl)
 
-            Spacer()
+                    VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                        Text("memorize.tutor.choose_method".localized)
+                            .font(AppTypography.headline)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, AppSpacing.md)
+
+                        VStack(spacing: AppSpacing.sm) {
+                            ForEach(TutorLearningMethod.allCases) { method in
+                                methodSelectionCard(method)
+                            }
+                        }
+                        .padding(.horizontal, AppSpacing.md)
+                    }
+
+                    VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                        Text("memorize.tutor.session_steps".localized)
+                            .font(AppTypography.headline)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, AppSpacing.md)
+
+                        VStack(spacing: AppSpacing.xs) {
+                            ForEach(currentSteps) { step in
+                                HStack(spacing: 12) {
+                                    Image(systemName: step.icon)
+                                        .font(.system(size: 14))
+                                        .foregroundColor(tutorAccent)
+                                        .frame(width: 28)
+
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(step.title)
+                                            .font(AppTypography.subheadline)
+                                            .foregroundColor(.white)
+                                        Text(step.description)
+                                            .font(AppTypography.caption)
+                                            .foregroundColor(Color.white.opacity(0.4))
+                                    }
+                                    Spacer()
+                                }
+                                .padding(.vertical, 6)
+                                .padding(.horizontal, AppSpacing.sm)
+                            }
+                        }
+                        .padding(AppSpacing.md)
+                        .background(AppColors.memorizeCard)
+                        .cornerRadius(AppCornerRadius.sm)
+                        .padding(.horizontal, AppSpacing.md)
+                    }
+                }
+                .padding(.bottom, AppSpacing.lg)
+            }
 
             Button {
+                currentStepIndex = 0
                 hasStartedSession = true
                 setupAndConnect()
             } label: {
-                Text("Start Session")
-                    .font(AppTypography.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(tutorAccent)
-                    .cornerRadius(AppCornerRadius.lg)
+                HStack(spacing: 8) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text("memorize.tutor.start_session".localized)
+                        .font(AppTypography.headline)
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(tutorAccent)
+                .cornerRadius(AppCornerRadius.sm)
             }
             .padding(.horizontal, AppSpacing.lg)
             .padding(.bottom, AppSpacing.xl)
         }
+    }
+
+    private func methodSelectionCard(_ method: TutorLearningMethod) -> some View {
+        let isSelected = method == selectedMethod
+
+        return Button {
+            selectedMethod = method
+            currentStepIndex = 0
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: method.icon)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(method.accent)
+                    .frame(width: 30)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(method.title)
+                        .font(AppTypography.headline)
+                        .foregroundColor(.white)
+                    Text(method.subtitle)
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.55))
+                    Text(method.goal)
+                        .font(AppTypography.caption)
+                        .foregroundColor(Color.white.opacity(0.38))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(isSelected ? method.accent : Color.white.opacity(0.25))
+            }
+            .padding(AppSpacing.md)
+            .background(isSelected ? method.accent.opacity(0.16) : AppColors.memorizeCard)
+            .overlay(
+                RoundedRectangle(cornerRadius: AppCornerRadius.sm)
+                    .stroke(isSelected ? method.accent.opacity(0.8) : Color.white.opacity(0.06), lineWidth: 1)
+            )
+            .cornerRadius(AppCornerRadius.sm)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Active Session
@@ -260,7 +635,7 @@ struct TutorTabView: View {
                             ProgressView()
                                 .tint(tutorAccent)
                                 .scaleEffect(1.1)
-                            Text(isConnected ? "Your tutor is preparing..." : "Connecting to your AI tutor...")
+                            Text(isConnected ? "memorize.tutor.preparing".localized : "memorize.tutor.connecting".localized)
                                 .font(AppTypography.subheadline)
                                 .foregroundColor(Color.white.opacity(0.5))
                         }
@@ -320,7 +695,7 @@ struct TutorTabView: View {
                     HStack(spacing: 8) {
                         Image(systemName: isMuted ? "mic.slash.fill" : "mic.fill")
                             .font(.system(size: 18, weight: .semibold))
-                        Text(isMuted ? "Unmute" : "Mute")
+                        Text(isMuted ? "memorize.tutor.unmute".localized : "memorize.tutor.mute".localized)
                             .font(AppTypography.subheadline)
                     }
                     .foregroundColor(.white)
@@ -336,9 +711,9 @@ struct TutorTabView: View {
                     advanceToNextStep()
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: currentStep == .review ? "checkmark" : "arrow.right")
+                        Image(systemName: isLastStep ? "checkmark" : "arrow.right")
                             .font(.system(size: 16, weight: .semibold))
-                        Text(currentStep == .review ? "Finish" : "Next")
+                        Text(isLastStep ? "memorize.tutor.finish".localized : "memorize.tutor.next".localized)
                             .font(AppTypography.subheadline)
                     }
                     .foregroundColor(.white)
@@ -374,7 +749,7 @@ struct TutorTabView: View {
 
     private var stepProgressBar: some View {
         HStack(spacing: 4) {
-            ForEach(TutorStep.allCases, id: \.self) { step in
+            ForEach(currentSteps) { step in
                 RoundedRectangle(cornerRadius: 2)
                     .fill(stepColor(step))
                     .frame(height: 4)
@@ -383,10 +758,10 @@ struct TutorTabView: View {
         }
     }
 
-    private func stepColor(_ step: TutorStep) -> Color {
-        if step.rawValue < currentStep.rawValue {
+    private func stepColor(_ step: TutorSessionStep) -> Color {
+        if step.id < currentStepIndex {
             return Color.green
-        } else if step == currentStep {
+        } else if step.id == currentStepIndex {
             return tutorAccent
         } else {
             return Color.white.opacity(0.15)
@@ -416,7 +791,7 @@ struct TutorTabView: View {
             ProgressView()
                 .tint(tutorAccent)
                 .scaleEffect(0.8)
-            Text("Tutor is thinking...")
+            Text("memorize.tutor.thinking".localized)
                 .font(AppTypography.caption)
                 .foregroundColor(Color.white.opacity(0.5))
         }
@@ -444,11 +819,11 @@ struct TutorTabView: View {
     private func advanceToNextStep() {
         guard !isTransitioning else { return }
 
-        let next = currentStep.rawValue + 1
-        let isFinishing = TutorStep(rawValue: next) == nil
+        let next = currentStepIndex + 1
+        let isFinishing = next >= currentSteps.count
 
-        if let nextStep = TutorStep(rawValue: next) {
-            currentStep = nextStep
+        if !isFinishing {
+            currentStepIndex = next
         }
 
         transitionTask?.cancel()
@@ -485,7 +860,7 @@ struct TutorTabView: View {
         messages = []
         currentAIText = ""
         currentUserText = ""
-        currentStep = .focus
+        currentStepIndex = 0
         isAIThinking = false
         isTransitioning = false
         transitionIsFinishing = false
@@ -529,26 +904,27 @@ struct TutorTabView: View {
         \(context)
         ---
 
-        You will guide them through 7 steps. You are currently on Step 1: Focus.
+        LEARNING METHOD:
+        \(selectedMethod.promptName)
+
+        METHOD GOAL:
+        \(selectedMethod.promptGoal)
+
+        You will guide them through \(currentSteps.count) steps. You are currently on Step 1: \(currentSteps[0].promptTitle).
 
         STEP INSTRUCTIONS:
-        1. FOCUS: Ask the student one question at a time: (a) What are you studying today? (b) Why does this matter to you? (c) How confident are you right now, 1 to 10? Get them mentally ready.
-        2. PREVIEW: Give a quick overview — main topic, 3-5 key concepts, important vocabulary. Make it scannable.
-        3. LEARN: Present ONE concept at a time. Short summary, concrete example or analogy. Make it feel easy. Ask if they understand before continuing.
-        4. EXPLAIN: Ask the student to explain what they just learned in their own words. Give feedback on what was good and what they missed.
-        5. RECALL: Hide the notes. Ask specific memory questions: "What were the main ideas?" "Define this term." Give feedback after each answer.
-        6. TEACH: Challenge them: "Teach this like you're explaining to a friend" or "Explain to a 10-year-old." Evaluate clarity, accuracy, simplicity.
-        7. REVIEW: Summarize key takeaways, what they did well, areas to review, and suggest spaced repetition (tomorrow, 3 days, 1 week).
+        \(selectedMethod.stepInstructionsForPrompt)
 
         RULES:
         - Keep responses concise — 2-4 sentences for voice. This is a conversation, not a lecture.
         - Wait for the student to respond before moving on.
         - Be encouraging but honest about mistakes.
-        - When the student says "next" or "continue", move to the next step.
+        - When the student says "next" or "continue", move to the next step in the selected method.
         - Reference specific content from the source material.
+        - Do not mix in steps from other learning methods unless the student explicitly asks to change methods.
         - Speak naturally as if you're sitting across from them.
 
-        Start now with Step 1: Focus. Greet the student warmly and ask your first question.
+        Start now with Step 1: \(currentSteps[0].promptTitle). Greet the student warmly and ask your first question.
         """
 
         let apiKey = APIProviderManager.staticLiveAIAPIKey
@@ -690,31 +1066,19 @@ struct TutorTabView: View {
         if isFinishing {
             return """
             IMPORTANT: The tutoring session is now complete. Ignore everything you were previously saying.
-            Give a final encouraging summary: key takeaways, what the student did well, areas to review, and suggest spaced repetition timing (tomorrow, 3 days, 1 week). Say goodbye warmly.
+            Give a final encouraging summary for \(selectedMethod.promptName): key takeaways, what the student did well, areas to review, and one concrete next study action. Say goodbye warmly.
             """
         }
 
         let step = currentStep
-        if step == .focus {
-            return "Begin the tutoring session now. Greet the student warmly and start Step 1: Focus by asking your first question."
+        if currentStepIndex == 0 {
+            return "Begin the tutoring session now. Greet the student warmly and start Step 1: \(step.promptTitle) by asking your first question. Follow this instruction: \(step.instruction)"
         }
 
         return """
-        IMPORTANT: We are now moving to Step \(step.rawValue + 1): \(step.title). Completely stop your previous topic.
-        \(stepInstruction(step))
+        IMPORTANT: We are now moving to Step \(currentStepIndex + 1): \(step.promptTitle). Completely stop your previous topic.
+        \(step.instruction)
         Start this step now. Do not reference or continue the previous step.
         """
-    }
-
-    private func stepInstruction(_ step: TutorStep) -> String {
-        switch step {
-        case .focus: return "Ask the student what they're studying, why it matters, and how confident they feel."
-        case .preview: return "Give a quick overview of the material — key concepts and vocabulary."
-        case .learn: return "Present ONE concept from the material with a clear explanation and example."
-        case .explain: return "Ask the student to explain what they just learned in their own words."
-        case .recall: return "Test the student's memory — ask specific questions without letting them see notes."
-        case .teach: return "Challenge the student to teach the concept as if explaining to a friend."
-        case .review: return "Summarize takeaways, strengths, areas to review, and suggest spaced repetition timing."
-        }
     }
 }

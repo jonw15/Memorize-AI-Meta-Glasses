@@ -213,6 +213,95 @@
 "tab.gallery" = "Gallery";
 "tab.settings" = "Settings";
 
+// MARK: - Memorize Tutor
+"memorize.tutor.title" = "AI Tutor";
+"memorize.tutor.subtitle" = "A voice-guided study session using proven learning techniques";
+"memorize.tutor.no_content" = "Add sources first to start a tutoring session";
+"memorize.tutor.choose_method" = "Choose a learning method";
+"memorize.tutor.session_steps" = "Session steps";
+"memorize.tutor.start_session" = "Start Session";
+"memorize.tutor.end" = "End";
+"memorize.tutor.preparing" = "Your tutor is preparing...";
+"memorize.tutor.connecting" = "Connecting to your AI tutor...";
+"memorize.tutor.mute" = "Mute";
+"memorize.tutor.unmute" = "Unmute";
+"memorize.tutor.next" = "Next";
+"memorize.tutor.finish" = "Finish";
+"memorize.tutor.thinking" = "Tutor is thinking...";
+
+"memorize.tutor.method.guided.title" = "Guided Study";
+"memorize.tutor.method.guided.subtitle" = "Full Study Session";
+"memorize.tutor.method.guided.goal" = "Move from focus to preview, learning, recall, teaching, and review.";
+"memorize.tutor.method.explain.title" = "Explain It Mode";
+"memorize.tutor.method.explain.subtitle" = "Feynman Technique";
+"memorize.tutor.method.explain.goal" = "Understand by explaining clearly, finding gaps, and explaining again.";
+"memorize.tutor.method.test.title" = "Test Me Mode";
+"memorize.tutor.method.test.subtitle" = "Active Recall";
+"memorize.tutor.method.test.goal" = "Strengthen memory by answering from memory before checking.";
+"memorize.tutor.method.repeat.title" = "Repeat & Reinforce Mode";
+"memorize.tutor.method.repeat.subtitle" = "Single-session Spaced Repetition";
+"memorize.tutor.method.repeat.goal" = "Improve retention by returning to a concept after a short switch.";
+
+"memorize.tutor.step.focus.title" = "Focus";
+"memorize.tutor.step.focus.desc" = "Get into learning mode";
+"memorize.tutor.step.preview.title" = "Preview";
+"memorize.tutor.step.preview.desc" = "Build your mental map";
+"memorize.tutor.step.learn.title" = "Learn";
+"memorize.tutor.step.learn.desc" = "One concept at a time";
+"memorize.tutor.step.explain.title" = "Explain";
+"memorize.tutor.step.explain.desc" = "Say it in your own words";
+"memorize.tutor.step.recall.title" = "Recall";
+"memorize.tutor.step.recall.desc" = "Test your memory";
+"memorize.tutor.step.teach.title" = "Teach";
+"memorize.tutor.step.teach.desc" = "Teach it to someone else";
+"memorize.tutor.step.review.title" = "Review";
+"memorize.tutor.step.review.desc" = "Review and plan ahead";
+
+"memorize.tutor.step.choose_concept.title" = "Choose a Concept";
+"memorize.tutor.step.choose_concept.desc" = "Pick one idea to learn";
+"memorize.tutor.step.simple_explain.title" = "Simple Explanation";
+"memorize.tutor.step.simple_explain.desc" = "Explain it in plain language";
+"memorize.tutor.step.find_gaps.title" = "Find Gaps";
+"memorize.tutor.step.find_gaps.desc" = "Spot unclear parts";
+"memorize.tutor.step.review_gaps.title" = "Review Gaps";
+"memorize.tutor.step.review_gaps.desc" = "Study what felt fuzzy";
+"memorize.tutor.step.explain_again.title" = "Explain Again";
+"memorize.tutor.step.explain_again.desc" = "Make the explanation clearer";
+"memorize.tutor.step.one_sentence.title" = "One-Sentence Summary";
+"memorize.tutor.step.one_sentence.desc" = "Compress the idea";
+"memorize.tutor.step.real_example.title" = "Real-World Example";
+"memorize.tutor.step.real_example.desc" = "Apply it to real life";
+
+"memorize.tutor.step.read_once.title" = "Read Once";
+"memorize.tutor.step.read_once.desc" = "Study the material once";
+"memorize.tutor.step.hide_material.title" = "Hide the Material";
+"memorize.tutor.step.hide_material.desc" = "Answer without notes";
+"memorize.tutor.step.memory_questions.title" = "Memory Questions";
+"memorize.tutor.step.memory_questions.desc" = "Retrieve answers from memory";
+"memorize.tutor.step.check_answers.title" = "Check Answers";
+"memorize.tutor.step.check_answers.desc" = "Compare with the source";
+"memorize.tutor.step.correct_mistakes.title" = "Correct Mistakes";
+"memorize.tutor.step.correct_mistakes.desc" = "Fix weak answers";
+"memorize.tutor.step.retry_memory.title" = "Retry From Memory";
+"memorize.tutor.step.retry_memory.desc" = "Answer the same questions again";
+"memorize.tutor.step.mastery_loop.title" = "Mastery Loop";
+"memorize.tutor.step.mastery_loop.desc" = "Repeat until correct";
+
+"memorize.tutor.step.brief_study.title" = "Brief Study";
+"memorize.tutor.step.brief_study.desc" = "Study one concept quickly";
+"memorize.tutor.step.first_recall.title" = "First Recall";
+"memorize.tutor.step.first_recall.desc" = "Recall it right away";
+"memorize.tutor.step.first_correct.title" = "Check and Correct";
+"memorize.tutor.step.first_correct.desc" = "Fix the first recall";
+"memorize.tutor.step.switch_topic.title" = "Switch Topics";
+"memorize.tutor.step.switch_topic.desc" = "Move to something different";
+"memorize.tutor.step.return_recall.title" = "Return and Recall";
+"memorize.tutor.step.return_recall.desc" = "Come back and retrieve again";
+"memorize.tutor.step.second_correct.title" = "Correct Again";
+"memorize.tutor.step.second_correct.desc" = "Reinforce the correction";
+"memorize.tutor.step.repeat_cycle.title" = "Repeat Cycle";
+"memorize.tutor.step.repeat_cycle.desc" = "Cycle recall several times";
+
 // MARK: - Errors
 "error.network" = "Network error, please check your connection";
 "error.api" = "API Error";
