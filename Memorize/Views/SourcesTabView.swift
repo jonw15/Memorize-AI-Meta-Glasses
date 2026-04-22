@@ -18,6 +18,7 @@ struct SourcesTabView: View {
     @State private var pendingDeleteSource: Source?
     @State private var viewingSource: Source?
     @State private var pendingAction: PendingSourceAction?
+    @State private var isVisible = false
 
     private enum PendingSourceAction {
         case textNote, camera, file, youtube
@@ -182,6 +183,7 @@ struct SourcesTabView: View {
             if !showing, let action = pendingAction {
                 pendingAction = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    guard isVisible else { return }
                     switch action {
                     case .textNote: showTextNoteEditor = true
                     case .youtube: showYouTubeImporter = true
@@ -235,6 +237,7 @@ struct SourcesTabView: View {
             )
         }
         .onAppear {
+            isVisible = true
             // Auto-open add source sheet only for brand-new empty projects (no title, no sources)
             if !didAutoShowAddSource
                 && viewModel.book.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -242,9 +245,15 @@ struct SourcesTabView: View {
                 && viewModel.book.pages.isEmpty {
                 didAutoShowAddSource = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    guard isVisible else { return }
                     showAddSourceSheet = true
                 }
             }
+        }
+        .onDisappear {
+            isVisible = false
+            showAddSourceSheet = false
+            pendingAction = nil
         }
     }
 

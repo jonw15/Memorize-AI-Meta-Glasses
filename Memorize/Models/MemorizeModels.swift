@@ -97,6 +97,100 @@ struct Source: Identifiable, Codable {
     }
 }
 
+// MARK: - Generated Notes
+
+enum GeneratedNoteKind: String, Codable {
+    case tutor
+    case interact
+    case explain
+    case podcast
+    case infographics
+    case quiz
+    case voiceSummary
+
+    var displayTitle: String {
+        switch self {
+        case .tutor:
+            return "memorize.tutor.title".localized
+        case .interact:
+            return "memorize.interact".localized
+        case .explain:
+            return "memorize.explain".localized
+        case .podcast:
+            return "memorize.podcast".localized
+        case .infographics:
+            return "memorize.infographics".localized
+        case .quiz:
+            return "memorize.pop_quiz".localized
+        case .voiceSummary:
+            return "memorize.voice_summary".localized
+        }
+    }
+
+    var promptName: String {
+        switch self {
+        case .tutor:
+            return "AI tutoring session"
+        case .interact:
+            return "conversation study mode"
+        case .explain:
+            return "summary study mode"
+        case .podcast:
+            return "podcast study mode"
+        case .infographics:
+            return "infographics study mode"
+        case .quiz:
+            return "pop quiz study mode"
+        case .voiceSummary:
+            return "voice summary study mode"
+        }
+    }
+}
+
+struct GeneratedNote: Identifiable, Codable {
+    let id: UUID
+    var title: String
+    var body: String
+    var mode: GeneratedNoteKind
+    let createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        body: String,
+        mode: GeneratedNoteKind,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.body = body
+        self.mode = mode
+        self.createdAt = createdAt
+    }
+
+    var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: createdAt)
+    }
+
+    var previewText: String {
+        let cleaned = body
+            .components(separatedBy: .newlines)
+            .map {
+                $0.replacingOccurrences(of: "**", with: "")
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "-*•# \t"))
+            }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+
+        guard cleaned.count > 220 else { return cleaned }
+        let endIndex = cleaned.index(cleaned.startIndex, offsetBy: 220)
+        return String(cleaned[..<endIndex]) + "..."
+    }
+}
+
 // MARK: - Book
 
 struct Book: Identifiable, Codable {
@@ -108,14 +202,15 @@ struct Book: Identifiable, Codable {
     var pages: [PageCapture]
     var sections: [Book]
     var sources: [Source]
+    var notes: [GeneratedNote]
     let createdAt: Date
     var updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, title, author, chapter, icon, pages, sections, sources, createdAt, updatedAt
+        case id, title, author, chapter, icon, pages, sections, sources, notes, createdAt, updatedAt
     }
 
-    init(title: String = "", author: String = "", chapter: String = "", icon: String = "", pages: [PageCapture] = [], sections: [Book] = [], sources: [Source] = []) {
+    init(title: String = "", author: String = "", chapter: String = "", icon: String = "", pages: [PageCapture] = [], sections: [Book] = [], sources: [Source] = [], notes: [GeneratedNote] = []) {
         self.id = UUID()
         self.title = title
         self.author = author
@@ -124,6 +219,7 @@ struct Book: Identifiable, Codable {
         self.pages = pages
         self.sections = sections
         self.sources = sources
+        self.notes = notes
         self.createdAt = Date()
         self.updatedAt = Date()
     }
@@ -138,6 +234,7 @@ struct Book: Identifiable, Codable {
         pages = try container.decodeIfPresent([PageCapture].self, forKey: .pages) ?? []
         sections = try container.decodeIfPresent([Book].self, forKey: .sections) ?? []
         sources = try container.decodeIfPresent([Source].self, forKey: .sources) ?? []
+        notes = try container.decodeIfPresent([GeneratedNote].self, forKey: .notes) ?? []
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
@@ -152,6 +249,7 @@ struct Book: Identifiable, Codable {
         try container.encode(pages, forKey: .pages)
         try container.encode(sections, forKey: .sections)
         try container.encode(sources, forKey: .sources)
+        try container.encode(notes, forKey: .notes)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
     }

@@ -360,6 +360,86 @@ struct MemorizeService {
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    // MARK: - Generate Study Notes
+
+    func generateStudyNote(
+        from pages: [PageCapture],
+        bookTitle: String,
+        mode: GeneratedNoteKind,
+        sessionTranscript: String? = nil
+    ) async throws -> GeneratedNote {
+        let completedPages = pages.filter { $0.status == .completed }
+        guard !completedPages.isEmpty else {
+            throw NSError(
+                domain: "MemorizeService",
+                code: 6,
+                userInfo: [NSLocalizedDescriptionKey: "No completed pages available for notes"]
+            )
+        }
+
+        let sourceText = completedPages
+            .enumerated()
+            .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
+            .joined(separator: "\n\n")
+
+        let titleText = bookTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let interactionText = sessionTranscript?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let interactionSection = interactionText.isEmpty
+            ? "No session transcript was captured. Focus only on source-grounded notes."
+            : """
+            Session transcript and learner performance:
+            \(interactionText)
+            """
+
+        let prompt = """
+        You are an expert study note writer. Create short, simple AI-generated notes after the learner finishes a \(mode.promptName).
+
+        Project title:
+        \(titleText.isEmpty ? "Untitled project" : titleText)
+
+        Source material:
+        \(sourceText)
+
+        \(interactionSection)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "title": "short note title",
+          "body": "study notes text"
+        }
+
+        Requirements:
+        - The title should be specific to the source and under 8 words.
+        - The body must follow this exact plain-text structure and order:
+
+          Summary
+          1-2 short sentences summarizing the source topic and main takeaway.
+
+          <Specific Topic Heading>
+          1-2 short sentences about the most important concept or discussion point.
+
+          Next steps
+          [User] Action title: One simple thing to review or practice next.
+          [AI Tutor] Action title: One short correction, reminder, or follow-up if relevant.
+
+          Details
+          2-4 short bullets. Include what the user said/answered/asked and the AI feedback if a session transcript exists.
+
+        - Include only 1-2 specific topic headings between Summary and Next steps.
+        - Topic headings should be short, specific, and written as plain heading lines, not markdown.
+        - The Next steps section must use bracketed owners like [User] or [AI Tutor].
+        - If a session transcript was provided, Details should briefly include what the user said/answered/asked and the AI's feedback, corrections, or coaching.
+        - If no session transcript was provided, Details should focus on source-grounded study details.
+        - Do not invent user speech, answers, or AI feedback that is not in the transcript.
+        - Keep the body under 250 words.
+        - Prefer plain language over exhaustive detail.
+        - No markdown fences and no extra JSON keys.
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return parseGeneratedNote(from: result, mode: mode)
+    }
+
     private func parseQuizQuestions(from response: String) -> [QuizQuestion] {
         let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
         let jsonObjectString = extractJSONObject(from: cleaned)
@@ -480,6 +560,38 @@ struct MemorizeService {
             strengths: ["You completed a spoken summary."],
             improvements: ["Try to mention more specific points from the reading."],
             feedback: fallbackFeedback.isEmpty ? "Unable to parse grading response. Please try again." : fallbackFeedback
+        )
+    }
+
+    private func parseGeneratedNote(from response: String, mode: GeneratedNoteKind) -> GeneratedNote {
+        let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        let jsonString = extractJSONObject(from: cleaned) ?? cleaned
+
+        struct RawGeneratedNote: Decodable {
+            let title: String?
+            let body: String?
+        }
+
+        if let data = jsonString.data(using: .utf8),
+           let raw = try? JSONDecoder().decode(RawGeneratedNote.self, from: data) {
+            let title = raw.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let body = raw.body?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let body, !body.isEmpty {
+                return GeneratedNote(
+                    title: title?.isEmpty == false ? title! : "memorize.notes_generated_title".localized,
+                    body: body,
+                    mode: mode
+                )
+            }
+        }
+
+        let fallbackBody = cleaned.isEmpty
+            ? "memorize.notes_empty_generated".localized
+            : cleaned
+        return GeneratedNote(
+            title: "memorize.notes_generated_title".localized,
+            body: fallbackBody,
+            mode: mode
         )
     }
 

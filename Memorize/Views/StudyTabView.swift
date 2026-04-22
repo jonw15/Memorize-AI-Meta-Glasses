@@ -8,6 +8,15 @@ import AVFoundation
 
 struct StudyTabView: View {
     @ObservedObject var viewModel: ProjectDetailViewModel
+    let onModeFinished: (GeneratedNoteKind) -> Void
+
+    init(
+        viewModel: ProjectDetailViewModel,
+        onModeFinished: @escaping (GeneratedNoteKind) -> Void = { _ in }
+    ) {
+        self._viewModel = ObservedObject(wrappedValue: viewModel)
+        self.onModeFinished = onModeFinished
+    }
 
     @State private var showInteract = false
     @State private var showExplainPersonaSelector = false
@@ -15,6 +24,8 @@ struct StudyTabView: View {
     @State private var selectedPersona: MemorizeExplainPersona = .highSchoolStudent
     @State private var showVoiceSummary = false
     @State private var showInfographics = false
+    @State private var modeStartedAt: [GeneratedNoteKind: Date] = [:]
+    private let minimumNoteGenerationDuration: TimeInterval = 10
 
     private var completedPages: [PageCapture] {
         viewModel.allCompletedPages
@@ -158,7 +169,9 @@ struct StudyTabView: View {
             .presentationDetents([.height(280)])
         }
         // Podcast player
-        .fullScreenCover(isPresented: $viewModel.showPodcastPlayer) {
+        .fullScreenCover(isPresented: $viewModel.showPodcastPlayer, onDismiss: {
+            finishTrackedMode(.podcast)
+        }) {
             MemorizePodcastPlayerView(
                 pages: completedPages,
                 bookTitle: bookTitle,
@@ -167,6 +180,9 @@ struct StudyTabView: View {
                 usesPDFLengthHeuristic: usesPDFLengthHeuristic
             ) {
                 viewModel.showPodcastPlayer = false
+            }
+            .onAppear {
+                startTrackedMode(.podcast)
             }
         }
         // Explain persona selector
@@ -179,7 +195,9 @@ struct StudyTabView: View {
             .presentationDetents([.medium])
         }
         // Summary view — AI immediately summarizes as selected persona
-        .fullScreenCover(isPresented: $showExplain) {
+        .fullScreenCover(isPresented: $showExplain, onDismiss: {
+            finishTrackedMode(.explain)
+        }) {
             MemorizeInteractView(
                 pages: completedPages,
                 bookTitle: bookTitle,
@@ -197,24 +215,43 @@ struct StudyTabView: View {
 
                 After you finish the summary, you can answer any follow-up questions the student has.
                 Keep your language conversational and easy to understand.
-                """
+                """,
+                onSessionCaptured: { messages in
+                    viewModel.captureSessionMessages(messages, for: .explain)
+                }
             )
+            .onAppear {
+                startTrackedMode(.explain)
+            }
         }
         // Interact
-        .fullScreenCover(isPresented: $showInteract) {
+        .fullScreenCover(isPresented: $showInteract, onDismiss: {
+            finishTrackedMode(.interact)
+        }) {
             MemorizeInteractView(
                 pages: completedPages,
                 bookTitle: bookTitle,
-                sectionTitle: sectionTitle
+                sectionTitle: sectionTitle,
+                onSessionCaptured: { messages in
+                    viewModel.captureSessionMessages(messages, for: .interact)
+                }
             )
+            .onAppear {
+                startTrackedMode(.interact)
+            }
         }
         // Voice Summary
-        .fullScreenCover(isPresented: $showVoiceSummary) {
+        .fullScreenCover(isPresented: $showVoiceSummary, onDismiss: {
+            finishTrackedMode(.voiceSummary)
+        }) {
             MemorizeVoiceSummaryView(
                 pages: completedPages,
                 bookTitle: bookTitle,
                 sectionTitle: sectionTitle
             )
+            .onAppear {
+                startTrackedMode(.voiceSummary)
+            }
         }
         // Infographics
         .fullScreenCover(isPresented: $showInfographics) {
@@ -225,6 +262,22 @@ struct StudyTabView: View {
                 sourceBundles: infographicSourceBundles
             )
         }
+    }
+
+    private func startTrackedMode(_ mode: GeneratedNoteKind) {
+        modeStartedAt[mode] = Date()
+    }
+
+    private func finishTrackedMode(_ mode: GeneratedNoteKind) {
+        defer { modeStartedAt[mode] = nil }
+
+        guard let start = modeStartedAt[mode],
+              Date().timeIntervalSince(start) >= minimumNoteGenerationDuration else {
+            viewModel.clearSessionCapture(for: mode)
+            return
+        }
+
+        onModeFinished(mode)
     }
 
     private var infographicSourceBundles: [InfographicSourceBundle] {

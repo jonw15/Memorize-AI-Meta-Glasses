@@ -766,7 +766,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.0.6;
+				MARKETING_VERSION = 0.0.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ariaspark.memorize;
 				PRODUCT_NAME = Memorize;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -801,7 +801,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.0.6;
+				MARKETING_VERSION = 0.0.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ariaspark.memorize;
 				PRODUCT_NAME = Memorize;
 				PROVISIONING_PROFILE_SPECIFIER = "";

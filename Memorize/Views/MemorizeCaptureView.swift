@@ -5520,6 +5520,7 @@ struct MemorizeInteractView: View {
     let bookTitle: String
     let sectionTitle: String
     var customSystemPrompt: String? = nil
+    var onSessionCaptured: ([MemorizeInteractMessage]) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
     @State private var geminiService: GeminiLiveService?
@@ -5533,6 +5534,7 @@ struct MemorizeInteractView: View {
     @State private var isMuted = true
     @State private var isUserMuted = false
     @State private var userQuestionMuteTask: Task<Void, Never>?
+    @State private var hasCapturedSession = false
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
     @State private var showVoicePicker = false
 
@@ -5634,13 +5636,43 @@ struct MemorizeInteractView: View {
             guard geminiService != nil else { return }
             reconnectWithNewVoice()
         }
+        .onDisappear {
+            captureSessionIfNeeded()
+        }
     }
 
     private func disconnectAndDismiss() {
+        captureSessionIfNeeded()
         userQuestionMuteTask?.cancel()
         geminiService?.disconnect()
         geminiService = nil
         dismiss()
+    }
+
+    private func captureSessionIfNeeded() {
+        guard !hasCapturedSession else { return }
+        let snapshot = sessionMessagesSnapshot()
+        guard !snapshot.isEmpty else { return }
+        hasCapturedSession = true
+        onSessionCaptured(snapshot)
+    }
+
+    private func sessionMessagesSnapshot() -> [MemorizeInteractMessage] {
+        var snapshot = messages
+        let userText = currentUserText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        if !userText.isEmpty {
+            snapshot.append(MemorizeInteractMessage(isUser: true, text: userText))
+        }
+
+        let aiText = currentAIText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        if !aiText.isEmpty {
+            snapshot.append(MemorizeInteractMessage(isUser: false, text: aiText))
+        }
+        return snapshot
     }
 
     private func reconnectWithNewVoice() {

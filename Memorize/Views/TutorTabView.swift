@@ -352,6 +352,7 @@ enum TutorLearningMethod: String, CaseIterable, Identifiable {
 
 struct TutorTabView: View {
     @ObservedObject var viewModel: ProjectDetailViewModel
+    let onSessionCaptured: ([MemorizeInteractMessage]) -> Void
 
     @State private var selectedMethod: TutorLearningMethod = .guidedStudy
     @State private var currentStepIndex = 0
@@ -372,8 +373,17 @@ struct TutorTabView: View {
     @State private var serviceSessionID = UUID()
     @State private var supportsHandsFreeMic = false
     @State private var isAISpeaking = false
+    @State private var hasCapturedSession = false
     @AppStorage("geminiSelectedVoice") private var selectedVoice = "Aoede"
     @State private var showVoicePicker = false
+
+    init(
+        viewModel: ProjectDetailViewModel,
+        onSessionCaptured: @escaping ([MemorizeInteractMessage]) -> Void = { _ in }
+    ) {
+        self._viewModel = ObservedObject(wrappedValue: viewModel)
+        self.onSessionCaptured = onSessionCaptured
+    }
 
     private var tutorAccent: Color { selectedMethod.accent }
 
@@ -450,6 +460,9 @@ struct TutorTabView: View {
         .onChange(of: selectedVoice) { _ in
             guard geminiService != nil else { return }
             reconnectWithNewVoice()
+        }
+        .onDisappear {
+            captureSessionIfNeeded()
         }
     }
 
@@ -849,6 +862,7 @@ struct TutorTabView: View {
     }
 
     private func endSession() {
+        captureSessionIfNeeded()
         transitionTask?.cancel()
         transitionTask = nil
         serviceSessionID = UUID()
@@ -866,6 +880,32 @@ struct TutorTabView: View {
         transitionIsFinishing = false
         supportsHandsFreeMic = false
         isAISpeaking = false
+    }
+
+    private func captureSessionIfNeeded() {
+        guard !hasCapturedSession else { return }
+        let snapshot = sessionMessagesSnapshot()
+        guard !snapshot.isEmpty else { return }
+        hasCapturedSession = true
+        onSessionCaptured(snapshot)
+    }
+
+    private func sessionMessagesSnapshot() -> [MemorizeInteractMessage] {
+        var snapshot = messages
+        let userText = currentUserText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        if !userText.isEmpty {
+            snapshot.append(MemorizeInteractMessage(isUser: true, text: userText))
+        }
+
+        let aiText = currentAIText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        if !aiText.isEmpty {
+            snapshot.append(MemorizeInteractMessage(isUser: false, text: aiText))
+        }
+        return snapshot
     }
 
     private func reconnectWithNewVoice() {

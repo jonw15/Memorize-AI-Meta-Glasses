@@ -14,6 +14,10 @@ class ProjectDetailViewModel: ObservableObject {
     @Published var isImportingYouTube = false
     @Published var youtubeImportError: String?
     @Published var showFilePicker = false
+    @Published private(set) var sourceAddedToken: UUID?
+    @Published var generatedNoteDraft: GeneratedNote?
+    @Published var isGeneratingNoteDraft = false
+    @Published var noteGenerationError: String?
 
     // Study action state
     @Published var quizQuestions: [QuizQuestion] = []
@@ -35,6 +39,8 @@ class ProjectDetailViewModel: ObservableObject {
     private let youtubeTranscriptImportService = YouTubeTranscriptImportService()
     private let wordsPerQuizQuestion = 85.0
     private let youtubeTranscriptChunkTargetChars = 2600
+    private var pendingSessionTranscripts: [GeneratedNoteKind: String] = [:]
+    private var hasPersistedBook: Bool
 
     var allCompletedPages: [PageCapture] {
         book.allPages.filter { $0.status == .completed }
@@ -67,6 +73,7 @@ class ProjectDetailViewModel: ObservableObject {
 
     init(book: Book) {
         self.book = book
+        self.hasPersistedBook = storage.bookExists(book.id)
     }
 
     // MARK: - Source Management
@@ -87,7 +94,9 @@ class ProjectDetailViewModel: ObservableObject {
         } else {
             storage.saveBook(book)
         }
+        hasPersistedBook = true
         print("📚 [ProjectDetail] Added source: \(source.name) (\(source.sourceType.rawValue))")
+        sourceAddedToken = UUID()
 
         // Auto-detect title if project is untitled
         if book.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -334,15 +343,140 @@ class ProjectDetailViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Notes
+
+    func generateNoteDraft(after mode: GeneratedNoteKind) {
+        guard hasContent else { return }
+        guard !isGeneratingNoteDraft else { return }
+        guard generatedNoteDraft == nil else { return }
+
+        let pages = allCompletedPages
+        let title = book.title
+        let sessionTranscript = noteSessionTranscript(for: mode)
+        isGeneratingNoteDraft = true
+        noteGenerationError = nil
+
+        Task {
+            do {
+                let note = try await memorizeService.generateStudyNote(
+                    from: pages,
+                    bookTitle: title,
+                    mode: mode,
+                    sessionTranscript: sessionTranscript
+                )
+                generatedNoteDraft = note
+            } catch {
+                noteGenerationError = error.localizedDescription
+                print("❌ [ProjectDetail] Note generation failed: \(error)")
+            }
+            isGeneratingNoteDraft = false
+        }
+    }
+
+    func saveGeneratedNote(_ note: GeneratedNote) {
+        book.notes.insert(note, at: 0)
+        book.updatedAt = Date()
+
+        if storage.bookExists(book.id) {
+            storage.updateBook(book)
+        } else {
+            storage.saveBook(book)
+        }
+        hasPersistedBook = true
+
+        generatedNoteDraft = nil
+        noteGenerationError = nil
+    }
+
+    func deleteNote(id: UUID) {
+        book.notes.removeAll { $0.id == id }
+        book.updatedAt = Date()
+        storage.updateBook(book)
+    }
+
+    func captureSessionMessages(_ messages: [MemorizeInteractMessage], for mode: GeneratedNoteKind) {
+        let transcript = formattedTranscript(from: messages)
+        guard !transcript.isEmpty else { return }
+        pendingSessionTranscripts[mode] = transcript
+    }
+
+    func clearSessionCapture(for mode: GeneratedNoteKind) {
+        pendingSessionTranscripts[mode] = nil
+    }
+
+    func discardGeneratedNote() {
+        generatedNoteDraft = nil
+        noteGenerationError = nil
+    }
+
+    private func noteSessionTranscript(for mode: GeneratedNoteKind) -> String? {
+        var transcript = pendingSessionTranscripts[mode]
+
+        if mode == .quiz {
+            let quizContext = formattedQuizSession()
+            if !quizContext.isEmpty {
+                transcript = [transcript, quizContext]
+                    .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: "\n\n")
+            }
+        }
+
+        return transcript?.isEmpty == false ? transcript : nil
+    }
+
+    private func formattedTranscript(from messages: [MemorizeInteractMessage]) -> String {
+        let lines = messages
+            .map { message -> String in
+                let text = message.text
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                guard !text.isEmpty else { return "" }
+                return "\(message.isUser ? "User said" : "AI feedback"): \(text)"
+            }
+            .filter { !$0.isEmpty }
+
+        let clipped = lines.suffix(16).joined(separator: "\n")
+        guard clipped.count > 5000 else { return clipped }
+        return String(clipped.suffix(5000))
+    }
+
+    private func formattedQuizSession() -> String {
+        let lines = quizQuestions.enumerated().compactMap { index, question -> String? in
+            guard let selectedIndex = question.selectedIndex,
+                  selectedIndex >= 0,
+                  selectedIndex < question.options.count else { return nil }
+
+            let userAnswer = question.options[selectedIndex]
+            let correctAnswer = question.options[question.correctIndex]
+            let result = selectedIndex == question.correctIndex ? "correct" : "incorrect"
+            let feedback = question.explanation?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            return """
+            Quiz item \(index + 1):
+            User said/selected: \(userAnswer)
+            AI feedback: The answer was \(result). Correct answer: \(correctAnswer). \(feedback)
+            """
+        }
+
+        return lines.joined(separator: "\n\n")
+    }
+
     func reload() {
         let books = storage.loadBooks()
         guard let updated = books.first(where: { $0.id == book.id }) else {
+            guard hasPersistedBook else {
+                isDeleted = false
+                print("📚 [ProjectDetail] Reload skipped — new unsaved project: \(book.id)")
+                return
+            }
             isDeleted = true
             print("📚 [ProjectDetail] Reload skipped — book no longer exists: \(book.id)")
             return
         }
 
         isDeleted = false
+        hasPersistedBook = true
         book = updated
         // Load thumbnails but don't drop pages that lack them (text-only sources are valid)
         for i in book.pages.indices {

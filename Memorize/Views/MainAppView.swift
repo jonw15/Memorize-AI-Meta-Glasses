@@ -18,20 +18,24 @@ import MWDATCore
 import SwiftUI
 
 struct MainAppView: View {
+  private static let hasSeenWelcomeKey = "hasSeenRecallHomeScreen"
+
   let wearables: WearablesInterface
   @ObservedObject private var viewModel: WearablesViewModel
   @StateObject private var streamViewModel: StreamSessionViewModel
   @StateObject private var quickVisionManager = QuickVisionManager.shared
+  @AppStorage(Self.hasSeenWelcomeKey) private var hasSeenWelcomeScreen = false
   @State private var hasCheckedPermissions = false
   @State private var shouldAutoLaunchLiveAI = false
   @State private var showLaunchIntro = true
   @State private var restoreProjectContext: ProjectContextSnapshot?
-  @State private var showWelcome = true
+  @State private var showWelcome: Bool
 
   init(wearables: WearablesInterface, viewModel: WearablesViewModel) {
     self.wearables = wearables
     self.viewModel = viewModel
     self._streamViewModel = StateObject(wrappedValue: StreamSessionViewModel(wearables: wearables))
+    self._showWelcome = State(initialValue: !UserDefaults.standard.bool(forKey: Self.hasSeenWelcomeKey))
   }
 
   var body: some View {
@@ -39,10 +43,14 @@ struct MainAppView: View {
       if showWelcome {
         // Welcome / onboarding screen
         HomeScreenView(viewModel: viewModel, onContinue: {
+          hasSeenWelcomeScreen = true
           withAnimation(.easeInOut(duration: 0.4)) {
             showWelcome = false
           }
         })
+        .onAppear {
+          hasSeenWelcomeScreen = true
+        }
         .transition(.opacity)
       } else if !hasCheckedPermissions {
         // Request permissions
