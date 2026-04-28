@@ -389,7 +389,7 @@ class ProjectDetailViewModel: ObservableObject {
                     sessionTranscript: sessionTranscript,
                     customInstructions: customInstructions
                 )
-                generatedNoteDraft = note
+                saveGeneratedNote(note)
             } catch {
                 noteGenerationError = error.localizedDescription
                 print("❌ [ProjectDetail] Note generation failed: \(error)")

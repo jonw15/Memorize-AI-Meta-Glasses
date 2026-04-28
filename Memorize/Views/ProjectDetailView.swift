@@ -235,20 +235,26 @@ struct ProjectDetailView: View {
     @ViewBuilder
     private var noteGenerationOverlay: some View {
         if viewModel.isGeneratingNoteDraft || viewModel.isGeneratingSlideDeck || viewModel.isGeneratingPaper {
-            ZStack {
-                Color.black.opacity(0.45).ignoresSafeArea()
-                VStack(spacing: 12) {
+            VStack {
+                Spacer()
+                HStack(spacing: 10) {
                     ProgressView()
                         .tint(.white)
-                        .scaleEffect(1.15)
+                        .scaleEffect(0.85)
                     Text(generationStatusText)
-                        .font(AppTypography.subheadline)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundColor(.white)
                 }
-                .padding(22)
-                .background(AppColors.memorizeCard)
-                .cornerRadius(AppCornerRadius.lg)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color(hex: "1F2420"))
+                .clipShape(Capsule())
+                .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 6)
+                .padding(.bottom, 96)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .allowsHitTesting(false)
         }
     }
 
@@ -1922,19 +1928,19 @@ private struct SavedNoteCard: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: iconName)
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(AppColors.memorizeAccent)
+                    .foregroundColor(Color(hex: "276B32"))
                     .frame(width: 34, height: 34)
-                    .background(AppColors.memorizeAccent.opacity(0.15))
+                    .background(Color(hex: "D6F4D8"))
                     .cornerRadius(AppCornerRadius.sm)
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text(note.title)
                         .font(AppTypography.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                         .fixedSize(horizontal: false, vertical: true)
                     Text(note.formattedDate)
                         .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(0.48))
+                        .foregroundColor(Color(hex: "8D958E"))
                 }
 
                 Spacer()
@@ -1942,9 +1948,9 @@ private struct SavedNoteCard: View {
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.red.opacity(0.9))
+                        .foregroundColor(Color(hex: "B0444C"))
                         .frame(width: 34, height: 34)
-                        .background(Color.red.opacity(0.12))
+                        .background(Color(hex: "FCE3E3"))
                         .cornerRadius(AppCornerRadius.sm)
                 }
                 .buttonStyle(.plain)
@@ -1953,33 +1959,38 @@ private struct SavedNoteCard: View {
             HStack(spacing: 8) {
                 Text(note.mode.displayTitle)
                     .font(AppTypography.caption)
-                    .foregroundColor(AppColors.memorizeAccent)
+                    .foregroundColor(Color(hex: "276B32"))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(AppColors.memorizeAccent.opacity(0.12))
+                    .background(Color(hex: "D6F4D8"))
                     .cornerRadius(AppCornerRadius.sm)
 
                 Spacer()
 
                 Text("memorize.notes_read".localized)
                     .font(AppTypography.caption)
-                    .foregroundColor(Color.white.opacity(0.55))
+                    .foregroundColor(Color(hex: "6E776F"))
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Color.white.opacity(0.35))
+                    .foregroundColor(Color(hex: "8D958E"))
             }
 
             Text(note.previewText)
                 .font(AppTypography.subheadline)
-                .foregroundColor(Color.white.opacity(0.74))
+                .foregroundColor(Color(hex: "1F2420").opacity(0.74))
                 .lineSpacing(3)
                 .lineLimit(4)
                 .multilineTextAlignment(.leading)
         }
         .padding(AppSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppColors.memorizeCard)
+        .background(Color.white)
         .cornerRadius(AppCornerRadius.lg)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppCornerRadius.lg)
+                .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)
     }
@@ -2012,6 +2023,10 @@ private struct SavedNoteDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    private var shareText: String {
+        "\(note.title)\n\n\(note.body)"
+    }
+
     var body: some View {
         NavigationView {
             ScrollView {
@@ -2019,20 +2034,20 @@ private struct SavedNoteDetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(note.mode.displayTitle)
                             .font(AppTypography.caption)
-                            .foregroundColor(AppColors.memorizeAccent)
+                            .foregroundColor(Color(hex: "276B32"))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
-                            .background(AppColors.memorizeAccent.opacity(0.12))
+                            .background(Color(hex: "D6F4D8"))
                             .cornerRadius(AppCornerRadius.sm)
 
                         Text(note.title)
                             .font(AppTypography.title2)
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                             .fixedSize(horizontal: false, vertical: true)
 
                         Text(note.formattedDate)
                             .font(AppTypography.caption)
-                            .foregroundColor(Color.white.opacity(0.5))
+                            .foregroundColor(Color(hex: "8D958E"))
                     }
 
                     ReadableNoteBody(text: note.body)
@@ -2047,19 +2062,25 @@ private struct SavedNoteDetailView: View {
                     Button("memorize.notes_close".localized) {
                         dismiss()
                     }
-                    .foregroundColor(Color.white.opacity(0.75))
+                    .foregroundColor(Color(hex: "1F2420"))
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(role: .destructive) {
-                        onDelete()
-                        dismiss()
-                    } label: {
-                        Image(systemName: "trash")
+                    HStack(spacing: 12) {
+                        ShareLink(item: shareText) {
+                            Image(systemName: "square.and.arrow.up")
+                                .foregroundColor(Color(hex: "1F2420"))
+                        }
+                        Button(role: .destructive) {
+                            onDelete()
+                            dismiss()
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .foregroundColor(Color(hex: "B0444C"))
                     }
-                    .foregroundColor(.red.opacity(0.9))
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
         }
     }
 }
@@ -2079,24 +2100,24 @@ private struct ReadableNoteBody: View {
                 if isHeading(line) {
                     Text(cleanHeading(line))
                         .font(AppTypography.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                         .padding(.top, 6)
                 } else if isBullet(line) {
                     HStack(alignment: .top, spacing: 10) {
                         Circle()
-                            .fill(AppColors.memorizeAccent)
+                            .fill(Color(hex: "276B32"))
                             .frame(width: 5, height: 5)
                             .padding(.top, 8)
                         Text(cleanBullet(line))
                             .font(AppTypography.body)
-                            .foregroundColor(Color.white.opacity(0.82))
+                            .foregroundColor(Color(hex: "1F2420").opacity(0.82))
                             .lineSpacing(4)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 } else {
                     Text(line)
                         .font(AppTypography.body)
-                        .foregroundColor(Color.white.opacity(0.82))
+                        .foregroundColor(Color(hex: "1F2420").opacity(0.82))
                         .lineSpacing(5)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -2104,8 +2125,12 @@ private struct ReadableNoteBody: View {
         }
         .padding(AppSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppColors.memorizeCard)
+        .background(Color.white)
         .cornerRadius(AppCornerRadius.lg)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppCornerRadius.lg)
+                .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+        )
     }
 
     private func isHeading(_ line: String) -> Bool {
@@ -2170,6 +2195,10 @@ private struct GeneratedNoteDraftView: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    private var shareText: String {
+        "\(note.title)\n\n\(note.body)"
+    }
+
     var body: some View {
         NavigationView {
             ScrollView {
@@ -2223,12 +2252,18 @@ private struct GeneratedNoteDraftView: View {
                     .foregroundColor(Color(hex: "6E776F"))
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("memorize.notes_save".localized) {
-                        onSave()
-                        dismiss()
+                    HStack(spacing: 12) {
+                        ShareLink(item: shareText) {
+                            Image(systemName: "square.and.arrow.up")
+                                .foregroundColor(Color(hex: "1F2420"))
+                        }
+                        Button("memorize.notes_save".localized) {
+                            onSave()
+                            dismiss()
+                        }
+                        .fontWeight(.semibold)
+                        .foregroundColor(Color(hex: "2F6A3F"))
                     }
-                    .fontWeight(.semibold)
-                    .foregroundColor(Color(hex: "2F6A3F"))
                 }
             }
             .toolbarColorScheme(.light, for: .navigationBar)
@@ -2241,6 +2276,21 @@ private struct GeneratedSlideDeckDraftView: View {
     let onClose: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+
+    private var shareText: String {
+        var lines: [String] = [deck.title, ""]
+        for (i, slide) in deck.slides.enumerated() {
+            lines.append("Slide \(i + 1) — \(slide.title)")
+            for bullet in slide.bullets {
+                lines.append("• \(bullet)")
+            }
+            if !slide.speakerNotes.isEmpty {
+                lines.append("Speaker notes: \(slide.speakerNotes)")
+            }
+            lines.append("")
+        }
+        return lines.joined(separator: "\n")
+    }
 
     var body: some View {
         NavigationView {
@@ -2278,12 +2328,18 @@ private struct GeneratedSlideDeckDraftView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        onClose()
-                        dismiss()
+                    HStack(spacing: 12) {
+                        ShareLink(item: shareText) {
+                            Image(systemName: "square.and.arrow.up")
+                                .foregroundColor(Color(hex: "1F2420"))
+                        }
+                        Button("Done") {
+                            onClose()
+                            dismiss()
+                        }
+                        .fontWeight(.semibold)
+                        .foregroundColor(Color(hex: "2F6A3F"))
                     }
-                    .fontWeight(.semibold)
-                    .foregroundColor(Color(hex: "2F6A3F"))
                 }
             }
             .toolbarColorScheme(.light, for: .navigationBar)
@@ -2362,6 +2418,10 @@ private struct GeneratedPaperDraftView: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    private var shareText: String {
+        "\(paper.title)\n\n\(paper.body)"
+    }
+
     var body: some View {
         NavigationView {
             ScrollView(showsIndicators: false) {
@@ -2402,12 +2462,18 @@ private struct GeneratedPaperDraftView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        onClose()
-                        dismiss()
+                    HStack(spacing: 12) {
+                        ShareLink(item: shareText) {
+                            Image(systemName: "square.and.arrow.up")
+                                .foregroundColor(Color(hex: "1F2420"))
+                        }
+                        Button("Done") {
+                            onClose()
+                            dismiss()
+                        }
+                        .fontWeight(.semibold)
+                        .foregroundColor(Color(hex: "2F6A3F"))
                     }
-                    .fontWeight(.semibold)
-                    .foregroundColor(Color(hex: "2F6A3F"))
                 }
             }
             .toolbarColorScheme(.light, for: .navigationBar)

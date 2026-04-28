@@ -1840,37 +1840,6 @@ struct MemorizeInfographicsView: View {
                     )
                 }
 
-                VStack(alignment: .leading, spacing: labelSpacing) {
-                    Text("memorize.infographic_language".localized)
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .foregroundColor(Color(hex: "1F2420"))
-
-                    Menu {
-                        ForEach(InfographicLanguage.allCases) { option in
-                            Button(option.titleKey.localized) {
-                                language = option
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 14) {
-                            Text(language.titleKey.localized)
-                                .font(.system(size: 19, weight: .semibold, design: .rounded))
-                                .lineLimit(1)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 12, weight: .bold))
-                        }
-                        .foregroundColor(Color(hex: "1F2420"))
-                        .padding(.horizontal, 22)
-                        .frame(height: controlHeight)
-                        .background(Color.white.opacity(0.94))
-                        .overlay(
-                            Capsule()
-                                .stroke(Color(hex: "E8E0D7"), lineWidth: 1)
-                        )
-                        .clipShape(Capsule())
-                    }
-                }
-
                 Button {
                     startGeneration()
                 } label: {
@@ -1966,16 +1935,32 @@ struct MemorizeInfographicsView: View {
                     }
                 }
 
-                Button {
-                    dismiss()
-                } label: {
-                    Text("memorize.done".localized)
-                        .font(AppTypography.headline)
+                if !infographics.isEmpty {
+                    Menu {
+                        ForEach(Array(infographics.enumerated()), id: \.offset) { index, image in
+                            ShareLink(
+                                item: Image(uiImage: image),
+                                preview: SharePreview(
+                                    "Infographic \(index + 1)",
+                                    image: Image(uiImage: image)
+                                )
+                            ) {
+                                Label("Infographic \(index + 1)", systemImage: "photo")
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text("Share")
+                                .font(AppTypography.headline)
+                        }
                         .foregroundColor(Color(hex: "1F2420"))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(Color.white.opacity(0.94))
                         .cornerRadius(AppCornerRadius.md)
+                    }
                 }
             }
             .padding(.horizontal, AppSpacing.md)
@@ -2249,16 +2234,16 @@ struct GeminiVoicePickerView: View {
                     HStack(spacing: 12) {
                         Image(systemName: voice.icon)
                             .font(.system(size: 20))
-                            .foregroundColor(voice.id == selectedVoice ? accent : .white.opacity(0.5))
+                            .foregroundColor(voice.id == selectedVoice ? accent : Color(hex: "8D958E"))
                             .frame(width: 32)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(voice.name)
                                 .font(AppTypography.headline)
-                                .foregroundColor(.white)
+                                .foregroundColor(Color(hex: "1F2420"))
                             Text(voice.description)
                                 .font(AppTypography.caption)
-                                .foregroundColor(.white.opacity(0.6))
+                                .foregroundColor(Color(hex: "6E776F"))
                         }
 
                         Spacer()
@@ -2270,7 +2255,7 @@ struct GeminiVoicePickerView: View {
                     }
                     .padding(.vertical, 4)
                 }
-                .listRowBackground(Color.white.opacity(voice.id == selectedVoice ? 0.1 : 0.0))
+                .listRowBackground(voice.id == selectedVoice ? Color(hex: "F4EFE6") : Color.clear)
             }
             .listStyle(.plain)
             .background(AppColors.memorizeBackground)
@@ -2283,11 +2268,11 @@ struct GeminiVoicePickerView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                     }
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
         }
     }
 }
