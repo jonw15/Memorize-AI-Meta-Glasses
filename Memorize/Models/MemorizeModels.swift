@@ -107,6 +107,7 @@ enum GeneratedNoteKind: String, Codable {
     case infographics
     case quiz
     case voiceSummary
+    case studyGuide
 
     var displayTitle: String {
         switch self {
@@ -124,6 +125,8 @@ enum GeneratedNoteKind: String, Codable {
             return "memorize.pop_quiz".localized
         case .voiceSummary:
             return "memorize.voice_summary".localized
+        case .studyGuide:
+            return "Study guide"
         }
     }
 
@@ -143,6 +146,8 @@ enum GeneratedNoteKind: String, Codable {
             return "pop quiz study mode"
         case .voiceSummary:
             return "voice summary study mode"
+        case .studyGuide:
+            return "study guide"
         }
     }
 }
@@ -188,6 +193,63 @@ struct GeneratedNote: Identifiable, Codable {
         guard cleaned.count > 220 else { return cleaned }
         let endIndex = cleaned.index(cleaned.startIndex, offsetBy: 220)
         return String(cleaned[..<endIndex]) + "..."
+    }
+}
+
+struct GeneratedSlideDeck: Identifiable, Codable {
+    let id: UUID
+    var title: String
+    var slides: [GeneratedSlide]
+    let createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        slides: [GeneratedSlide],
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.slides = slides
+        self.createdAt = createdAt
+    }
+}
+
+struct GeneratedSlide: Identifiable, Codable {
+    let id: UUID
+    var title: String
+    var bullets: [String]
+    var speakerNotes: String
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        bullets: [String],
+        speakerNotes: String
+    ) {
+        self.id = id
+        self.title = title
+        self.bullets = bullets
+        self.speakerNotes = speakerNotes
+    }
+}
+
+struct GeneratedPaper: Identifiable, Codable {
+    let id: UUID
+    var title: String
+    var body: String
+    let createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        body: String,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.body = body
+        self.createdAt = createdAt
     }
 }
 

@@ -21,26 +21,26 @@ struct TextNoteEditorView: View {
             VStack(spacing: AppSpacing.md) {
                 TextField("memorize.note_title_placeholder".localized, text: $title)
                     .font(AppTypography.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                     .padding(AppSpacing.sm)
-                    .background(AppColors.memorizeCard)
+                    .background(Color.white.opacity(0.94))
                     .cornerRadius(AppCornerRadius.md)
 
                 ZStack(alignment: .topLeading) {
                     if text.isEmpty {
                         Text("memorize.note_text_placeholder".localized)
                             .font(AppTypography.body)
-                            .foregroundColor(Color.white.opacity(0.3))
+                            .foregroundColor(Color(hex: "8D958E"))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 8)
                     }
                     TextEditor(text: $text)
                         .font(AppTypography.body)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                         .scrollContentBackground(.hidden)
                 }
                 .padding(AppSpacing.sm)
-                .background(AppColors.memorizeCard)
+                .background(Color.white.opacity(0.94))
                 .cornerRadius(AppCornerRadius.md)
                 .frame(maxHeight: .infinity)
 
@@ -52,10 +52,10 @@ struct TextNoteEditorView: View {
                 } label: {
                     Text("memorize.save_note".localized)
                         .font(AppTypography.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(isValid ? AppColors.memorizeAccent : Color.white.opacity(0.1))
+                        .background(isValid ? AppColors.memorizeAccent : Color(hex: "EAE4DC"))
                         .cornerRadius(AppCornerRadius.md)
                 }
                 .disabled(!isValid)
@@ -69,10 +69,10 @@ struct TextNoteEditorView: View {
                     Button("memorize.cancel".localized) {
                         dismiss()
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
         }
     }
 }

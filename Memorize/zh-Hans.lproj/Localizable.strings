@@ -517,6 +517,23 @@
 // MARK: - Recall 回忆学习
 "tab.memorize" = "Recall";
 "memorize.title" = "Recall";
+"memorize.home_brand" = "Mastery";
+"memorize.projects_eyebrow" = "你的项目";
+"memorize.project_home_prompt" = "今天想学什么？";
+"memorize.new_project" = "新建项目";
+"memorize.new_project_desc" = "导入 PDF、粘贴链接，或从空白项目开始";
+"memorize.recent" = "最近";
+"memorize.search" = "搜索";
+"memorize.search_projects" = "搜索项目";
+"memorize.source_count_one" = "%d 个来源";
+"memorize.source_count_many" = "%d 个来源";
+"memorize.today" = "今天";
+"memorize.yesterday" = "昨天";
+"memorize.days_ago" = "%d 天前";
+"memorize.project_count_one" = "个项目";
+"memorize.project_count_many" = "个项目";
+"memorize.source_label_one" = "个来源";
+"memorize.source_label_many" = "个来源";
 "memorize.currently_reading" = "正在阅读";
 "memorize.existing_projects" = "已有项目";
 "memorize.add_to_library" = "拍摄、上传、学习任何内容。";
@@ -640,6 +657,9 @@
 "memorize.back" = "返回";
 "memorize.sources" = "来源";
 "memorize.sources_desc" = "上传 PDF、笔记或照片，让 AI 与你一起学习。";
+"memorize.sources_sheet_desc" = "Mastery 正在学习的所有资料。继续添加，让每种模式更有依据。";
+"memorize.in_this_project" = "本项目中";
+"memorize.source_glasses" = "眼镜";
 "memorize.study" = "学习";
 "memorize.notes" = "笔记";
 "memorize.tutor_short" = "导师";

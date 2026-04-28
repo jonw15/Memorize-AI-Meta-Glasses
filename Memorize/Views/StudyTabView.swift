@@ -6,15 +6,77 @@
 import SwiftUI
 import AVFoundation
 
+struct TutorMethodCard: Identifiable {
+    let id: String
+    let title: String
+    let detail: String
+    let icon: String
+    let tone: Color
+
+    static let all: [TutorMethodCard] = [
+        TutorMethodCard(
+            id: "feynman",
+            title: "Feynman Technique",
+            detail: "5 min · Teach back",
+            icon: "text.bubble.fill",
+            tone: Color(hex: "9B3949")
+        ),
+        TutorMethodCard(
+            id: "leitner",
+            title: "Leitner System",
+            detail: "20 cards · Boxed",
+            icon: "square.stack.3d.up.fill",
+            tone: Color(hex: "1E5D5A")
+        ),
+        TutorMethodCard(
+            id: "mnemonics",
+            title: "Mnemonics",
+            detail: "Visual · Story",
+            icon: "house.fill",
+            tone: Color(hex: "6A4F8E")
+        ),
+        TutorMethodCard(
+            id: "active_recall",
+            title: "Active Recall",
+            detail: "8 prompts · Retrieve",
+            icon: "brain.head.profile",
+            tone: Color(hex: "2E5C3A")
+        ),
+        TutorMethodCard(
+            id: "cornell",
+            title: "Cornell Method",
+            detail: "3 steps · Notes",
+            icon: "note.text",
+            tone: Color(hex: "8C7E3A")
+        ),
+        TutorMethodCard(
+            id: "spaced",
+            title: "Spaced Repetition",
+            detail: "Today · 8 due",
+            icon: "calendar",
+            tone: Color(hex: "4F8C5C")
+        )
+    ]
+}
+
 struct StudyTabView: View {
     @ObservedObject var viewModel: ProjectDetailViewModel
+    let onShowSources: () -> Void
+    let onShowLive: () -> Void
+    let onShowTutor: () -> Void
     let onModeFinished: (GeneratedNoteKind) -> Void
 
     init(
         viewModel: ProjectDetailViewModel,
+        onShowSources: @escaping () -> Void = {},
+        onShowLive: @escaping () -> Void = {},
+        onShowTutor: @escaping () -> Void = {},
         onModeFinished: @escaping (GeneratedNoteKind) -> Void = { _ in }
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
+        self.onShowSources = onShowSources
+        self.onShowLive = onShowLive
+        self.onShowTutor = onShowTutor
         self.onModeFinished = onModeFinished
     }
 
@@ -24,6 +86,7 @@ struct StudyTabView: View {
     @State private var selectedPersona: MemorizeExplainPersona = .highSchoolStudent
     @State private var showVoiceSummary = false
     @State private var showInfographics = false
+    @State private var presentedTutorMiniApp: TutorMiniAppKind?
     @State private var modeStartedAt: [GeneratedNoteKind: Date] = [:]
     private let minimumNoteGenerationDuration: TimeInterval = 10
 
@@ -48,85 +111,30 @@ struct StudyTabView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: AppSpacing.md) {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 24) {
+                learnHeader
+
                 if !hasContent {
                     VStack(spacing: AppSpacing.md) {
                         Image(systemName: "sparkles")
                             .font(.system(size: 40))
-                            .foregroundColor(Color.white.opacity(0.3))
+                            .foregroundColor(Color(hex: "8D958E"))
                         Text("memorize.no_content_for_study".localized)
                             .font(AppTypography.subheadline)
-                            .foregroundColor(Color.white.opacity(0.5))
+                            .foregroundColor(Color(hex: "6E776F"))
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 60)
                 } else {
-                    Text("memorize.study_prompt".localized)
-                        .font(AppTypography.subheadline)
-                        .foregroundColor(Color.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, AppSpacing.md)
-                        .padding(.top, AppSpacing.lg)
+                    Text("Study with Mastery")
+                        .font(.system(size: 30, weight: .regular, design: .serif))
+                        .foregroundColor(Color(hex: "1F2420"))
 
-                    // Interact
-                    studyActionButton(
-                        title: "memorize.interact".localized,
-                        subtitle: "memorize.interact_subtitle".localized,
-                        icon: "bubble.left.and.bubble.right.fill",
-                        gradient: [Color(red: 0.2, green: 0.7, blue: 0.4), Color(red: 0.1, green: 0.5, blue: 0.3)]
-                    ) {
-                        showInteract = true
-                    }
+                    learnCardGrid
 
-                    // Explain
-                    studyActionButton(
-                        title: "memorize.explain".localized,
-                        subtitle: "memorize.explain_subtitle".localized,
-                        icon: "lightbulb.fill",
-                        gradient: [Color.orange, Color.orange.opacity(0.7)]
-                    ) {
-                        showExplainPersonaSelector = true
-                    }
-
-                    // Podcast
-                    studyActionButton(
-                        title: "memorize.podcast".localized,
-                        subtitle: "memorize.podcast_subtitle".localized,
-                        icon: "waveform",
-                        gradient: [Color(red: 0.64, green: 0.21, blue: 0.83), Color(red: 0.5, green: 0.15, blue: 0.7)]
-                    ) {
-                        viewModel.startPodcast()
-                    }
-
-                    // Infographics
-                    studyActionButton(
-                        title: "memorize.infographics".localized,
-                        subtitle: "memorize.infographics_subtitle".localized,
-                        icon: "chart.bar.doc.horizontal.fill",
-                        gradient: [Color(red: 0.93, green: 0.35, blue: 0.47), Color(red: 0.80, green: 0.22, blue: 0.35)]
-                    ) {
-                        showInfographics = true
-                    }
-
-                    Text("memorize.test_mode_prompt".localized)
-                        .font(AppTypography.subheadline)
-                        .foregroundColor(Color.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, AppSpacing.md)
-                        .padding(.top, AppSpacing.sm)
-
-                    // Pop Quiz
-                    studyActionButton(
-                        title: "memorize.pop_quiz".localized,
-                        subtitle: "memorize.pop_quiz_subtitle".localized,
-                        icon: "questionmark.circle.fill",
-                        gradient: [Color.blue, Color.cyan]
-                    ) {
-                        viewModel.generateQuiz()
-                    }
-
+                    tutorSection
 
                     if let error = viewModel.podcastErrorMessage, !error.isEmpty {
                         Text(error)
@@ -136,9 +144,11 @@ struct StudyTabView: View {
                     }
                 }
             }
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.bottom, AppSpacing.xl)
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 110)
         }
+        .background(Color(hex: "FCF7EF"))
         .overlay {
             if viewModel.isGeneratingQuiz {
                 ZStack {
@@ -262,6 +272,253 @@ struct StudyTabView: View {
                 sourceBundles: infographicSourceBundles
             )
         }
+        // Tutor mini apps
+        .fullScreenCover(item: $presentedTutorMiniApp) { kind in
+            TutorMiniAppView(
+                kind: kind,
+                book: viewModel.book,
+                onClose: { presentedTutorMiniApp = nil }
+            )
+        }
+    }
+
+    private var learnHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(projectEyebrow)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .tracking(0.4)
+                    .foregroundColor(Color(hex: "8D958E"))
+                    .lineLimit(2)
+
+                Spacer()
+
+                Button(action: onShowSources) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc.text")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(Color(hex: "2F6A83"))
+                            .frame(width: 24, height: 24)
+                            .background(Color(hex: "E8F3F1"))
+                            .clipShape(Circle())
+
+                        Text("memorize.sources".localized)
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundColor(Color(hex: "1F2420"))
+
+                        Text("\(viewModel.book.sourceCount)")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .frame(width: 22, height: 22)
+                            .background(Color(hex: "1F2420"))
+                            .clipShape(Circle())
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(0.92))
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color(hex: "E8E0D7"), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
+            Text("Learn")
+                .font(.system(size: 36, weight: .regular, design: .serif))
+                .foregroundColor(Color(hex: "1F2420"))
+        }
+    }
+
+    private var projectEyebrow: String {
+        let title = viewModel.book.title.isEmpty ? "memorize.untitled".localized : viewModel.book.title
+        return title.uppercased()
+    }
+
+    private var learnCardGrid: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: 16),
+                GridItem(.flexible(), spacing: 16)
+            ],
+            spacing: 16
+        ) {
+            learnCard(
+                title: "Summary",
+                detail: "Voice chat · grounded",
+                icon: "message.fill",
+                accessoryIcon: "ellipsis",
+                tone: Color(hex: "AED9B1"),
+                action: { showExplainPersonaSelector = true }
+            )
+
+            learnCard(
+                title: "Live",
+                detail: "Glasses · real-time",
+                icon: "eyeglasses",
+                accessoryIcon: "record.circle",
+                tone: Color(hex: "4146C5"),
+                action: onShowLive
+            )
+
+            learnCard(
+                title: "Pop quiz",
+                detail: "6 cards · 4 min",
+                icon: "bolt.fill",
+                accessoryIcon: nil,
+                tone: Color(hex: "F5A92D"),
+                action: { viewModel.generateQuiz() }
+            )
+
+            learnCard(
+                title: "Podcast",
+                detail: "Audio · 12 min",
+                icon: "headphones",
+                accessoryIcon: nil,
+                tone: Color(hex: "4E8FD0"),
+                action: { viewModel.startPodcast() }
+            )
+        }
+    }
+
+    private func learnCard(
+        title: String,
+        detail: String,
+        icon: String,
+        accessoryIcon: String?,
+        tone: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 0) {
+                ZStack {
+                    tone
+                    Image(systemName: icon)
+                        .font(.system(size: icon == "headphones" ? 60 : 54, weight: .regular))
+                        .foregroundColor(.white.opacity(0.92))
+
+                    if let accessoryIcon {
+                        Image(systemName: accessoryIcon)
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundColor(accessoryIcon == "record.circle" ? Color(hex: "FF6C6C") : .white)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                            .padding(24)
+                    }
+                }
+                .frame(height: 148)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title)
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundColor(Color(hex: "1F2420"))
+
+                    Text(detail)
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundColor(Color(hex: "8D958E"))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
+                .background(Color.white)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.07), radius: 10, x: 0, y: 5)
+        }
+        .buttonStyle(.plain)
+        .disabled(!hasContent || viewModel.isGeneratingQuiz || viewModel.isGeneratingExplanation)
+        .opacity(hasContent ? 1 : 0.45)
+    }
+
+    private var tutorSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Learn with a tutor")
+                    .font(.system(size: 30, weight: .regular, design: .serif))
+                    .foregroundColor(Color(hex: "1F2420"))
+
+                Text("Six proven techniques. Pick one and Mastery runs the session.")
+                    .font(.system(size: 16, weight: .regular, design: .rounded))
+                    .foregroundColor(Color(hex: "8D958E"))
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            tutorCardGrid
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var tutorCardGrid: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: 12),
+                GridItem(.flexible(), spacing: 12)
+            ],
+            spacing: 12
+        ) {
+            ForEach(TutorMethodCard.all) { method in
+                tutorCard(method)
+            }
+        }
+    }
+
+    private func tutorCard(_ method: TutorMethodCard) -> some View {
+        Button(action: {
+            if let kind = TutorMiniAppKind.fromCardId(method.id) {
+                presentedTutorMiniApp = kind
+            } else {
+                onShowTutor()
+            }
+        }) {
+            VStack(spacing: 0) {
+                ZStack {
+                    method.tone
+                    Image(systemName: method.icon)
+                        .font(.system(size: 38, weight: .regular))
+                        .foregroundColor(.white.opacity(0.92))
+                }
+                .frame(height: 120)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(method.title)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(Color(hex: "1F2420"))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkle")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(Color(hex: "8D958E"))
+                        Text(method.detail)
+                            .font(.system(size: 12, weight: .regular, design: .rounded))
+                            .foregroundColor(Color(hex: "8D958E"))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Color.white)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.07), radius: 10, x: 0, y: 5)
+        }
+        .buttonStyle(.plain)
+        .disabled(!hasContent)
+        .opacity(hasContent ? 1 : 0.45)
     }
 
     private func startTrackedMode(_ mode: GeneratedNoteKind) {

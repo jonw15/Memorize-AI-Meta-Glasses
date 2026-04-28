@@ -94,11 +94,11 @@ struct HomeScreenView: View {
 
         Text("Recall")
           .font(.system(size: 38, weight: .bold))
-          .foregroundColor(.white)
+          .foregroundColor(Color(hex: "1F2420"))
 
         Text("AI-Powered Study Assistant")
           .font(AppTypography.subheadline)
-          .foregroundColor(Color.white.opacity(0.5))
+          .foregroundColor(Color(hex: "8D958E"))
       }
       .padding(.bottom, AppSpacing.xl)
 
@@ -125,7 +125,7 @@ struct HomeScreenView: View {
         } label: {
           Text("Get Started")
             .font(AppTypography.headline)
-            .foregroundColor(.white)
+            .foregroundColor(Color(hex: "1F2420"))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(AppColors.memorizeAccent)
@@ -144,7 +144,7 @@ struct HomeScreenView: View {
               Text("Connect Ray-Ban Meta glasses")
             }
             .font(AppTypography.subheadline)
-            .foregroundColor(Color.white.opacity(0.5))
+            .foregroundColor(Color(hex: "6E776F"))
             .padding(.vertical, 12)
           }
         }
@@ -166,11 +166,11 @@ struct HomeScreenView: View {
 
         Text("Connect Ray-Ban Meta")
           .font(.system(size: 28, weight: .bold))
-          .foregroundColor(.white)
+          .foregroundColor(Color(hex: "1F2420"))
 
         Text("Make sure your glasses are in developer mode and nearby")
           .font(AppTypography.subheadline)
-          .foregroundColor(Color.white.opacity(0.5))
+          .foregroundColor(Color(hex: "8D958E"))
           .multilineTextAlignment(.center)
           .padding(.horizontal, AppSpacing.xl)
       }
@@ -193,7 +193,7 @@ struct HomeScreenView: View {
             }
           }
           .font(AppTypography.headline)
-          .foregroundColor(.white)
+          .foregroundColor(Color(hex: "1F2420"))
           .frame(maxWidth: .infinity)
           .padding(.vertical, 16)
           .background(AppColors.memorizeAccent)
@@ -207,7 +207,7 @@ struct HomeScreenView: View {
         } label: {
           Text("Back")
             .font(AppTypography.subheadline)
-            .foregroundColor(Color.white.opacity(0.5))
+            .foregroundColor(Color(hex: "6E776F"))
             .padding(.vertical, 12)
         }
       }
@@ -261,11 +261,11 @@ struct FeatureTipView: View {
       VStack(alignment: .leading, spacing: AppSpacing.xs) {
         Text(title)
           .font(AppTypography.headline)
-          .foregroundColor(.white)
+          .foregroundColor(Color(hex: "1F2420"))
 
         Text(text)
           .font(AppTypography.subheadline)
-          .foregroundColor(Color.white.opacity(0.5))
+          .foregroundColor(Color(hex: "8D958E"))
           .fixedSize(horizontal: false, vertical: true)
       }
 

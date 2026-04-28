@@ -516,6 +516,23 @@
 // MARK: - Recall
 "tab.memorize" = "Recall";
 "memorize.title" = "Recall";
+"memorize.home_brand" = "Mastery";
+"memorize.projects_eyebrow" = "YOUR PROJECTS";
+"memorize.project_home_prompt" = "What are you studying?";
+"memorize.new_project" = "New project";
+"memorize.new_project_desc" = "Drop in a PDF, paste a link, or start from scratch";
+"memorize.recent" = "RECENT";
+"memorize.search" = "Search";
+"memorize.search_projects" = "Search projects";
+"memorize.source_count_one" = "%d source";
+"memorize.source_count_many" = "%d sources";
+"memorize.today" = "Today";
+"memorize.yesterday" = "Yesterday";
+"memorize.days_ago" = "%dd ago";
+"memorize.project_count_one" = "project";
+"memorize.project_count_many" = "projects";
+"memorize.source_label_one" = "source";
+"memorize.source_label_many" = "sources";
 "memorize.currently_reading" = "Currently Reading";
 "memorize.existing_projects" = "Existing Projects";
 "memorize.add_to_library" = "Capture, upload, and study anything.";
@@ -639,6 +656,9 @@
 "memorize.back" = "Back";
 "memorize.sources" = "Sources";
 "memorize.sources_desc" = "Upload PDFs, notes, or photos for AI to study with you.";
+"memorize.sources_sheet_desc" = "Everything Mastery is learning from. Add more to ground every mode.";
+"memorize.in_this_project" = "IN THIS PROJECT";
+"memorize.source_glasses" = "Glasses";
 "memorize.study" = "Study";
 "memorize.notes" = "Notes";
 "memorize.tutor_short" = "Tutor";

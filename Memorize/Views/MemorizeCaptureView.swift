@@ -1714,8 +1714,14 @@ struct MemorizeInfographicsView: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 22, weight: .medium))
-                    .foregroundColor(.white.opacity(0.88))
+                    .foregroundColor(Color(hex: "1F2420"))
                     .frame(width: 48, height: 48)
+                    .background(Color.white.opacity(0.88))
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(Color(hex: "E8E0D7"), lineWidth: 1)
+                    )
             }
             .padding(.trailing, AppSpacing.lg)
             .padding(.top, AppSpacing.xl)
@@ -1735,12 +1741,12 @@ struct MemorizeInfographicsView: View {
                         .font(.system(size: compact ? 24 : 28, weight: .semibold))
                         .foregroundColor(AppColors.memorizeAccent)
                         .frame(width: compact ? 70 : 82, height: compact ? 70 : 82)
-                        .background(Color.black.opacity(0.22))
+                        .background(Color(hex: "D6F4D8"))
                         .clipShape(Circle())
 
                     Text("memorize.customize_infographic".localized)
                         .font(.system(size: compact ? 28 : 31, weight: .regular, design: .rounded))
-                        .foregroundColor(.white.opacity(0.92))
+                        .foregroundColor(Color(hex: "1F2420"))
                         .multilineTextAlignment(.center)
                         .minimumScaleFactor(0.75)
                         .frame(maxWidth: .infinity)
@@ -1751,7 +1757,7 @@ struct MemorizeInfographicsView: View {
                 VStack(alignment: .leading, spacing: labelSpacing) {
                     Text("memorize.infographic_orientation".localized)
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.9))
+                        .foregroundColor(Color(hex: "1F2420"))
 
                     HStack(spacing: 10) {
                         ForEach(InfographicOrientation.allCases) { option in
@@ -1763,7 +1769,7 @@ struct MemorizeInfographicsView: View {
                 VStack(alignment: .leading, spacing: labelSpacing) {
                     Text("memorize.infographic_sources".localized)
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.9))
+                        .foregroundColor(Color(hex: "1F2420"))
 
                     Menu {
                         ForEach(sourceBundles) { source in
@@ -1787,10 +1793,14 @@ struct MemorizeInfographicsView: View {
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 12, weight: .bold))
                         }
-                        .foregroundColor(.white.opacity(0.86))
+                        .foregroundColor(Color(hex: "1F2420"))
                         .padding(.horizontal, 20)
                         .frame(height: controlHeight)
-                        .background(Color.black.opacity(0.22))
+                        .background(Color.white.opacity(0.94))
+                        .overlay(
+                            Capsule()
+                                .stroke(Color(hex: "E8E0D7"), lineWidth: 1)
+                        )
                         .clipShape(Capsule())
                     }
                 }
@@ -1798,13 +1808,13 @@ struct MemorizeInfographicsView: View {
                 VStack(alignment: .leading, spacing: labelSpacing) {
                     Text("memorize.infographic_prompt".localized)
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.9))
+                        .foregroundColor(Color(hex: "1F2420"))
 
                     ZStack(alignment: .topLeading) {
                         if customPrompt.isEmpty {
                             Text("memorize.infographic_prompt_placeholder".localized)
                                 .font(.system(size: compact ? 16 : 17, weight: .regular, design: .rounded))
-                                .foregroundColor(.white.opacity(0.42))
+                                .foregroundColor(Color(hex: "8D958E"))
                                 .lineSpacing(5)
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 16)
@@ -1813,7 +1823,7 @@ struct MemorizeInfographicsView: View {
 
                         TextEditor(text: $customPrompt)
                             .font(.system(size: compact ? 16 : 17, weight: .regular, design: .rounded))
-                            .foregroundColor(.white.opacity(0.9))
+                            .foregroundColor(Color(hex: "1F2420"))
                             .lineSpacing(5)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 9)
@@ -1822,18 +1832,18 @@ struct MemorizeInfographicsView: View {
                             .focused($isPromptFocused)
                     }
                     .frame(height: compact ? 104 : 118)
-                    .background(AppColors.memorizeBackground.opacity(0.7))
+                    .background(Color.white.opacity(0.94))
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(isPromptFocused ? AppColors.memorizeAccent : Color.white.opacity(0.14), lineWidth: isPromptFocused ? 2.5 : 1)
+                            .stroke(isPromptFocused ? Color(hex: "2F6A3F") : Color(hex: "E8E0D7"), lineWidth: isPromptFocused ? 2.5 : 1)
                     )
                 }
 
                 VStack(alignment: .leading, spacing: labelSpacing) {
                     Text("memorize.infographic_language".localized)
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.9))
+                        .foregroundColor(Color(hex: "1F2420"))
 
                     Menu {
                         ForEach(InfographicLanguage.allCases) { option in
@@ -1849,10 +1859,14 @@ struct MemorizeInfographicsView: View {
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 12, weight: .bold))
                         }
-                        .foregroundColor(.white.opacity(0.86))
+                        .foregroundColor(Color(hex: "1F2420"))
                         .padding(.horizontal, 22)
                         .frame(height: controlHeight)
-                        .background(Color.black.opacity(0.22))
+                        .background(Color.white.opacity(0.94))
+                        .overlay(
+                            Capsule()
+                                .stroke(Color(hex: "E8E0D7"), lineWidth: 1)
+                        )
                         .clipShape(Capsule())
                     }
                 }
@@ -1862,7 +1876,7 @@ struct MemorizeInfographicsView: View {
                 } label: {
                     Text("memorize.generate".localized)
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                         .frame(maxWidth: .infinity)
                         .frame(height: compact ? 58 : 64)
                         .background(AppColors.memorizeAccent)
@@ -1885,15 +1899,15 @@ struct MemorizeInfographicsView: View {
                 Spacer()
                 VStack(spacing: AppSpacing.md) {
                     ProgressView()
-                        .tint(.white)
+                        .tint(Color(hex: "2F6A3F"))
                         .scaleEffect(1.5)
                     Text("memorize.infographics_generating".localized)
                         .font(AppTypography.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                     if totalToGenerate > 0 {
                         Text("\(progress)/\(totalToGenerate)")
                             .font(AppTypography.caption)
-                            .foregroundColor(.white.opacity(0.6))
+                            .foregroundColor(Color(hex: "8D958E"))
                     }
                 }
                 Spacer()
@@ -1902,11 +1916,11 @@ struct MemorizeInfographicsView: View {
                 VStack(spacing: AppSpacing.md) {
                     Image(systemName: "chart.bar.doc.horizontal")
                         .font(.system(size: 48))
-                        .foregroundColor(.white.opacity(0.3))
+                        .foregroundColor(Color(hex: "8D958E"))
                     if let errorMessage {
                         Text(errorMessage)
                             .font(AppTypography.body)
-                            .foregroundColor(.white.opacity(0.7))
+                            .foregroundColor(Color(hex: "6E776F"))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, AppSpacing.lg)
                     }
@@ -1923,11 +1937,11 @@ struct MemorizeInfographicsView: View {
                         if isGenerating {
                             HStack(spacing: 8) {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(Color(hex: "2F6A3F"))
                                     .scaleEffect(0.8)
                                 Text("memorize.infographics_generating_more".localized)
                                     .font(AppTypography.caption)
-                                    .foregroundColor(.white.opacity(0.6))
+                                    .foregroundColor(Color(hex: "8D958E"))
                             }
                             .padding(AppSpacing.md)
                         }
@@ -1944,10 +1958,10 @@ struct MemorizeInfographicsView: View {
                     } label: {
                         Text("memorize.back".localized)
                             .font(AppTypography.headline)
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(Color.white.opacity(0.1))
+                            .background(Color.white.opacity(0.94))
                             .cornerRadius(AppCornerRadius.md)
                     }
                 }
@@ -1957,10 +1971,10 @@ struct MemorizeInfographicsView: View {
                 } label: {
                     Text("memorize.done".localized)
                         .font(AppTypography.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color.white.opacity(0.1))
+                        .background(Color.white.opacity(0.94))
                         .cornerRadius(AppCornerRadius.md)
                 }
             }
@@ -1983,13 +1997,13 @@ struct MemorizeInfographicsView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .foregroundColor(.white.opacity(0.88))
+            .foregroundColor(orientation == option ? Color(hex: "1F2420") : Color(hex: "6E776F"))
             .frame(maxWidth: .infinity)
             .frame(height: height)
-            .background(orientation == option ? Color.black.opacity(0.22) : Color.clear)
+            .background(orientation == option ? Color.white.opacity(0.94) : Color.clear)
             .overlay(
                 Capsule()
-                    .stroke(orientation == option ? Color.clear : Color.white.opacity(0.72), lineWidth: 1.5)
+                    .stroke(orientation == option ? Color(hex: "E8E0D7") : Color(hex: "D9D2C8"), lineWidth: 1.5)
             )
             .clipShape(Capsule())
         }
@@ -3137,7 +3151,7 @@ struct MemorizePodcastPlayerView: View {
             // Title
             Text(bookTitle)
                 .font(AppTypography.title2)
-                .foregroundColor(.white)
+                .foregroundColor(Color(hex: "1F2420"))
                 .multilineTextAlignment(.center)
                 .lineLimit(3)
                 .padding(.horizontal, AppSpacing.lg)
@@ -3154,11 +3168,11 @@ struct MemorizePodcastPlayerView: View {
             if !hasStartedPlaying {
                 HStack(spacing: 8) {
                     ProgressView()
-                        .tint(.white)
+                        .tint(Color(hex: "1F2420"))
                         .scaleEffect(0.8)
                     Text(startupLoadingText)
                         .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(0.6))
+                        .foregroundColor(Color(hex: "1F2420").opacity(0.6))
                 }
                 .padding(AppSpacing.md)
             }
@@ -3204,7 +3218,7 @@ struct MemorizePodcastPlayerView: View {
                     disconnectAndDismiss()
                 } label: {
                     Image(systemName: "chevron.left")
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                 }
             }
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -3212,11 +3226,11 @@ struct MemorizePodcastPlayerView: View {
                     showVoicePicker = true
                 } label: {
                     Image(systemName: "person.crop.circle")
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                 }
             }
         }
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarColorScheme(.light, for: .navigationBar)
         .toolbarBackground(AppColors.memorizeBackground, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
     }
@@ -3254,7 +3268,7 @@ struct MemorizePodcastPlayerView: View {
 
             Text(bookTitle)
                 .font(AppTypography.title2)
-                .foregroundColor(.white)
+                .foregroundColor(Color(hex: "1F2420"))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .padding(.horizontal, AppSpacing.lg)
@@ -3269,17 +3283,17 @@ struct MemorizePodcastPlayerView: View {
 
             Text("memorize.podcast_header".localized)
                 .font(AppTypography.subheadline)
-                .foregroundColor(Color.white.opacity(0.6))
+                .foregroundColor(Color(hex: "1F2420").opacity(0.6))
 
             // Loading indicator
             if !hasStartedPlaying {
                 HStack(spacing: 8) {
                     ProgressView()
-                        .tint(.white)
+                        .tint(Color(hex: "1F2420"))
                         .scaleEffect(0.8)
                     Text(startupLoadingText)
                         .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(0.6))
+                        .foregroundColor(Color(hex: "1F2420").opacity(0.6))
                 }
                 .padding(AppSpacing.md)
             }
@@ -3313,7 +3327,7 @@ struct MemorizePodcastPlayerView: View {
                     disconnectAndDismiss()
                 } label: {
                     Image(systemName: "chevron.left")
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                 }
             }
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -3321,11 +3335,11 @@ struct MemorizePodcastPlayerView: View {
                     showVoicePicker = true
                 } label: {
                     Image(systemName: "person.crop.circle")
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                 }
             }
         }
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarColorScheme(.light, for: .navigationBar)
         .toolbarBackground(AppColors.memorizeBackground, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
     }
@@ -3417,12 +3431,12 @@ struct MemorizePodcastPlayerView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "mic.fill")
                         .font(.system(size: 28, weight: .medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
 
                     Text(listenerQuestionArmed && !isMuted ? "LISTENING" : "TAP TO INTERRUPT")
                         .font(.system(size: 11, weight: .bold))
                         .tracking(1.2)
-                        .foregroundColor(.white.opacity(0.9))
+                        .foregroundColor(Color(hex: "1F2420").opacity(0.9))
                 }
             }
         }
@@ -3469,11 +3483,11 @@ struct MemorizePodcastPlayerView: View {
                 HStack {
                     Text(formatTime(displayPosition))
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(Color.white.opacity(0.5))
+                        .foregroundColor(Color(hex: "1F2420").opacity(0.5))
                     Spacer()
                     Text(formatTime(effectiveMax))
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(Color.white.opacity(0.5))
+                        .foregroundColor(Color(hex: "1F2420").opacity(0.5))
                 }
             }
 
@@ -3484,7 +3498,7 @@ struct MemorizePodcastPlayerView: View {
                         .scaleEffect(0.75)
                     Text("Jumping to \(formatTime(displayPosition))... transcript catching up.")
                         .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(0.6))
+                        .foregroundColor(Color(hex: "1F2420").opacity(0.6))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.horizontal, AppSpacing.xs)
@@ -3495,7 +3509,7 @@ struct MemorizePodcastPlayerView: View {
                 Button { podcastSkip(by: -skipInterval) } label: {
                     Image(systemName: "gobackward.15")
                         .font(.system(size: 28, weight: .medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                 }
 
                 Button { togglePodcastPlayPause() } label: {
@@ -3507,7 +3521,7 @@ struct MemorizePodcastPlayerView: View {
                 Button { podcastSkip(by: skipInterval) } label: {
                     Image(systemName: "goforward.15")
                         .font(.system(size: 28, weight: .medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                 }
             }
             .padding(.vertical, AppSpacing.sm)
@@ -5312,7 +5326,7 @@ struct ExplainPersonaPickerView: View {
         VStack(spacing: AppSpacing.md) {
             Text("memorize.explain.select_persona".localized)
                 .font(AppTypography.headline)
-                .foregroundColor(.white)
+                .foregroundColor(Color(hex: "1F2420"))
                 .padding(.top, 32)
 
             ForEach(MemorizeExplainPersona.allCases) { persona in
@@ -5325,13 +5339,17 @@ struct ExplainPersonaPickerView: View {
                             .font(.system(size: 22))
                         Text(persona.displayKey.localized)
                             .font(AppTypography.body)
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                         Spacer()
                     }
                     .padding(.vertical, 12)
                     .padding(.horizontal, AppSpacing.md)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(AppCornerRadius.sm)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: AppCornerRadius.sm, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppCornerRadius.sm, style: .continuous)
+                            .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+                    )
                 }
             }
             .padding(.horizontal, AppSpacing.md)
@@ -5342,7 +5360,7 @@ struct ExplainPersonaPickerView: View {
             } label: {
                 Text("memorize.cancel".localized)
                     .font(AppTypography.body)
-                    .foregroundColor(Color.white.opacity(0.65))
+                    .foregroundColor(Color(hex: "6E776F"))
             }
             .padding(.bottom, AppSpacing.lg)
         }
@@ -5558,21 +5576,21 @@ struct MemorizeInteractView: View {
     }
 
     var body: some View {
-        ZStack {
-            AppColors.memorizeBackground
-                .ignoresSafeArea()
+        NavigationView {
+            ZStack {
+                AppColors.memorizeBackground
+                    .ignoresSafeArea()
 
-            NavigationView {
                 VStack(spacing: AppSpacing.md) {
                     Text("memorize.interact_prompt".localized)
                         .font(AppTypography.subheadline)
-                        .foregroundColor(Color.white.opacity(0.7))
+                        .foregroundColor(Color(hex: "6E776F"))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, AppSpacing.md)
 
                     Text(sectionTitle.isEmpty ? bookTitle : "\(bookTitle) — \(sectionTitle)")
                         .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(0.55))
+                        .foregroundColor(Color(hex: "8D958E"))
                         .lineLimit(2)
                         .padding(.horizontal, AppSpacing.md)
 
@@ -5597,32 +5615,30 @@ struct MemorizeInteractView: View {
                     Spacer(minLength: AppSpacing.lg)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .background(Color.clear)
-                .navigationTitle("memorize.interact".localized)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button {
-                            disconnectAndDismiss()
-                        } label: {
-                            Image(systemName: "chevron.left")
-                                .foregroundColor(.white)
-                        }
-                    }
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button {
-                            showVoicePicker = true
-                        } label: {
-                            Image(systemName: "person.crop.circle")
-                                .foregroundColor(.white)
-                        }
+            }
+            .navigationTitle("memorize.interact".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        disconnectAndDismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .foregroundColor(Color(hex: "1F2420"))
                     }
                 }
-                .toolbarColorScheme(.dark, for: .navigationBar)
-                .toolbarBackground(AppColors.memorizeBackground, for: .navigationBar)
-                .toolbarBackground(.visible, for: .navigationBar)
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showVoicePicker = true
+                    } label: {
+                        Image(systemName: "person.crop.circle")
+                            .foregroundColor(Color(hex: "1F2420"))
+                    }
+                }
             }
-            .background(Color.clear)
+            .toolbarColorScheme(.light, for: .navigationBar)
+            .toolbarBackground(AppColors.memorizeBackground, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
         .sheet(isPresented: $showVoicePicker) {
             GeminiVoicePickerView(selectedVoice: $selectedVoice, accent: interactAccent)
@@ -5869,7 +5885,7 @@ struct MemorizeInteractView: View {
                 if messages.isEmpty && currentAIText.isEmpty {
                     Text("memorize.interact_placeholder".localized)
                         .font(AppTypography.body)
-                        .foregroundColor(Color.white.opacity(0.5))
+                        .foregroundColor(Color(hex: "8D958E"))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(AppSpacing.md)
                 } else {
@@ -5879,12 +5895,12 @@ struct MemorizeInteractView: View {
                                 if message.isUser { Spacer() }
                                 Text(message.text)
                                     .font(AppTypography.body)
-                                    .foregroundColor(.white)
+                                    .foregroundColor(Color(hex: "1F2420"))
                                     .multilineTextAlignment(message.isUser ? .trailing : .leading)
                                     .padding(AppSpacing.sm)
                                     .background(
                                         RoundedRectangle(cornerRadius: AppCornerRadius.sm)
-                                            .fill(message.isUser ? interactAccent.opacity(0.3) : AppColors.memorizeCard)
+                                            .fill(message.isUser ? interactAccent.opacity(0.18) : Color(hex: "F4EFE6"))
                                     )
                                 if !message.isUser { Spacer() }
                             }
@@ -5897,11 +5913,11 @@ struct MemorizeInteractView: View {
                                 Spacer()
                                 Text(currentUserText.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression))
                                     .font(AppTypography.body)
-                                    .foregroundColor(.white.opacity(0.8))
+                                    .foregroundColor(Color(hex: "1F2420").opacity(0.7))
                                     .padding(AppSpacing.sm)
                                     .background(
                                         RoundedRectangle(cornerRadius: AppCornerRadius.sm)
-                                            .fill(interactAccent.opacity(0.2))
+                                            .fill(interactAccent.opacity(0.12))
                                     )
                             }
                             .id("userStreaming")
@@ -5915,19 +5931,19 @@ struct MemorizeInteractView: View {
                                         ThinkingDotsView()
                                         Text("memorize.interact_starting".localized)
                                             .font(AppTypography.caption)
-                                            .foregroundColor(.white.opacity(0.72))
+                                            .foregroundColor(Color(hex: "6E776F"))
                                     }
                                     .padding(AppSpacing.sm)
                                     .background(
                                         RoundedRectangle(cornerRadius: AppCornerRadius.sm)
-                                            .fill(AppColors.memorizeCard.opacity(0.7))
+                                            .fill(Color(hex: "F4EFE6"))
                                     )
                                 } else {
                                     ThinkingDotsView()
                                         .padding(AppSpacing.sm)
                                         .background(
                                             RoundedRectangle(cornerRadius: AppCornerRadius.sm)
-                                                .fill(AppColors.memorizeCard.opacity(0.7))
+                                                .fill(Color(hex: "F4EFE6"))
                                         )
                                 }
                                 Spacer()
@@ -5940,11 +5956,11 @@ struct MemorizeInteractView: View {
                             HStack {
                                 Text(currentAIText)
                                     .font(AppTypography.body)
-                                    .foregroundColor(.white.opacity(0.8))
+                                    .foregroundColor(Color(hex: "1F2420").opacity(0.7))
                                     .padding(AppSpacing.sm)
                                     .background(
                                         RoundedRectangle(cornerRadius: AppCornerRadius.sm)
-                                            .fill(AppColors.memorizeCard.opacity(0.7))
+                                            .fill(Color(hex: "F4EFE6"))
                                     )
                                 Spacer()
                             }
@@ -5970,26 +5986,34 @@ struct MemorizeInteractView: View {
             }
         }
         .frame(minHeight: 260, maxHeight: 400)
-        .background(AppColors.memorizeCard)
+        .background(Color.white)
         .cornerRadius(AppCornerRadius.md)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppCornerRadius.md)
+                .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+        )
     }
 
     private func startupStatusCard(text: String) -> some View {
         VStack(spacing: AppSpacing.md) {
             ProgressView()
-                .tint(.white)
+                .tint(Color(hex: "1F2420"))
                 .scaleEffect(0.95)
 
             Text(text)
                 .font(AppTypography.body)
-                .foregroundColor(.white.opacity(0.85))
+                .foregroundColor(Color(hex: "1F2420").opacity(0.7))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, AppSpacing.lg)
         }
         .frame(maxWidth: .infinity)
         .frame(minHeight: 260, maxHeight: 400)
-        .background(AppColors.memorizeCard)
+        .background(Color.white)
         .cornerRadius(AppCornerRadius.md)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppCornerRadius.md)
+                .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+        )
     }
 
     private var microphoneButton: some View {
@@ -6024,7 +6048,7 @@ struct MemorizeInteractView: View {
             .foregroundColor(.white)
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
-            .background(isMuted ? Color.white.opacity(0.15) : interactAccent.opacity(0.5))
+            .background(isMuted ? Color(hex: "1F2420") : interactAccent.opacity(0.85))
             .cornerRadius(AppCornerRadius.md)
         }
         .disabled(!isConnected)

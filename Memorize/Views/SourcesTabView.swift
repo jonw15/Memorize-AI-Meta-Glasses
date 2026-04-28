@@ -10,6 +10,7 @@ struct SourcesTabView: View {
     @ObservedObject var viewModel: ProjectDetailViewModel
     @ObservedObject var streamViewModel: StreamSessionViewModel
 
+    @Environment(\.dismiss) private var dismiss
     @State private var showAddSourceSheet = false
     @State private var didAutoShowAddSource = false
     @State private var showTextNoteEditor = false
@@ -26,137 +27,24 @@ struct SourcesTabView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Source list
-            ScrollView {
-                VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("memorize.sources".localized)
-                            .font(AppTypography.headline)
-                            .foregroundColor(.white)
-                        Text("memorize.sources_desc".localized)
-                            .font(AppTypography.caption)
-                            .foregroundColor(Color.white.opacity(0.4))
-                    }
-                    .padding(.horizontal, AppSpacing.md)
-                    .padding(.top, AppSpacing.md)
+            Capsule()
+                .fill(Color(hex: "E2DDD4"))
+                .frame(width: 64, height: 5)
+                .padding(.top, 22)
+                .padding(.bottom, 24)
 
-                    if viewModel.book.sources.isEmpty && viewModel.book.pages.isEmpty {
-                        VStack(spacing: AppSpacing.md) {
-                            Image(systemName: "doc.badge.plus")
-                                .font(.system(size: 40))
-                                .foregroundColor(Color.white.opacity(0.3))
-                            Text("memorize.no_sources".localized)
-                                .font(AppTypography.subheadline)
-                                .foregroundColor(Color.white.opacity(0.5))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 60)
-                    } else {
-                        // Legacy camera pages (if any)
-                        if !viewModel.book.pages.isEmpty {
-                            sourceRow(
-                                icon: "camera.fill",
-                                name: "Camera Pages",
-                                detail: "\(viewModel.book.completedPages) pages",
-                                onDelete: nil
-                            )
-                            .onTapGesture {
-                                showCameraCapture = true
-                            }
-                        }
-
-                        // New-style sources
-                        ForEach(viewModel.book.sources) { source in
-                            if source.sourceType == .camera {
-                                sourceRow(
-                                    icon: source.iconName,
-                                    name: source.name,
-                                    detail: sourceDetail(source),
-                                    onDelete: { pendingDeleteSource = source }
-                                )
-                                .onTapGesture {
-                                    showCameraCapture = true
-                                }
-                            } else {
-                                sourceRow(
-                                    icon: source.iconName,
-                                    name: source.name,
-                                    detail: sourceDetail(source),
-                                    onDelete: { pendingDeleteSource = source }
-                                )
-                                .onTapGesture {
-                                    viewingSource = source
-                                }
-                            }
-                        }
-                    }
-
-                    // PDF import progress
-                    if viewModel.isImportingPDF {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .tint(AppColors.memorizeAccent)
-                                .scaleEffect(0.8)
-                            if let progress = viewModel.pdfImportProgress {
-                                Text("Importing \(progress.currentPage)/\(progress.totalPages) pages...")
-                                    .font(AppTypography.caption)
-                                    .foregroundColor(Color.white.opacity(0.6))
-                            }
-                        }
-                        .padding(.horizontal, AppSpacing.md)
-                    }
-
-                    if viewModel.isImportingYouTube {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .tint(AppColors.memorizeAccent)
-                                .scaleEffect(0.8)
-                            Text("memorize.youtube_import_loading".localized)
-                                .font(AppTypography.caption)
-                                .foregroundColor(Color.white.opacity(0.6))
-                        }
-                        .padding(.horizontal, AppSpacing.md)
-                    }
-
-                    if let error = viewModel.pdfImportError {
-                        Text(error)
-                            .font(AppTypography.caption)
-                            .foregroundColor(.red.opacity(0.8))
-                            .padding(.horizontal, AppSpacing.md)
-                    }
-
-                    if let error = viewModel.youtubeImportError {
-                        Text(error)
-                            .font(AppTypography.caption)
-                            .foregroundColor(.red.opacity(0.8))
-                            .padding(.horizontal, AppSpacing.md)
-                    }
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 22) {
+                    sourcesHeader
+                    actionTiles
+                    projectSourcesSection
+                    progressAndErrors
                 }
+                .padding(.horizontal, 26)
+                .padding(.bottom, 36)
             }
-
-            Spacer()
-
-            // Bottom action bar
-            HStack(spacing: AppSpacing.md) {
-                Button {
-                    showAddSourceSheet = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("memorize.add_source".localized)
-                            .font(AppTypography.subheadline)
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 14)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: AppCornerRadius.lg))
-                }
-            }
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.bottom, AppSpacing.md)
         }
+        .background(Color(hex: "FCF7EF").ignoresSafeArea())
         .sheet(isPresented: $showAddSourceSheet) {
             AddSourceSheet(
                 onTextNote: {
@@ -238,23 +126,304 @@ struct SourcesTabView: View {
         }
         .onAppear {
             isVisible = true
-            // Auto-open add source sheet only for brand-new empty projects (no title, no sources)
-            if !didAutoShowAddSource
-                && viewModel.book.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                && viewModel.book.sources.isEmpty
-                && viewModel.book.pages.isEmpty {
-                didAutoShowAddSource = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    guard isVisible else { return }
-                    showAddSourceSheet = true
-                }
-            }
         }
         .onDisappear {
             isVisible = false
             showAddSourceSheet = false
             pendingAction = nil
         }
+    }
+
+    private var sourcesHeader: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("memorize.sources".localized)
+                    .font(.system(size: 36, weight: .regular, design: .serif))
+                    .foregroundColor(Color(hex: "1F2420"))
+
+                Text("memorize.sources_sheet_desc".localized)
+                    .font(.system(size: 21, weight: .regular, design: .rounded))
+                    .foregroundColor(Color(hex: "8D958E"))
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundColor(Color(hex: "1F2420"))
+                    .frame(width: 46, height: 46)
+                    .background(Color.white.opacity(0.9))
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(Color(hex: "E8E0D7"), lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var actionTiles: some View {
+        HStack(spacing: 14) {
+            sourceActionTile(
+                icon: "arrow.up.to.line",
+                title: "memorize.upload_pdf".localized,
+                tint: Color(hex: "CFEFFF"),
+                foreground: Color(hex: "20657E")
+            ) {
+                dismiss()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    viewModel.showFilePicker = true
+                }
+            }
+
+            sourceActionTile(
+                icon: "camera",
+                title: "memorize.source_camera".localized,
+                tint: Color(hex: "D6F4D8"),
+                foreground: Color(hex: "276B32")
+            ) {
+                showCameraCapture = true
+            }
+
+            sourceActionTile(
+                icon: "eyeglasses",
+                title: "memorize.source_glasses".localized,
+                tint: Color(hex: "FFE1E5"),
+                foreground: Color(hex: "9A3B4B")
+            ) {
+                showCameraCapture = true
+            }
+        }
+    }
+
+    private func sourceActionTile(
+        icon: String,
+        title: String,
+        tint: Color,
+        foreground: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 18) {
+                Image(systemName: icon)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundColor(foreground)
+                    .frame(width: 58, height: 58)
+                    .background(tint)
+                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+
+                Text(title)
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundColor(Color(hex: "1F2420"))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 22)
+            .background(Color.white.opacity(0.95))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 5)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var projectSourcesSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 7) {
+                Text("memorize.in_this_project".localized)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .tracking(0.7)
+                    .foregroundColor(Color(hex: "8D958E"))
+
+                Text("·")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(Color(hex: "8D958E").opacity(0.7))
+
+                Text("\(projectSourceCount)")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(Color(hex: "8D958E"))
+            }
+
+            if viewModel.book.sources.isEmpty && viewModel.book.pages.isEmpty {
+                emptySourceCard
+            } else {
+                VStack(spacing: 14) {
+                    if !viewModel.book.pages.isEmpty {
+                        sourceCard(
+                            icon: "camera.fill",
+                            title: "Camera Pages",
+                            category: "PHOTO",
+                            detail: "\(viewModel.book.completedPages) pages",
+                            tint: Color(hex: "FFE9B8"),
+                            foreground: Color(hex: "8A641F"),
+                            onDelete: nil
+                        ) {
+                            showCameraCapture = true
+                        }
+                    }
+
+                    ForEach(viewModel.book.sources) { source in
+                        sourceCard(for: source)
+                    }
+                }
+            }
+        }
+    }
+
+    private var projectSourceCount: Int {
+        viewModel.book.sources.count + (viewModel.book.pages.isEmpty ? 0 : 1)
+    }
+
+    private var emptySourceCard: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "doc.badge.plus")
+                .font(.system(size: 30, weight: .medium))
+                .foregroundColor(Color(hex: "8D958E"))
+            Text("memorize.no_sources".localized)
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundColor(Color(hex: "6E776F"))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 34)
+        .background(Color.white.opacity(0.95))
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+        )
+    }
+
+    private var progressAndErrors: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if viewModel.isImportingPDF {
+                progressRow(text: viewModel.pdfImportProgress.map { "Importing \($0.currentPage)/\($0.totalPages) pages..." } ?? "Loading...")
+            }
+
+            if viewModel.isImportingYouTube {
+                progressRow(text: "memorize.youtube_import_loading".localized)
+            }
+
+            if let error = viewModel.pdfImportError {
+                Text(error)
+                    .font(AppTypography.caption)
+                    .foregroundColor(.red.opacity(0.8))
+            }
+
+            if let error = viewModel.youtubeImportError {
+                Text(error)
+                    .font(AppTypography.caption)
+                    .foregroundColor(.red.opacity(0.8))
+            }
+        }
+    }
+
+    private func progressRow(text: String) -> some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .tint(Color(hex: "2F6A3F"))
+                .scaleEffect(0.8)
+            Text(text)
+                .font(AppTypography.caption)
+                .foregroundColor(Color(hex: "6E776F"))
+        }
+    }
+
+    private func sourceCard(for source: Source) -> some View {
+        let style = sourceStyle(for: source)
+        return sourceCard(
+            icon: source.iconName,
+            title: source.name,
+            category: sourceCategory(source),
+            detail: sourceDetail(source),
+            tint: style.tint,
+            foreground: style.foreground,
+            onDelete: { pendingDeleteSource = source }
+        ) {
+            if source.sourceType == .camera {
+                showCameraCapture = true
+            } else {
+                viewingSource = source
+            }
+        }
+    }
+
+    private func sourceCard(
+        icon: String,
+        title: String,
+        category: String,
+        detail: String,
+        tint: Color,
+        foreground: Color,
+        onDelete: (() -> Void)?,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 18) {
+                Image(systemName: icon)
+                    .font(.system(size: 23, weight: .semibold))
+                    .foregroundColor(foreground)
+                    .frame(width: 60, height: 60)
+                    .background(tint)
+                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(category)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .tracking(0.5)
+                        .foregroundColor(Color(hex: "A0A49D"))
+
+                    Text(title)
+                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                        .foregroundColor(Color(hex: "1F2420"))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.76)
+
+                    Text(detail)
+                        .font(.system(size: 17, weight: .regular, design: .rounded))
+                        .foregroundColor(Color(hex: "8D958E"))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                }
+
+                Spacer(minLength: 8)
+
+                if let onDelete {
+                    Menu {
+                        Button(role: .destructive, action: onDelete) {
+                            Label("memorize.delete_session_confirm".localized, systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(Color(hex: "9DA49D"))
+                    }
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(Color(hex: "9DA49D"))
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
+            .background(Color.white.opacity(0.95))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.055), radius: 10, x: 0, y: 5)
+        }
+        .buttonStyle(.plain)
     }
 
     private func sourceRow(icon: String, name: String, detail: String, onDelete: (() -> Void)?) -> some View {
@@ -288,6 +457,9 @@ struct SourcesTabView: View {
         }
         .padding(.horizontal, AppSpacing.md)
         .padding(.vertical, AppSpacing.sm)
+        .background(AppColors.memorizeCard)
+        .cornerRadius(AppCornerRadius.md)
+        .padding(.horizontal, AppSpacing.md)
     }
 
     private func sourceDetail(_ source: Source) -> String {
@@ -303,6 +475,31 @@ struct SourcesTabView: View {
             return "Imported file"
         case .youtube:
             return "YouTube transcript"
+        }
+    }
+
+    private func sourceCategory(_ source: Source) -> String {
+        switch source.sourceType {
+        case .pdf: return "PDF"
+        case .camera: return "CAPTURE"
+        case .textNote: return "LECTURE"
+        case .file: return "FILE"
+        case .youtube: return "VIDEO"
+        }
+    }
+
+    private func sourceStyle(for source: Source) -> (tint: Color, foreground: Color) {
+        switch source.sourceType {
+        case .pdf:
+            return (Color(hex: "CFEFFF"), Color(hex: "20657E"))
+        case .camera:
+            return (Color(hex: "FFE9B8"), Color(hex: "8A641F"))
+        case .textNote:
+            return (Color(hex: "D6F4D8"), Color(hex: "276B32"))
+        case .file:
+            return (Color(hex: "E5E3FF"), Color(hex: "524A98"))
+        case .youtube:
+            return (Color(hex: "FFE1E5"), Color(hex: "9A3B4B"))
         }
     }
 
@@ -414,7 +611,7 @@ struct SourceTextView: View {
                             .foregroundColor(AppColors.memorizeAccent)
                         Text(source.sourceType == .pdf ? "\(source.pages.count) pages" : "")
                             .font(AppTypography.caption)
-                            .foregroundColor(Color.white.opacity(0.5))
+                            .foregroundColor(Color(hex: "8D958E"))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, AppSpacing.xs)
@@ -440,13 +637,13 @@ struct SourceTextView: View {
                     if allText.isEmpty {
                         Text("No text content available")
                             .font(AppTypography.subheadline)
-                            .foregroundColor(Color.white.opacity(0.4))
+                            .foregroundColor(Color(hex: "8D958E"))
                             .padding(.top, AppSpacing.xl)
                             .frame(maxWidth: .infinity)
                     } else {
                         Text(displayText)
                             .font(AppTypography.body)
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                             .lineSpacing(6)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
@@ -465,11 +662,11 @@ struct SourceTextView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "chevron.left")
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                     }
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
         }
         .fullScreenCover(isPresented: $showReadAloud) {
             MemorizeReadAloudView(
@@ -509,17 +706,17 @@ struct YouTubeLinkImportView: View {
             VStack(spacing: AppSpacing.md) {
                 Text("memorize.source_youtube_desc".localized)
                     .font(AppTypography.subheadline)
-                    .foregroundColor(Color.white.opacity(0.7))
+                    .foregroundColor(Color(hex: "6E776F"))
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 TextField("memorize.youtube_link_placeholder".localized, text: $link)
                     .font(AppTypography.body)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
                     .autocorrectionDisabled()
                     .padding(AppSpacing.sm)
-                    .background(AppColors.memorizeCard)
+                    .background(Color.white.opacity(0.94))
                     .cornerRadius(AppCornerRadius.md)
 
                 if let errorMessage, !errorMessage.isEmpty {
@@ -544,10 +741,10 @@ struct YouTubeLinkImportView: View {
                         Text("memorize.youtube_import_button".localized)
                             .font(AppTypography.headline)
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background((isValid && !isImporting) ? AppColors.memorizeAccent : Color.white.opacity(0.1))
+                    .background((isValid && !isImporting) ? AppColors.memorizeAccent : Color(hex: "EAE4DC"))
                     .cornerRadius(AppCornerRadius.md)
                 }
                 .disabled(!isValid || isImporting)
@@ -563,11 +760,11 @@ struct YouTubeLinkImportView: View {
                     Button("memorize.cancel".localized) {
                         dismiss()
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                     .disabled(isImporting)
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
         }
     }
 }

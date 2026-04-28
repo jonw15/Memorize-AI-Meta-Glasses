@@ -1387,7 +1387,8 @@ private struct YouTubeCardWebPreview: UIViewRepresentable {
         uiView.loadHTMLString("", baseURL: nil)
     }
 
-    final class Coordinator {
+    @MainActor
+    final class Coordinator: @unchecked Sendable {
         var loadedURLString: String?
     }
 }
@@ -1524,7 +1525,7 @@ private struct NativeYouTubePlayer: UIViewControllerRepresentable {
         uiViewController.player = nil
     }
 
-    final class Coordinator {
+    final class Coordinator: @unchecked Sendable {
         @Binding var playbackFailed: Bool
         private var statusObservation: NSKeyValueObservation?
         private var timeControlObservation: NSKeyValueObservation?
@@ -1545,7 +1546,9 @@ private struct NativeYouTubePlayer: UIViewControllerRepresentable {
                 switch item.status {
                 case .failed:
                     print("⚠️ [NativeYouTubePlayer] AVPlayerItem failed: \(item.error?.localizedDescription ?? "unknown")")
-                    DispatchQueue.main.async { self?.playbackFailed = true }
+                    Task { @MainActor [weak self] in
+                        self?.playbackFailed = true
+                    }
                 case .readyToPlay:
                     print("▶️ [NativeYouTubePlayer] AVPlayerItem ready to play")
                 default:
@@ -1555,23 +1558,26 @@ private struct NativeYouTubePlayer: UIViewControllerRepresentable {
 
             // Watch timeControlStatus — auto-resume if paused by audio session
             // interruption (e.g. Gemini's playback engine reconfiguring the session).
-            timeControlObservation = player.observe(\.timeControlStatus, options: [.new, .old]) { [weak self] player, change in
-                guard let self, self.shouldBePlaying else { return }
-                let status = player.timeControlStatus
-                switch status {
-                case .paused:
-                    print("⏸️ [NativeYouTubePlayer] Paused unexpectedly, auto-resuming in 0.3s")
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                        guard let self, self.shouldBePlaying, player.timeControlStatus == .paused else { return }
-                        player.play()
-                        print("▶️ [NativeYouTubePlayer] Auto-resumed after interruption")
+            timeControlObservation = player.observe(\.timeControlStatus, options: [.new, .old]) { [weak self, weak player] _, _ in
+                Task { @MainActor [weak self, weak player] in
+                    guard let self, self.shouldBePlaying, let player else { return }
+                    let status = player.timeControlStatus
+                    switch status {
+                    case .paused:
+                        print("⏸️ [NativeYouTubePlayer] Paused unexpectedly, auto-resuming in 0.3s")
+                        Task { @MainActor [weak self, weak player] in
+                            try? await Task.sleep(nanoseconds: 300_000_000)
+                            guard let self, self.shouldBePlaying, let player, player.timeControlStatus == .paused else { return }
+                            player.play()
+                            print("▶️ [NativeYouTubePlayer] Auto-resumed after interruption")
+                        }
+                    case .waitingToPlayAtSpecifiedRate:
+                        print("⏳ [NativeYouTubePlayer] Buffering...")
+                    case .playing:
+                        break
+                    @unknown default:
+                        break
                     }
-                case .waitingToPlayAtSpecifiedRate:
-                    print("⏳ [NativeYouTubePlayer] Buffering...")
-                case .playing:
-                    break
-                @unknown default:
-                    break
                 }
             }
 

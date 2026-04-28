@@ -19,17 +19,17 @@ struct BookSectionsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(parentBook.title.isEmpty ? "memorize.untitled".localized : parentBook.title)
                         .font(AppTypography.largeTitle)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
 
                     if !parentBook.author.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(parentBook.author)
                             .font(AppTypography.subheadline)
-                            .foregroundColor(.white.opacity(0.6))
+                            .foregroundColor(Color(hex: "6E776F"))
                     }
 
                     Text(String(format: "memorize.sections_count".localized, parentBook.sections.count))
                         .font(AppTypography.caption)
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(Color(hex: "8D958E"))
                         .padding(.top, 2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -59,11 +59,11 @@ struct BookSectionsView: View {
                             Image(systemName: "chevron.left")
                             Text("memorize.back".localized)
                         }
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                     }
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
         }
         .fullScreenCover(item: $selectedSection) { section in
             MemorizeCaptureView(

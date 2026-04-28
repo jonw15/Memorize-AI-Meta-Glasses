@@ -38,16 +38,16 @@ struct MemorizeQuizView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                     }
                 }
                 ToolbarItem(placement: .principal) {
                     Text("memorize.pop_quiz".localized)
                         .font(AppTypography.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
         }
         .task {
             // Let the audio session from the previous screen fully release
@@ -96,14 +96,14 @@ struct MemorizeQuizView: View {
             // Question counter
             Text(String(format: "memorize.quiz_question_count".localized, currentIndex + 1, questions.count))
                 .font(AppTypography.caption)
-                .foregroundColor(Color.white.opacity(0.5))
+                .foregroundColor(Color(hex: "8D958E"))
                 .padding(.top, AppSpacing.lg)
 
             // Progress bar
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.white.opacity(0.1))
+                        .fill(Color(hex: "EAE4DC"))
                         .frame(height: 4)
 
                     RoundedRectangle(cornerRadius: 2)
@@ -117,10 +117,10 @@ struct MemorizeQuizView: View {
             if let typeLabel = questionTypeLabel(for: question.type) {
                 Text(typeLabel)
                     .font(AppTypography.caption)
-                    .foregroundColor(AppColors.memorizeAccent)
+                    .foregroundColor(Color(hex: "276B32"))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(AppColors.memorizeCard)
+                    .background(Color(hex: "D6F4D8"))
                     .cornerRadius(AppCornerRadius.sm)
             }
 
@@ -132,21 +132,25 @@ struct MemorizeQuizView: View {
                         if let concept = question.concept?.trimmingCharacters(in: .whitespacesAndNewlines), !concept.isEmpty {
                             Text(concept)
                                 .font(AppTypography.caption)
-                                .foregroundColor(Color.white.opacity(0.55))
+                                .foregroundColor(Color(hex: "8D958E"))
                                 .textCase(.uppercase)
                         }
 
                         Text(question.question)
                             .font(AppTypography.title)
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                             .multilineTextAlignment(.leading)
                             .lineLimit(nil)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(AppSpacing.md)
-                    .background(AppColors.memorizeCard)
+                    .background(Color.white)
                     .cornerRadius(AppCornerRadius.md)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppCornerRadius.md)
+                            .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+                    )
 
                     // Answer options
                     VStack(spacing: AppSpacing.sm) {
@@ -166,7 +170,7 @@ struct MemorizeQuizView: View {
                     Text("Say A, B, C, or D to answer")
                         .font(AppTypography.caption)
                 }
-                .foregroundColor(Color.white.opacity(0.35))
+                .foregroundColor(Color(hex: "8D958E"))
                 .padding(.top, AppSpacing.xs)
             }
 
@@ -181,7 +185,7 @@ struct MemorizeQuizView: View {
                          ? "memorize.quiz_next".localized
                          : "memorize.quiz_results".localized)
                         .font(AppTypography.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(AppColors.memorizeAccent)
@@ -201,17 +205,17 @@ struct MemorizeQuizView: View {
         let isCorrect = index == question.correctIndex
 
         let backgroundColor: Color = {
-            if !isAnswered { return AppColors.memorizeCard }
-            if isCorrect { return Color.green.opacity(0.2) }
-            if isSelected && !isCorrect { return Color.red.opacity(0.2) }
-            return AppColors.memorizeCard
+            if !isAnswered { return Color.white }
+            if isCorrect { return Color(hex: "D6F4D8") }
+            if isSelected && !isCorrect { return Color(hex: "FCE3E3") }
+            return Color.white
         }()
 
         let borderColor: Color = {
-            if !isAnswered { return Color.white.opacity(0.1) }
-            if isCorrect { return Color.green }
-            if isSelected && !isCorrect { return Color.red }
-            return Color.white.opacity(0.1)
+            if !isAnswered { return Color(hex: "EAE4DC") }
+            if isCorrect { return Color(hex: "276B32") }
+            if isSelected && !isCorrect { return Color(hex: "B0444C") }
+            return Color(hex: "EAE4DC")
         }()
 
         return Button {
@@ -221,16 +225,16 @@ struct MemorizeQuizView: View {
                 // Option letter
                 Text(["A", "B", "C", "D"][index])
                     .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundColor(isSelected ? .white : Color.white.opacity(0.6))
+                    .foregroundColor(isSelected ? Color(hex: "1F2420") : Color(hex: "8D958E"))
                     .frame(width: 28, height: 28)
                     .background(
                         Circle()
-                            .fill(isSelected ? AppColors.memorizeAccent : Color.white.opacity(0.1))
+                            .fill(isSelected ? AppColors.memorizeAccent : Color(hex: "F4EFE6"))
                     )
 
                 Text(question.options[index])
                     .font(AppTypography.body)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                     .multilineTextAlignment(.leading)
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
@@ -241,10 +245,10 @@ struct MemorizeQuizView: View {
                 if isAnswered {
                     if isCorrect {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
+                            .foregroundColor(Color(hex: "276B32"))
                     } else if isSelected {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.red)
+                            .foregroundColor(Color(hex: "B0444C"))
                     }
                 }
             }
@@ -268,14 +272,14 @@ struct MemorizeQuizView: View {
             // Score circle
             ZStack {
                 Circle()
-                    .stroke(Color.white.opacity(0.1), lineWidth: 8)
+                    .stroke(Color(hex: "EAE4DC"), lineWidth: 8)
                     .frame(width: 150, height: 150)
 
                 Circle()
                     .trim(from: 0, to: questions.isEmpty ? 0 : CGFloat(score) / CGFloat(questions.count))
                     .stroke(
-                        score == questions.count ? Color.green :
-                            score >= questions.count / 2 ? AppColors.memorizeAccent : Color.orange,
+                        score == questions.count ? Color(hex: "276B32") :
+                            score >= questions.count / 2 ? Color(hex: "276B32") : Color(hex: "C99526"),
                         style: StrokeStyle(lineWidth: 8, lineCap: .round)
                     )
                     .frame(width: 150, height: 150)
@@ -284,13 +288,13 @@ struct MemorizeQuizView: View {
                 VStack(spacing: 4) {
                     Text("\(score)/\(questions.count)")
                         .font(.system(size: 36, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                 }
             }
 
             Text(String(format: "memorize.quiz_score".localized, score, questions.count))
                 .font(AppTypography.title)
-                .foregroundColor(.white)
+                .foregroundColor(Color(hex: "1F2420"))
                 .multilineTextAlignment(.center)
 
             Spacer()
@@ -301,7 +305,7 @@ struct MemorizeQuizView: View {
             } label: {
                 Text("memorize.quiz_done".localized)
                     .font(AppTypography.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(AppColors.memorizeAccent)
@@ -318,10 +322,10 @@ struct MemorizeQuizView: View {
         VStack(spacing: AppSpacing.md) {
             Image(systemName: "questionmark.circle")
                 .font(.system(size: 48))
-                .foregroundColor(Color.white.opacity(0.3))
+                .foregroundColor(Color(hex: "8D958E"))
             Text("memorize.quiz_no_pages".localized)
                 .font(AppTypography.body)
-                .foregroundColor(Color.white.opacity(0.5))
+                .foregroundColor(Color(hex: "6E776F"))
         }
     }
 

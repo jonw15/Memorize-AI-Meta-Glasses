@@ -366,7 +366,8 @@ struct MemorizeService {
         from pages: [PageCapture],
         bookTitle: String,
         mode: GeneratedNoteKind,
-        sessionTranscript: String? = nil
+        sessionTranscript: String? = nil,
+        customInstructions: String? = nil
     ) async throws -> GeneratedNote {
         let completedPages = pages.filter { $0.status == .completed }
         guard !completedPages.isEmpty else {
@@ -390,54 +391,240 @@ struct MemorizeService {
             Session transcript and learner performance:
             \(interactionText)
             """
+        let customInstructionText = customInstructions?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let customInstructionSection = customInstructionText.isEmpty
+            ? "No extra creation preferences were provided."
+            : """
+            Creation preferences:
+            \(customInstructionText)
+            """
+
+        let prompt: String
+        if mode == .studyGuide {
+            prompt = """
+            You are an expert study guide writer. Create a thorough, well-structured study guide from the selected study material.
+
+            Project title:
+            \(titleText.isEmpty ? "Untitled project" : titleText)
+
+            Source material:
+            \(sourceText)
+
+            \(interactionSection)
+
+            \(customInstructionSection)
+
+            Return ONLY valid JSON in this exact shape:
+            {
+              "title": "short study guide title",
+              "body": "study guide text"
+            }
+
+            Requirements:
+            - This must be a real study guide, not brief study notes.
+            - The title should be specific to the source and under 8 words.
+            - The body must follow this exact plain-text structure and order:
+
+              Overview
+              2-3 sentences framing the topic, scope, and why it matters.
+
+              Learning objectives
+              - 3-5 bulleted objectives written as "Understand/Explain/Apply ..." statements.
+
+              Key terms
+              - Term — short definition.
+              (5-8 entries; only terms supported by the source.)
+
+              Sections
+              <Section heading>
+              2-4 sentences explaining the section's main ideas.
+              - Bulleted key points, formulas, or examples grounded in the source.
+              (Repeat for 3-5 sections that cover the source.)
+
+              Review questions
+              1. Question text.
+              2. Question text.
+              (5-8 numbered questions ranging from recall to application.)
+
+              Practice & next steps
+              - 2-4 concrete actions the learner should do to master the material.
+
+            - Section headings should be short, specific, and written as plain heading lines, not markdown.
+            - Stay strictly grounded in the source material. Do not invent facts, citations, or examples not present in the source.
+            - Prefer plain language; keep sentences tight.
+            - No markdown fences and no extra JSON keys.
+            """
+        } else {
+            prompt = """
+            You are an expert study note writer. Create short, simple AI-generated notes after the learner finishes a \(mode.promptName).
+
+            Project title:
+            \(titleText.isEmpty ? "Untitled project" : titleText)
+
+            Source material:
+            \(sourceText)
+
+            \(interactionSection)
+
+            \(customInstructionSection)
+
+            Return ONLY valid JSON in this exact shape:
+            {
+              "title": "short note title",
+              "body": "study notes text"
+            }
+
+            Requirements:
+            - The title should be specific to the source and under 8 words.
+            - The body must follow this exact plain-text structure and order:
+
+              Summary
+              1-2 short sentences summarizing the source topic and main takeaway.
+
+              <Specific Topic Heading>
+              1-2 short sentences about the most important concept or discussion point.
+
+              Next steps
+              [User] Action title: One simple thing to review or practice next.
+              [AI Tutor] Action title: One short correction, reminder, or follow-up if relevant.
+
+              Details
+              2-4 short bullets. Include what the user said/answered/asked and the AI feedback if a session transcript exists.
+
+            - Include only 1-2 specific topic headings between Summary and Next steps.
+            - Topic headings should be short, specific, and written as plain heading lines, not markdown.
+            - The Next steps section must use bracketed owners like [User] or [AI Tutor].
+            - If a session transcript was provided, Details should briefly include what the user said/answered/asked and the AI's feedback, corrections, or coaching.
+            - If no session transcript was provided, Details should focus on source-grounded study details.
+            - Do not invent user speech, answers, or AI feedback that is not in the transcript.
+            - Keep the body under 250 words.
+            - Prefer plain language over exhaustive detail.
+            - No markdown fences and no extra JSON keys.
+            """
+        }
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return parseGeneratedNote(from: result, mode: mode)
+    }
+
+    func generateSlideDeck(
+        from pages: [PageCapture],
+        bookTitle: String,
+        customInstructions: String? = nil
+    ) async throws -> GeneratedSlideDeck {
+        let completedPages = pages.filter { $0.status == .completed }
+        guard !completedPages.isEmpty else {
+            throw NSError(
+                domain: "MemorizeService",
+                code: 7,
+                userInfo: [NSLocalizedDescriptionKey: "No completed pages available for a slide deck"]
+            )
+        }
+
+        let sourceText = completedPages
+            .enumerated()
+            .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
+            .joined(separator: "\n\n")
+
+        let titleText = bookTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let customInstructionText = customInstructions?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let customInstructionSection = customInstructionText.isEmpty
+            ? "Use a concise presentation-ready structure."
+            : customInstructionText
 
         let prompt = """
-        You are an expert study note writer. Create short, simple AI-generated notes after the learner finishes a \(mode.promptName).
+        You are an expert presentation designer. Generate a real slide deck from the selected study material.
 
         Project title:
         \(titleText.isEmpty ? "Untitled project" : titleText)
 
+        Creation preferences:
+        \(customInstructionSection)
+
         Source material:
         \(sourceText)
 
-        \(interactionSection)
-
         Return ONLY valid JSON in this exact shape:
         {
-          "title": "short note title",
-          "body": "study notes text"
+          "title": "deck title",
+          "slides": [
+            {
+              "title": "slide title",
+              "bullets": ["short bullet", "short bullet"],
+              "speakerNotes": "1-3 sentences the presenter can say"
+            }
+          ]
         }
 
         Requirements:
-        - The title should be specific to the source and under 8 words.
-        - The body must follow this exact plain-text structure and order:
-
-          Summary
-          1-2 short sentences summarizing the source topic and main takeaway.
-
-          <Specific Topic Heading>
-          1-2 short sentences about the most important concept or discussion point.
-
-          Next steps
-          [User] Action title: One simple thing to review or practice next.
-          [AI Tutor] Action title: One short correction, reminder, or follow-up if relevant.
-
-          Details
-          2-4 short bullets. Include what the user said/answered/asked and the AI feedback if a session transcript exists.
-
-        - Include only 1-2 specific topic headings between Summary and Next steps.
-        - Topic headings should be short, specific, and written as plain heading lines, not markdown.
-        - The Next steps section must use bracketed owners like [User] or [AI Tutor].
-        - If a session transcript was provided, Details should briefly include what the user said/answered/asked and the AI's feedback, corrections, or coaching.
-        - If no session transcript was provided, Details should focus on source-grounded study details.
-        - Do not invent user speech, answers, or AI feedback that is not in the transcript.
-        - Keep the body under 250 words.
-        - Prefer plain language over exhaustive detail.
+        - This must be a slide deck, not study notes.
+        - Match the requested target length when provided.
+        - Include a title slide and a closing/review slide when useful.
+        - Each slide should have 2-4 concise bullets.
+        - Speaker notes should explain the slide in plain language.
+        - Keep every bullet source-grounded.
         - No markdown fences and no extra JSON keys.
         """
 
         let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
-        return parseGeneratedNote(from: result, mode: mode)
+        return parseGeneratedSlideDeck(from: result)
+    }
+
+    func generatePaper(
+        from pages: [PageCapture],
+        bookTitle: String,
+        customInstructions: String? = nil
+    ) async throws -> GeneratedPaper {
+        let completedPages = pages.filter { $0.status == .completed }
+        guard !completedPages.isEmpty else {
+            throw NSError(
+                domain: "MemorizeService",
+                code: 8,
+                userInfo: [NSLocalizedDescriptionKey: "No completed pages available for a paper"]
+            )
+        }
+
+        let sourceText = completedPages
+            .enumerated()
+            .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
+            .joined(separator: "\n\n")
+
+        let titleText = bookTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let customInstructionText = customInstructions?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let customInstructionSection = customInstructionText.isEmpty
+            ? "Write a clear, source-grounded paper with a thesis, evidence, and conclusion."
+            : customInstructionText
+
+        let prompt = """
+        You are an expert academic writing assistant. Generate a paper from the selected study material.
+
+        Project title:
+        \(titleText.isEmpty ? "Untitled project" : titleText)
+
+        Creation preferences:
+        \(customInstructionSection)
+
+        Source material:
+        \(sourceText)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "title": "paper title",
+          "body": "full paper text"
+        }
+
+        Requirements:
+        - This must be a paper, not study notes.
+        - Match the requested target length when provided.
+        - Use a paper structure: title, introduction, thesis, body paragraphs with evidence, and conclusion.
+        - Write in polished paragraphs, not bullet-heavy notes.
+        - Stay grounded in the selected sources.
+        - Do not invent citations, page numbers, quotes, authors, or facts not present in the sources.
+        - Use plain text only. No markdown fences and no extra JSON keys.
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return parseGeneratedPaper(from: result)
     }
 
     private func parseQuizQuestions(from response: String) -> [QuizQuestion] {
@@ -592,6 +779,91 @@ struct MemorizeService {
             title: "memorize.notes_generated_title".localized,
             body: fallbackBody,
             mode: mode
+        )
+    }
+
+    private func parseGeneratedSlideDeck(from response: String) -> GeneratedSlideDeck {
+        let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        let jsonString = extractJSONObject(from: cleaned) ?? cleaned
+
+        struct RawDeck: Decodable {
+            let title: String?
+            let slides: [RawSlide]?
+        }
+
+        struct RawSlide: Decodable {
+            let title: String?
+            let bullets: [String]?
+            let speakerNotes: String?
+        }
+
+        if let data = jsonString.data(using: .utf8),
+           let raw = try? JSONDecoder().decode(RawDeck.self, from: data) {
+            let slides = (raw.slides ?? []).compactMap { rawSlide -> GeneratedSlide? in
+                let title = rawSlide.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let bullets = (rawSlide.bullets ?? [])
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                let speakerNotes = rawSlide.speakerNotes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+                guard !title.isEmpty || !bullets.isEmpty || !speakerNotes.isEmpty else { return nil }
+                return GeneratedSlide(
+                    title: title.isEmpty ? "Slide" : title,
+                    bullets: bullets,
+                    speakerNotes: speakerNotes
+                )
+            }
+
+            if !slides.isEmpty {
+                let title = raw.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return GeneratedSlideDeck(
+                    title: title.isEmpty ? "Generated slide deck" : title,
+                    slides: slides
+                )
+            }
+        }
+
+        let fallbackBullets = Array(
+            cleaned
+                .components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "-*•# \t")) }
+                .filter { !$0.isEmpty }
+                .prefix(4)
+        )
+
+        let fallbackSlide = GeneratedSlide(
+            title: "Generated slide deck",
+            bullets: fallbackBullets,
+            speakerNotes: cleaned.isEmpty ? "Unable to parse the slide deck response. Please try again." : cleaned
+        )
+
+        return GeneratedSlideDeck(title: "Generated slide deck", slides: [fallbackSlide])
+    }
+
+    private func parseGeneratedPaper(from response: String) -> GeneratedPaper {
+        let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        let jsonString = extractJSONObject(from: cleaned) ?? cleaned
+
+        struct RawPaper: Decodable {
+            let title: String?
+            let body: String?
+        }
+
+        if let data = jsonString.data(using: .utf8),
+           let raw = try? JSONDecoder().decode(RawPaper.self, from: data) {
+            let title = raw.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let body = raw.body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !body.isEmpty {
+                return GeneratedPaper(
+                    title: title.isEmpty ? "Generated paper" : title,
+                    body: body
+                )
+            }
+        }
+
+        return GeneratedPaper(
+            title: "Generated paper",
+            body: cleaned.isEmpty ? "Unable to parse the paper response. Please try again." : cleaned
         )
     }
 

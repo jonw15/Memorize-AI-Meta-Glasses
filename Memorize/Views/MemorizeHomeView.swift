@@ -40,6 +40,8 @@ struct MemorizeHomeView: View {
     @State private var pdfImportProgress: PDFImportService.PDFImportProgress?
     @State private var pdfImportError: String?
     @State private var splitPDFBySections = false
+    @State private var isSearchActive = false
+    @State private var searchText = ""
     @StateObject private var addBookVoice = AddBookVoiceController()
     @StateObject private var homeVoice = HomeVoiceController()
     private let memorizeService = MemorizeService()
@@ -47,51 +49,71 @@ struct MemorizeHomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            homeHeaderSection
-                .padding(.horizontal, AppSpacing.md)
+            projectHomeHeader
+                .padding(.horizontal, AppSpacing.lg)
                 .padding(.top, AppSpacing.sm)
 
-            liveModeBanner
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.top, AppSpacing.sm)
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: AppSpacing.lg) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("memorize.projects_eyebrow".localized)
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .tracking(0.6)
+                            .foregroundColor(projectMutedText)
 
-                // Project list
-                if viewModel.books.isEmpty {
-                    Spacer()
-                    VStack(spacing: AppSpacing.md) {
-                        Image(systemName: "book.closed")
-                            .font(.system(size: 40))
-                            .foregroundColor(Color.white.opacity(0.3))
-                        Text("memorize.no_projects".localized)
-                            .font(AppTypography.subheadline)
-                            .foregroundColor(Color.white.opacity(0.5))
+                        Text("memorize.project_home_prompt".localized)
+                            .font(.system(size: 34, weight: .regular, design: .serif))
+                            .foregroundColor(projectInk)
+                            .lineSpacing(-2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    Spacer()
-                } else {
-                    ScrollView {
-                        VStack(spacing: AppSpacing.sm) {
-                            ForEach(viewModel.books) { book in
-                                compactProjectCard(book: book)
-                                    .onTapGesture {
-                                        if book.hasSections {
-                                            selectedParentBook = book
-                                        } else {
-                                            selectedProjectBook = book
+
+                    newProjectButton
+
+                    if isSearchActive {
+                        projectSearchField
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 7) {
+                            Text("memorize.recent".localized)
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .tracking(0.5)
+                                .foregroundColor(projectMutedText)
+
+                            Text("·")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundColor(projectMutedText.opacity(0.55))
+
+                            Text("\(displayedBooks.count)")
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .foregroundColor(projectMutedText)
+                        }
+
+                        if displayedBooks.isEmpty {
+                            emptyProjectsCard
+                        } else {
+                            VStack(spacing: 10) {
+                                ForEach(displayedBooks) { book in
+                                    compactProjectCard(book: book)
+                                        .onTapGesture {
+                                            openProject(book)
                                         }
-                                    }
+                                }
                             }
                         }
-                        .padding(.horizontal, AppSpacing.md)
-                        .padding(.top, AppSpacing.md)
                     }
-                }
 
-                // Bottom action bar
-                bottomActionBar
-                    .padding(.horizontal, AppSpacing.md)
-                    .padding(.bottom, AppSpacing.lg)
+                    projectStatsBar
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 6)
+                }
+                .padding(.horizontal, AppSpacing.lg)
+                .padding(.top, AppSpacing.xl)
+                .padding(.bottom, 38)
             }
-        .background(AppColors.memorizeBackground.ignoresSafeArea())
+        }
+        .background(projectPaper.ignoresSafeArea())
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
             viewModel.loadBooks()
@@ -281,54 +303,130 @@ struct MemorizeHomeView: View {
 
     // MARK: - Home Header
 
-    private var homeHeaderSection: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("memorize.title".localized)
-                    .font(AppTypography.largeTitle)
-                    .foregroundColor(.white)
+    private var projectPaper: Color {
+        Color(hex: "F8F4EE")
+    }
 
-                Text("memorize.add_to_library".localized)
-                    .font(AppTypography.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
-            }
+    private var projectInk: Color {
+        Color(hex: "1F2420")
+    }
 
-            Spacer()
+    private var projectMutedText: Color {
+        Color(hex: "8D958E")
+    }
+
+    private var displayedBooks: [Book] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return viewModel.books }
+
+        return viewModel.books.filter { book in
+            book.title.localizedCaseInsensitiveContains(query) ||
+            book.author.localizedCaseInsensitiveContains(query) ||
+            book.chapter.localizedCaseInsensitiveContains(query)
         }
     }
 
-    private var liveModeBanner: some View {
+    private var projectHomeHeader: some View {
+        HStack(spacing: 12) {
+            Button {
+                showLiveMode = true
+            } label: {
+                Image(systemName: "sparkle.magnifyingglass")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(projectPaper)
+                    .frame(width: 40, height: 40)
+                    .background(projectInk)
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            Text("memorize.home_brand".localized)
+                .font(.system(size: 24, weight: .regular, design: .serif))
+                .foregroundColor(projectInk)
+
+            Spacer()
+
+            Button {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                    isSearchActive.toggle()
+                    if !isSearchActive {
+                        searchText = ""
+                    }
+                }
+            } label: {
+                Image(systemName: isSearchActive ? "xmark" : "magnifyingglass")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(projectInk)
+                    .frame(width: 44, height: 44)
+                    .background(Color.white.opacity(0.82))
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(Color(hex: "E8E0D7"), lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("memorize.search".localized))
+        }
+    }
+
+    private var projectSearchField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(projectMutedText)
+
+            TextField("memorize.search_projects".localized, text: $searchText)
+                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .foregroundColor(projectInk)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(Color.white.opacity(0.9))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+        )
+    }
+
+    private var newProjectButton: some View {
         Button {
-            showLiveMode = true
+            createNewProject()
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "camera.viewfinder")
-                    .font(.system(size: 21, weight: .semibold))
-                    .foregroundColor(.black)
+            HStack(spacing: 14) {
+                Image(systemName: "plus")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundColor(projectInk)
                     .frame(width: 42, height: 42)
-                    .background(AppColors.memorizeAccent)
-                    .cornerRadius(AppCornerRadius.sm)
+                    .background(Color.white.opacity(0.36))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("memorize.live_mode".localized)
-                        .font(AppTypography.headline)
-                        .foregroundColor(.white)
+                    Text("memorize.new_project".localized)
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundColor(projectInk)
 
-                    Text("memorize.live_mode_desc".localized)
-                        .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(0.6))
+                    Text("memorize.new_project_desc".localized)
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .foregroundColor(projectInk.opacity(0.72))
                         .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Spacer()
+                Spacer(minLength: 8)
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(Color.white.opacity(0.35))
+                    .foregroundColor(projectInk.opacity(0.64))
             }
-            .padding(AppSpacing.md)
-            .background(AppColors.memorizeCard)
-            .cornerRadius(AppCornerRadius.lg)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 18)
+            .background(Color(hex: "BFEFC8"))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: Color(hex: "8BD49C").opacity(0.28), radius: 18, x: 0, y: 10)
         }
         .buttonStyle(.plain)
     }
@@ -460,42 +558,45 @@ struct MemorizeHomeView: View {
     // MARK: - Compact Project Card
 
     private func compactProjectCard(book: Book) -> some View {
-        HStack(spacing: 12) {
-            // AI-assigned icon
-            Text(book.icon.isEmpty ? "\u{1F4D6}" : book.icon)
-                .font(.system(size: 28))
-                .frame(width: 44, height: 44)
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(AppCornerRadius.sm)
+        HStack(spacing: 16) {
+            projectIcon(for: book)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(book.title.isEmpty ? "memorize.untitled".localized : book.title)
-                    .font(AppTypography.subheadline)
-                    .foregroundColor(.white)
-                    .lineLimit(1)
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundColor(projectInk)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 4) {
-                    Text("\(book.sourceCount) \(book.sourceCount == 1 ? "source" : "sources")")
-                        .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(0.5))
+                    Text(projectSourceText(for: book))
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .foregroundColor(projectMutedText)
                     Text("·")
-                        .foregroundColor(Color.white.opacity(0.3))
-                    Text(formatDate(book.updatedAt))
-                        .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(0.5))
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundColor(projectMutedText.opacity(0.65))
+                    Text(relativeDateText(for: book.updatedAt))
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .foregroundColor(projectMutedText)
                 }
             }
 
             Spacer()
+
+            ProjectProgressRing(
+                progress: projectProgress(for: book),
+                tint: projectRingColor(for: book)
+            )
         }
-        .padding(.horizontal, AppSpacing.md)
-        .padding(.vertical, AppSpacing.sm)
-        .background(AppColors.memorizeCard)
-        .cornerRadius(AppCornerRadius.lg)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 20)
+        .background(Color.white.opacity(0.96))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: AppCornerRadius.lg)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
         )
+        .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 5)
         .contextMenu {
             Button(role: .destructive) {
                 pendingDeleteBook = book
@@ -503,6 +604,142 @@ struct MemorizeHomeView: View {
                 Label("memorize.delete_session_confirm".localized, systemImage: "trash")
             }
         }
+    }
+
+    private var emptyProjectsCard: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "book.closed")
+                .font(.system(size: 28, weight: .medium))
+                .foregroundColor(projectInk.opacity(0.45))
+                .frame(width: 56, height: 56)
+                .background(Color(hex: "EEF0E7"))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            Text("memorize.no_projects".localized)
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundColor(projectInk)
+
+            Text("memorize.new_project_desc".localized)
+                .font(.system(size: 14, weight: .regular, design: .rounded))
+                .foregroundColor(projectMutedText)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
+        .padding(.horizontal, 22)
+        .background(Color.white.opacity(0.94))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
+    }
+
+    private var projectStatsBar: some View {
+        let sourceTotal = viewModel.books.reduce(0) { $0 + $1.sourceCount }
+
+        return HStack(spacing: 18) {
+            Label("\(viewModel.books.count)", systemImage: "folder")
+            Text(viewModel.books.count == 1 ? "memorize.project_count_one".localized : "memorize.project_count_many".localized)
+
+            Text("·")
+                .foregroundColor(projectMutedText.opacity(0.45))
+
+            Label("\(sourceTotal)", systemImage: "doc.text")
+            Text(sourceTotal == 1 ? "memorize.source_label_one".localized : "memorize.source_label_many".localized)
+        }
+        .font(.system(size: 14, weight: .semibold, design: .rounded))
+        .foregroundColor(projectMutedText)
+    }
+
+    private func projectIcon(for book: Book) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(projectTileColor(for: book))
+                .frame(width: 55, height: 55)
+
+            if book.icon.isEmpty {
+                Image(systemName: projectSystemIcon(for: book))
+                    .font(.system(size: 27, weight: .medium))
+                    .foregroundColor(projectRingColor(for: book))
+            } else {
+                Text(book.icon)
+                    .font(.system(size: 28))
+            }
+        }
+    }
+
+    private func openProject(_ book: Book) {
+        if book.hasSections {
+            selectedParentBook = book
+        } else {
+            selectedProjectBook = book
+        }
+    }
+
+    private func createNewProject() {
+        selectedProjectBook = Book(title: "")
+    }
+
+    private func projectSourceText(for book: Book) -> String {
+        let count = book.sourceCount
+        let key = count == 1 ? "memorize.source_count_one" : "memorize.source_count_many"
+        return String(format: key.localized, count)
+    }
+
+    private func relativeDateText(for date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            return "memorize.today".localized
+        }
+        if calendar.isDateInYesterday(date) {
+            return "memorize.yesterday".localized
+        }
+        if let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: Date())).day,
+           days > 0 && days < 7 {
+            return String(format: "memorize.days_ago".localized, days)
+        }
+        return formatDate(date)
+    }
+
+    private func projectProgress(for book: Book) -> CGFloat {
+        let completed = book.allPages.filter { $0.status == .completed }.count
+        let total = max(book.allPages.count, book.sourceCount, book.sections.count)
+        guard total > 0 else { return 0.18 }
+        return max(0.18, min(1, CGFloat(completed) / CGFloat(total)))
+    }
+
+    private func projectSystemIcon(for book: Book) -> String {
+        if book.sources.contains(where: { $0.sourceType == .pdf }) { return "doc.richtext.fill" }
+        if book.hasSections { return "square.stack.3d.up.fill" }
+        if book.sources.contains(where: { $0.sourceType == .youtube }) { return "play.rectangle.fill" }
+        if !book.pages.isEmpty { return "camera.fill" }
+        return "text.book.closed.fill"
+    }
+
+    private func projectTileColor(for book: Book) -> Color {
+        let colors = [
+            Color(hex: "DDF8D9"),
+            Color(hex: "FFE2E5"),
+            Color(hex: "D7F1FF"),
+            Color(hex: "F4E5FF"),
+            Color(hex: "FFF0C9")
+        ]
+        let index = Int(UInt(bitPattern: book.id.hashValue) % UInt(colors.count))
+        return colors[index]
+    }
+
+    private func projectRingColor(for book: Book) -> Color {
+        let colors = [
+            Color(hex: "76C975"),
+            Color(hex: "FF95A3"),
+            Color(hex: "78C4E3"),
+            Color(hex: "A58BEB"),
+            Color(hex: "E5B84C")
+        ]
+        let index = Int(UInt(bitPattern: book.id.hashValue) % UInt(colors.count))
+        return colors[index]
     }
 
     private func projectEmoji(for book: Book) -> String {
@@ -603,10 +840,10 @@ struct MemorizeHomeView: View {
                             showNewSessionForm = false
                         }
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                     }
                 }
-                .toolbarColorScheme(.dark, for: .navigationBar)
+                .toolbarColorScheme(.light, for: .navigationBar)
         }
     }
 
@@ -675,10 +912,10 @@ struct MemorizeHomeView: View {
                 VStack(spacing: AppSpacing.xs) {
                     Text("memorize.cover_capture_subtitle".localized)
                         .font(AppTypography.subheadline)
-                        .foregroundColor(.white.opacity(0.9))
+                        .foregroundColor(Color(hex: "1F2420"))
                     Text("memorize.cover_capture_align_hint".localized)
                         .font(AppTypography.caption)
-                        .foregroundColor(.white.opacity(0.65))
+                        .foregroundColor(Color(hex: "6E776F"))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -690,19 +927,13 @@ struct MemorizeHomeView: View {
                     }
                 } label: {
                     Text(coverCountdownValue != nil
-                         ? "memorize.cover_capture_cancel_countdown".localized
+                        ? "memorize.cover_capture_cancel_countdown".localized
                          : "memorize.cover_capture_take_photo".localized)
                         .font(AppTypography.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(
-                            LinearGradient(
-                                colors: [AppColors.memorizeAccent, AppColors.memorizeAccent.opacity(0.8)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
+                        .background(AppColors.memorizeAccent)
                         .cornerRadius(AppCornerRadius.md)
                 }
                 .disabled(isWaitingForCoverSnapshot)
@@ -725,7 +956,7 @@ struct MemorizeHomeView: View {
         VStack(spacing: AppSpacing.md) {
             Text("memorize.enter_book_details".localized)
                 .font(AppTypography.subheadline)
-                .foregroundColor(Color.white.opacity(0.7))
+                .foregroundColor(Color(hex: "6E776F"))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(spacing: AppSpacing.sm) {
@@ -742,7 +973,7 @@ struct MemorizeHomeView: View {
                         Text("memorize.autofill_cover".localized)
                             .font(AppTypography.subheadline)
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .background(AppColors.memorizeAccent.opacity(0.25))
@@ -772,7 +1003,7 @@ struct MemorizeHomeView: View {
                                 .font(AppTypography.subheadline)
                         }
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .background(Color.orange.opacity(0.25))
@@ -793,7 +1024,7 @@ struct MemorizeHomeView: View {
                             Text("memorize.pdf_sections".localized)
                                 .font(AppTypography.subheadline)
                         }
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                     }
                     .toggleStyle(SwitchToggleStyle(tint: Color.orange))
                 }
@@ -818,8 +1049,8 @@ struct MemorizeHomeView: View {
                     .autocorrectionDisabled()
                     .padding(.horizontal, AppSpacing.md)
                     .padding(.vertical, 14)
-                    .background(AppColors.memorizeCard)
-                    .foregroundColor(.white)
+                    .background(Color.white.opacity(0.94))
+                    .foregroundColor(Color(hex: "1F2420"))
                     .cornerRadius(AppCornerRadius.md)
 
                 TextField("memorize.author_field".localized, text: $newSessionAuthor)
@@ -827,8 +1058,8 @@ struct MemorizeHomeView: View {
                     .autocorrectionDisabled()
                     .padding(.horizontal, AppSpacing.md)
                     .padding(.vertical, 14)
-                    .background(AppColors.memorizeCard)
-                    .foregroundColor(.white)
+                    .background(Color.white.opacity(0.94))
+                    .foregroundColor(Color(hex: "1F2420"))
                     .cornerRadius(AppCornerRadius.md)
 
                 TextField("memorize.chapter_field".localized, text: $newSessionChapter)
@@ -836,8 +1067,8 @@ struct MemorizeHomeView: View {
                     .autocorrectionDisabled()
                     .padding(.horizontal, AppSpacing.md)
                     .padding(.vertical, 14)
-                    .background(AppColors.memorizeCard)
-                    .foregroundColor(.white)
+                    .background(Color.white.opacity(0.94))
+                    .foregroundColor(Color(hex: "1F2420"))
                     .cornerRadius(AppCornerRadius.md)
             }
 
@@ -859,16 +1090,10 @@ struct MemorizeHomeView: View {
             } label: {
                 Text("memorize.start_session".localized)
                     .font(AppTypography.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(
-                        LinearGradient(
-                            colors: [AppColors.memorizeAccent, AppColors.memorizeAccent.opacity(0.8)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .background(AppColors.memorizeAccent)
                     .cornerRadius(AppCornerRadius.md)
             }
             .disabled(!isNewSessionValid)
@@ -1124,6 +1349,27 @@ struct MemorizeHomeView: View {
             pdfImportError = error.localizedDescription
             print("❌ [Memorize] PDF import failed: \(error.localizedDescription)")
         }
+    }
+}
+
+private struct ProjectProgressRing: View {
+    let progress: CGFloat
+    let tint: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color(hex: "E7E0D7"), lineWidth: 4)
+
+            Circle()
+                .trim(from: 0, to: min(max(progress, 0), 1))
+                .stroke(
+                    tint,
+                    style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: 48, height: 48)
     }
 }
 

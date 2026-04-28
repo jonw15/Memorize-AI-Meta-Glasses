@@ -18,7 +18,7 @@ struct AddSourceSheet: View {
             VStack(spacing: AppSpacing.md) {
                 Text("memorize.add_source_title".localized)
                     .font(AppTypography.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                     .padding(.top, AppSpacing.md)
 
                 VStack(spacing: AppSpacing.sm) {
@@ -49,11 +49,11 @@ struct AddSourceSheet: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(Color.white.opacity(0.5))
+                            .foregroundColor(Color(hex: "8D958E"))
                     }
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
         }
     }
 

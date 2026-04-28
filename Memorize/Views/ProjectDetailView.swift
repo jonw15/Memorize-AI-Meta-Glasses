@@ -13,17 +13,18 @@ struct ProjectDetailView: View {
     @Environment(\.dismiss) private var dismiss
     private let onDeleteProject: (UUID) -> Void
 
-    @State private var selectedTab: ProjectTab = .sources
+    @State private var selectedTab: ProjectTab = .study
     @State private var showRenameAlert = false
     @State private var renameText = ""
     @State private var showTutor = false
     @State private var showLiveMode = false
+    @State private var showSourcesPanel = false
     @State private var isDeletingProject = false
     @State private var tutorStartedAt: Date?
     private let minimumNoteGenerationDuration: TimeInterval = 10
 
     enum ProjectTab {
-        case sources, tutor, study, notes
+        case study, notes, create
     }
 
     init(
@@ -65,6 +66,20 @@ struct ProjectDetailView: View {
             } message: {
                 Text(viewModel.noteGenerationError ?? "")
             }
+            .alert("Slide Deck Error", isPresented: slideDeckErrorPresented) {
+                Button("OK", role: .cancel) {
+                    viewModel.slideDeckGenerationError = nil
+                }
+            } message: {
+                Text(viewModel.slideDeckGenerationError ?? "")
+            }
+            .alert("Paper Error", isPresented: paperErrorPresented) {
+                Button("OK", role: .cancel) {
+                    viewModel.paperGenerationError = nil
+                }
+            } message: {
+                Text(viewModel.paperGenerationError ?? "")
+            }
             .sheet(item: $viewModel.generatedNoteDraft) { note in
                 GeneratedNoteDraftView(
                     note: note,
@@ -77,11 +92,33 @@ struct ProjectDetailView: View {
                     }
                 )
             }
+            .sheet(item: $viewModel.generatedSlideDeckDraft) { deck in
+                GeneratedSlideDeckDraftView(
+                    deck: deck,
+                    onClose: {
+                        viewModel.discardGeneratedSlideDeck()
+                    }
+                )
+            }
+            .sheet(item: $viewModel.generatedPaperDraft) { paper in
+                GeneratedPaperDraftView(
+                    paper: paper,
+                    onClose: {
+                        viewModel.discardGeneratedPaper()
+                    }
+                )
+            }
             .overlay {
                 noteGenerationOverlay
             }
             .fullScreenCover(isPresented: $showLiveMode) {
                 ProjectLiveModeView(streamViewModel: streamViewModel)
+            }
+            .sheet(isPresented: $showSourcesPanel) {
+                SourcesTabView(viewModel: viewModel, streamViewModel: streamViewModel)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+                    .presentationCornerRadius(34)
             }
             .fullScreenCover(isPresented: $showTutor, onDismiss: {
                 finishTutorSessionForNotes()
@@ -98,7 +135,6 @@ struct ProjectDetailView: View {
     private var navigationContainer: some View {
         NavigationView {
             VStack(spacing: 0) {
-                liveModeBanner
                 tabContent
                 bottomTabBar
             }
@@ -111,7 +147,7 @@ struct ProjectDetailView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "chevron.left")
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -129,11 +165,11 @@ struct ProjectDetailView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis")
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                     }
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
         }
     }
 
@@ -178,29 +214,34 @@ struct ProjectDetailView: View {
     @ViewBuilder
     private var tabContent: some View {
         switch selectedTab {
-        case .sources:
-            SourcesTabView(viewModel: viewModel, streamViewModel: streamViewModel)
-        case .tutor:
-            SourcesTabView(viewModel: viewModel, streamViewModel: streamViewModel)
         case .study:
-            StudyTabView(viewModel: viewModel) { mode in
+            StudyTabView(
+                viewModel: viewModel,
+                onShowSources: { showSourcesPanel = true },
+                onShowLive: { showLiveMode = true },
+                onShowTutor: {
+                    showTutor = true
+                }
+            ) { mode in
                 viewModel.generateNoteDraft(after: mode)
             }
         case .notes:
             NotesTabView(viewModel: viewModel)
+        case .create:
+            CreateTabView(viewModel: viewModel)
         }
     }
 
     @ViewBuilder
     private var noteGenerationOverlay: some View {
-        if viewModel.isGeneratingNoteDraft {
+        if viewModel.isGeneratingNoteDraft || viewModel.isGeneratingSlideDeck || viewModel.isGeneratingPaper {
             ZStack {
                 Color.black.opacity(0.45).ignoresSafeArea()
                 VStack(spacing: 12) {
                     ProgressView()
                         .tint(.white)
                         .scaleEffect(1.15)
-                    Text("memorize.notes_generating".localized)
+                    Text(generationStatusText)
                         .font(AppTypography.subheadline)
                         .foregroundColor(.white)
                 }
@@ -217,6 +258,38 @@ struct ProjectDetailView: View {
             set: { isPresented in
                 if !isPresented {
                     viewModel.noteGenerationError = nil
+                }
+            }
+        )
+    }
+
+    private var generationStatusText: String {
+        if viewModel.isGeneratingSlideDeck {
+            return "Generating slide deck..."
+        }
+        if viewModel.isGeneratingPaper {
+            return "Generating paper..."
+        }
+        return "memorize.notes_generating".localized
+    }
+
+    private var slideDeckErrorPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.slideDeckGenerationError != nil },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.slideDeckGenerationError = nil
+                }
+            }
+        )
+    }
+
+    private var paperErrorPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.paperGenerationError != nil },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.paperGenerationError = nil
                 }
             }
         )
@@ -429,45 +502,771 @@ struct ProjectDetailView: View {
     }
 
     private var bottomTabBar: some View {
-        HStack {
-            tabButton(tab: .sources, icon: "doc.on.doc.fill", label: "memorize.sources".localized)
-
-            // Tutor button opens fullscreen
-            Button {
-                selectedTab = .tutor
-                showTutor = true
-            } label: {
-                VStack(spacing: 4) {
-                    Image(systemName: "graduationcap.fill")
-                        .font(.system(size: 20))
-                    Text("memorize.tutor_short".localized)
-                        .font(AppTypography.caption)
-                }
-                .foregroundColor(selectedTab == .tutor ? AppColors.memorizeAccent : Color.white.opacity(0.5))
-                .frame(maxWidth: .infinity)
-            }
-
-            tabButton(tab: .study, icon: "sparkles", label: "memorize.study".localized)
-            tabButton(tab: .notes, icon: "note.text", label: "memorize.notes".localized)
+        HStack(spacing: 10) {
+            tabButton(tab: .study, icon: "leaf", label: "Learn")
+            tabButton(tab: .notes, icon: "textformat", label: "memorize.notes".localized)
+            tabButton(tab: .create, icon: "pencil", label: "Create")
         }
-        .padding(.top, 8)
-        .padding(.bottom, 4)
-        .background(AppColors.memorizeCard)
+        .padding(.horizontal, 18)
+        .padding(.top, 6)
+        .padding(.bottom, 6)
+        .background(
+            LinearGradient(
+                colors: [Color(hex: "F9CED6"), Color(hex: "D8F1E9")],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .ignoresSafeArea(edges: .bottom)
+        )
     }
 
     private func tabButton(tab: ProjectTab, icon: String, label: String) -> some View {
         Button {
             selectedTab = tab
         } label: {
-            VStack(spacing: 4) {
+            VStack(spacing: 2) {
                 Image(systemName: icon)
-                    .font(.system(size: 20))
+                    .font(.system(size: 17))
                 Text(label)
                     .font(AppTypography.caption)
             }
-            .foregroundColor(selectedTab == tab ? AppColors.memorizeAccent : Color.white.opacity(0.5))
+            .foregroundColor(selectedTab == tab ? Color(hex: "2F6A3F") : Color(hex: "8D958E"))
             .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(selectedTab == tab ? Color(hex: "D8F7D8") : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
+    }
+}
+
+// MARK: - Create Tab
+
+private struct CreateTabView: View {
+    @ObservedObject var viewModel: ProjectDetailViewModel
+    @State private var showInfographics = false
+    @State private var customizationKind: CreateOutputKind?
+    @State private var infographicBundlesOverride: [InfographicSourceBundle]?
+
+    private var completedPages: [PageCapture] {
+        viewModel.allCompletedPages
+    }
+
+    private var bookTitle: String {
+        viewModel.book.title.isEmpty ? "memorize.untitled".localized : viewModel.book.title
+    }
+
+    private var projectEyebrow: String {
+        bookTitle.uppercased()
+    }
+
+    private var hasContent: Bool {
+        !completedPages.isEmpty
+    }
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                createHeader
+                promptCard
+                makeSection
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 8)
+            .padding(.bottom, 120)
+        }
+        .background(Color(hex: "FCF7EF"))
+        .fullScreenCover(isPresented: $viewModel.showQuiz) {
+            MemorizeQuizView(questions: $viewModel.quizQuestions)
+        }
+        .fullScreenCover(isPresented: $showInfographics) {
+            let bundles = infographicBundlesOverride ?? infographicSourceBundles
+            MemorizeInfographicsView(
+                pages: bundles.flatMap(\.pages),
+                bookTitle: bookTitle,
+                sectionTitle: viewModel.book.chapter,
+                sourceBundles: bundles
+            )
+        }
+        .sheet(item: $customizationKind) { kind in
+            CreateCustomizationSheet(
+                kind: kind,
+                sourceBundles: infographicSourceBundles,
+                onGenerate: handleCustomization
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
+            .presentationCornerRadius(32)
+        }
+    }
+
+    private var createHeader: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(projectEyebrow)
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .tracking(0.2)
+                .foregroundColor(Color(hex: "8D958E"))
+                .lineLimit(2)
+
+            Text("Create")
+                .font(.system(size: 36, weight: .regular, design: .serif))
+                .foregroundColor(Color(hex: "1F2420"))
+        }
+    }
+
+    private var promptCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkle")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("TURN YOUR LEARNING INTO...")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .tracking(0.4)
+            }
+            .foregroundColor(Color(hex: "943C4A"))
+
+            Text("Make a 10-slide deck on photosynthesis from my notes.")
+                .font(.system(size: 24, weight: .regular, design: .serif))
+                .foregroundColor(Color(hex: "1F2420"))
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            FlowLayout(spacing: 8, lineSpacing: 8) {
+                promptChip("8-slide deck")
+                promptChip("Study guide")
+                promptChip("Infographic")
+                promptChip("Paper")
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: "FFE3E7"))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color(hex: "FF98A6"), lineWidth: 1)
+        )
+    }
+
+    private func promptChip(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 15, weight: .bold, design: .rounded))
+            .foregroundColor(Color(hex: "943C4A"))
+            .padding(.horizontal, 13)
+            .padding(.vertical, 7)
+            .background(Color.white.opacity(0.74))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color(hex: "FF98A6"), lineWidth: 1)
+            )
+    }
+
+    private var makeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("WHAT DO YOU WANT TO MAKE?")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .tracking(0.8)
+                .foregroundColor(Color(hex: "535B54"))
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 12),
+                    GridItem(.flexible(), spacing: 12)
+                ],
+                spacing: 12
+            ) {
+                createCard(
+                    title: "Slide deck",
+                    subtitle: "Presentation-ready",
+                    icon: "display",
+                    tint: Color(hex: "FFE1E5"),
+                    foreground: Color(hex: "943C4A"),
+                    action: { customizationKind = .slideDeck }
+                )
+
+                createCard(
+                    title: "Infographic",
+                    subtitle: "One-page visual",
+                    icon: "photo",
+                    tint: Color(hex: "CFEFFF"),
+                    foreground: Color(hex: "20657E"),
+                    action: { customizationKind = .infographic }
+                )
+
+                createCard(
+                    title: "Study guide",
+                    subtitle: "Outlined & structured",
+                    icon: "book.closed",
+                    tint: Color(hex: "D6F4D8"),
+                    foreground: Color(hex: "276B32"),
+                    action: { customizationKind = .studyGuide }
+                )
+
+                createCard(
+                    title: "Paper",
+                    subtitle: "Essay or research write-up",
+                    icon: "pencil",
+                    tint: Color(hex: "CFEFFF"),
+                    foreground: Color(hex: "20657E"),
+                    action: { customizationKind = .paper }
+                )
+            }
+        }
+    }
+
+    private func createCard(
+        title: String,
+        subtitle: String,
+        icon: String,
+        tint: Color,
+        foreground: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 14) {
+                Image(systemName: icon)
+                    .font(.system(size: 21, weight: .semibold))
+                    .foregroundColor(foreground)
+                    .frame(width: 50, height: 50)
+                    .background(tint)
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 19, weight: .bold, design: .rounded))
+                        .foregroundColor(.black)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.78)
+
+                    Text(subtitle)
+                        .font(.system(size: 15, weight: .regular, design: .rounded))
+                        .foregroundColor(Color(hex: "8D958E"))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.78)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 138, alignment: .topLeading)
+            .padding(18)
+            .background(Color.white.opacity(0.96))
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+        .disabled(!hasContent || viewModel.isGeneratingQuiz || viewModel.isGeneratingNoteDraft || viewModel.isGeneratingSlideDeck || viewModel.isGeneratingPaper)
+        .opacity(hasContent ? 1 : 0.45)
+    }
+
+    private func handleCustomization(_ config: CreateCustomization) {
+        customizationKind = nil
+        let selectedBundles = config.selectedBundles
+        let instructions = config.instructions
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            switch config.kind {
+            case .infographic:
+                infographicBundlesOverride = selectedBundles
+                showInfographics = true
+            case .slideDeck:
+                viewModel.generateSlideDeck(
+                    from: selectedBundles.flatMap(\.pages),
+                    customInstructions: instructions
+                )
+            case .paper:
+                viewModel.generatePaper(
+                    from: selectedBundles.flatMap(\.pages),
+                    customInstructions: instructions
+                )
+            case .studyGuide:
+                viewModel.generateNoteDraft(
+                    after: config.kind.noteMode,
+                    from: selectedBundles.flatMap(\.pages),
+                    customInstructions: instructions
+                )
+            }
+        }
+    }
+
+    private var infographicSourceBundles: [InfographicSourceBundle] {
+        var bundles: [InfographicSourceBundle] = []
+
+        let legacyPages = viewModel.book.pages.filter { $0.status == .completed }
+        if !legacyPages.isEmpty {
+            bundles.append(
+                InfographicSourceBundle(
+                    title: "memorize.source_camera".localized,
+                    pages: legacyPages
+                )
+            )
+        }
+
+        for source in viewModel.book.sources {
+            let completed = source.pages.filter { $0.status == .completed }
+            guard !completed.isEmpty else { continue }
+            bundles.append(InfographicSourceBundle(title: source.name, pages: completed))
+        }
+
+        if bundles.isEmpty && !completedPages.isEmpty {
+            bundles.append(
+                InfographicSourceBundle(
+                    title: "memorize.sources".localized,
+                    pages: completedPages
+                )
+            )
+        }
+
+        return bundles
+    }
+}
+
+private enum CreateOutputKind: String, Identifiable {
+    case slideDeck
+    case studyGuide
+    case paper
+    case infographic
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .slideDeck: return "Slide deck"
+        case .studyGuide: return "Study guide"
+        case .paper: return "Paper"
+        case .infographic: return "Infographic"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .slideDeck: return "Set the slide count, source mix, and focus."
+        case .studyGuide: return "Choose how deep the outline should go."
+        case .paper: return "Tune the length and research angle."
+        case .infographic: return "Pick the scope before opening the visual builder."
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .slideDeck: return "display"
+        case .studyGuide: return "book.closed"
+        case .paper: return "pencil"
+        case .infographic: return "photo"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .slideDeck, .paper: return Color(hex: "FFE1E5")
+        case .studyGuide: return Color(hex: "D6F4D8")
+        case .infographic: return Color(hex: "CFEFFF")
+        }
+    }
+
+    var foreground: Color {
+        switch self {
+        case .slideDeck, .paper: return Color(hex: "943C4A")
+        case .studyGuide: return Color(hex: "276B32")
+        case .infographic: return Color(hex: "20657E")
+        }
+    }
+
+    var noteMode: GeneratedNoteKind {
+        switch self {
+        case .slideDeck, .infographic:
+            return .infographics
+        case .studyGuide:
+            return .studyGuide
+        case .paper:
+            return .voiceSummary
+        }
+    }
+
+    var lengthOptions: [String] {
+        switch self {
+        case .slideDeck:
+            return ["6 slides", "10 slides", "14 slides"]
+        case .studyGuide:
+            return ["Quick", "Standard", "Detailed"]
+        case .paper:
+            return ["1 page", "3 pages", "5 pages"]
+        case .infographic:
+            return ["Simple", "Standard", "Detailed"]
+        }
+    }
+
+    var defaultLength: String {
+        switch self {
+        case .slideDeck:
+            return "10 slides"
+        case .studyGuide, .infographic:
+            return "Standard"
+        case .paper:
+            return "3 pages"
+        }
+    }
+}
+
+private struct CreateCustomization {
+    let kind: CreateOutputKind
+    let length: String
+    let selectedBundles: [InfographicSourceBundle]
+    let focusNotes: String
+
+    var instructions: String {
+        let sourceNames = selectedBundles.map(\.title).joined(separator: ", ")
+        let trimmedNotes = focusNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        var lines = [
+            "Output type: \(kind.title)",
+            "Target length: \(length)",
+            "Use these selected sources or notes: \(sourceNames.isEmpty ? "selected project sources" : sourceNames)"
+        ]
+
+        if !trimmedNotes.isEmpty {
+            lines.append("Learner focus notes: \(trimmedNotes)")
+        }
+
+        switch kind {
+        case .slideDeck:
+            lines.append("Format the body as a presentation-ready slide outline with slide titles, bullets, and speaker notes.")
+        case .studyGuide:
+            lines.append("Format the body as a structured study guide with sections, key ideas, review prompts, and next steps.")
+        case .paper:
+            lines.append("Format the body as an essay or research write-up outline with a thesis, evidence, and a clear conclusion.")
+        case .infographic:
+            lines.append("Use the selected scope to set up the visual infographic generator.")
+        }
+
+        return lines.joined(separator: "\n")
+    }
+}
+
+private struct CreateCustomizationSheet: View {
+    let kind: CreateOutputKind
+    let sourceBundles: [InfographicSourceBundle]
+    let onGenerate: (CreateCustomization) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedLength: String
+    @State private var selectedSourceIDs: Set<UUID>
+    @State private var focusNotes = ""
+
+    init(
+        kind: CreateOutputKind,
+        sourceBundles: [InfographicSourceBundle],
+        onGenerate: @escaping (CreateCustomization) -> Void
+    ) {
+        self.kind = kind
+        self.sourceBundles = sourceBundles
+        self.onGenerate = onGenerate
+        _selectedLength = State(initialValue: kind.defaultLength)
+        _selectedSourceIDs = State(initialValue: Set(sourceBundles.map(\.id)))
+    }
+
+    private var selectedBundles: [InfographicSourceBundle] {
+        sourceBundles.filter { selectedSourceIDs.contains($0.id) }
+    }
+
+    private var canGenerate: Bool {
+        !selectedBundles.isEmpty
+    }
+
+    var body: some View {
+        ZStack {
+            Color(hex: "FCF7EF").ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Capsule()
+                    .fill(Color(hex: "DED8CF"))
+                    .frame(width: 54, height: 5)
+                    .padding(.top, 12)
+                    .padding(.bottom, 18)
+
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 22) {
+                        header
+                        lengthSection
+                        sourcesSection
+                        notesSection
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 120)
+                }
+            }
+
+            VStack {
+                Spacer()
+                generateBar
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: kind.icon)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundColor(kind.foreground)
+                .frame(width: 52, height: 52)
+                .background(kind.tint)
+                .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Customize \(kind.title)")
+                    .font(.system(size: 31, weight: .regular, design: .serif))
+                    .foregroundColor(Color(hex: "1F2420"))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(kind.subtitle)
+                    .font(.system(size: 15, weight: .regular, design: .rounded))
+                    .foregroundColor(Color(hex: "7F877F"))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(Color(hex: "535B54"))
+                    .frame(width: 42, height: 42)
+                    .background(Color.white.opacity(0.9))
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color(hex: "E8E1D8"), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var lengthSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionLabel("Length")
+
+            HStack(spacing: 8) {
+                ForEach(kind.lengthOptions, id: \.self) { option in
+                    Button {
+                        selectedLength = option
+                    } label: {
+                        Text(option)
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundColor(selectedLength == option ? Color(hex: "1F2420") : Color(hex: "7F877F"))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(selectedLength == option ? kind.tint : Color.white.opacity(0.9))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(selectedLength == option ? kind.foreground.opacity(0.35) : Color(hex: "E8E1D8"), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var sourcesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                sectionLabel("Sources or notes to use")
+                Spacer()
+                Text("\(selectedBundles.count)")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundColor(Color(hex: "7F877F"))
+            }
+
+            VStack(spacing: 10) {
+                ForEach(sourceBundles) { source in
+                    sourceRow(source)
+                }
+            }
+        }
+    }
+
+    private func sourceRow(_ source: InfographicSourceBundle) -> some View {
+        let isSelected = selectedSourceIDs.contains(source.id)
+
+        return Button {
+            if isSelected {
+                selectedSourceIDs.remove(source.id)
+            } else {
+                selectedSourceIDs.insert(source.id)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(isSelected ? Color(hex: "6FC985") : Color(hex: "A5AAA4"))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(source.title)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(Color(hex: "1F2420"))
+                        .lineLimit(2)
+
+                    Text("\(source.pages.count) page\(source.pages.count == 1 ? "" : "s")")
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundColor(Color(hex: "8D958E"))
+                }
+
+                Spacer()
+            }
+            .padding(15)
+            .background(Color.white.opacity(0.94))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(isSelected ? Color(hex: "6FC985").opacity(0.55) : Color(hex: "E8E1D8"), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var notesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionLabel("Notes")
+
+            TextEditor(text: $focusNotes)
+                .font(.system(size: 16, weight: .regular, design: .rounded))
+                .foregroundColor(Color(hex: "1F2420"))
+                .scrollContentBackground(.hidden)
+                .padding(12)
+                .frame(minHeight: 116)
+                .background(Color.white.opacity(0.94))
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color(hex: "E8E1D8"), lineWidth: 1)
+                )
+                .overlay(alignment: .topLeading) {
+                    if focusNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("Add what to emphasize, avoid, or include.")
+                            .font(.system(size: 16, weight: .regular, design: .rounded))
+                            .foregroundColor(Color(hex: "A5AAA4"))
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 20)
+                            .allowsHitTesting(false)
+                    }
+                }
+        }
+    }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 14, weight: .bold, design: .rounded))
+            .tracking(0.7)
+            .foregroundColor(Color(hex: "535B54"))
+    }
+
+    private var generateBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+                .background(Color(hex: "E8E1D8"))
+
+            Button {
+                guard canGenerate else { return }
+                let config = CreateCustomization(
+                    kind: kind,
+                    length: selectedLength,
+                    selectedBundles: selectedBundles,
+                    focusNotes: focusNotes
+                )
+                onGenerate(config)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: kind == .infographic ? "arrow.right" : "sparkles")
+                        .font(.system(size: 17, weight: .bold))
+                    Text(kind == .infographic ? "Continue" : "Generate")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                }
+                .foregroundColor(Color(hex: "1F2420"))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 17)
+                .background(canGenerate ? Color(hex: "BFEFC8") : Color(hex: "DAD7D1"))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canGenerate)
+            .padding(.horizontal, 24)
+            .padding(.top, 14)
+            .padding(.bottom, 24)
+            .background(.ultraThinMaterial)
+        }
+    }
+}
+
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? 0
+        let rows = rows(for: subviews, maxWidth: maxWidth)
+        let height = rows.reduce(CGFloat.zero) { total, row in
+            total + row.height
+        } + CGFloat(max(rows.count - 1, 0)) * lineSpacing
+        return CGSize(width: maxWidth, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let rows = rows(for: subviews, maxWidth: bounds.width)
+        var y = bounds.minY
+
+        for row in rows {
+            var x = bounds.minX
+            for item in row.items {
+                item.subview.place(
+                    at: CGPoint(x: x, y: y),
+                    proposal: ProposedViewSize(item.size)
+                )
+                x += item.size.width + spacing
+            }
+            y += row.height + lineSpacing
+        }
+    }
+
+    private func rows(for subviews: Subviews, maxWidth: CGFloat) -> [Row] {
+        var rows: [Row] = []
+        var currentItems: [RowItem] = []
+        var currentWidth: CGFloat = 0
+        var currentHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            let nextWidth = currentItems.isEmpty ? size.width : currentWidth + spacing + size.width
+
+            if nextWidth > maxWidth && !currentItems.isEmpty {
+                rows.append(Row(items: currentItems, height: currentHeight))
+                currentItems = []
+                currentWidth = 0
+                currentHeight = 0
+            }
+
+            currentItems.append(RowItem(subview: subview, size: size))
+            currentWidth = currentItems.count == 1 ? size.width : currentWidth + spacing + size.width
+            currentHeight = max(currentHeight, size.height)
+        }
+
+        if !currentItems.isEmpty {
+            rows.append(Row(items: currentItems, height: currentHeight))
+        }
+
+        return rows
+    }
+
+    private struct Row {
+        let items: [RowItem]
+        let height: CGFloat
+    }
+
+    private struct RowItem {
+        let subview: LayoutSubview
+        let size: CGSize
     }
 }
 
@@ -534,9 +1333,9 @@ If the user asks about something you cannot see clearly, say what is unclear and
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                         .frame(width: 40, height: 40)
-                        .background(Color.white.opacity(0.1))
+                        .background(Color.white.opacity(0.88))
                         .cornerRadius(AppCornerRadius.sm)
                 }
 
@@ -552,11 +1351,11 @@ If the user asks about something you cannot see clearly, say what is unclear and
 
                 Text("memorize.live_mode_select_device".localized)
                     .font(AppTypography.title2)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
 
                 Text("memorize.live_mode_select_device_desc".localized)
                     .font(AppTypography.subheadline)
-                    .foregroundColor(Color.white.opacity(0.62))
+                    .foregroundColor(Color(hex: "6E776F"))
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)
                     .padding(.horizontal, AppSpacing.lg)
@@ -590,19 +1389,19 @@ If the user asks about something you cannot see clearly, say what is unclear and
             HStack(spacing: 14) {
                 Image(systemName: device.iconName)
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(isEnabled ? .black : Color.white.opacity(0.35))
+                    .foregroundColor(isEnabled ? Color(hex: "1F2420") : Color(hex: "1F2420").opacity(0.35))
                     .frame(width: 44, height: 44)
-                    .background(isEnabled ? AppColors.memorizeAccent : Color.white.opacity(0.08))
+                    .background(isEnabled ? AppColors.memorizeAccent : Color(hex: "F4EFE6"))
                     .cornerRadius(AppCornerRadius.sm)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(device.rawValue)
                         .font(AppTypography.headline)
-                        .foregroundColor(isEnabled ? .white : Color.white.opacity(0.42))
+                        .foregroundColor(isEnabled ? Color(hex: "1F2420") : Color(hex: "1F2420").opacity(0.42))
 
                     Text(subtitle)
                         .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(isEnabled ? 0.58 : 0.34))
+                        .foregroundColor(Color(hex: "1F2420").opacity(isEnabled ? 0.58 : 0.34))
                         .lineLimit(2)
                 }
 
@@ -610,11 +1409,11 @@ If the user asks about something you cannot see clearly, say what is unclear and
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color.white.opacity(isEnabled ? 0.38 : 0.18))
+                    .foregroundColor(Color(hex: "1F2420").opacity(isEnabled ? 0.38 : 0.18))
             }
             .padding(AppSpacing.md)
             .frame(maxWidth: .infinity)
-            .background(AppColors.memorizeCard)
+            .background(Color.white)
             .cornerRadius(AppCornerRadius.lg)
         }
         .buttonStyle(.plain)
@@ -651,19 +1450,19 @@ If the user asks about something you cannot see clearly, say what is unclear and
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                     .frame(width: 40, height: 40)
-                    .background(Color.white.opacity(0.1))
+                    .background(Color(hex: "F4EFE6"))
                     .cornerRadius(AppCornerRadius.sm)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("memorize.live_mode".localized)
                     .font(AppTypography.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                 Text(device.rawValue)
                     .font(AppTypography.caption)
-                    .foregroundColor(Color.white.opacity(0.5))
+                    .foregroundColor(Color(hex: "1F2420").opacity(0.5))
             }
 
             Spacer()
@@ -734,15 +1533,15 @@ If the user asks about something you cannot see clearly, say what is unclear and
                     VStack(alignment: .leading, spacing: 8) {
                         Text("memorize.live_mode_scene_prompt".localized)
                             .font(AppTypography.headline)
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                         Text("memorize.live_mode_scene_prompt_desc".localized)
                             .font(AppTypography.subheadline)
-                            .foregroundColor(Color.white.opacity(0.58))
+                            .foregroundColor(Color(hex: "1F2420").opacity(0.58))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(AppSpacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(AppColors.memorizeCard)
+                    .background(Color.white)
                     .cornerRadius(AppCornerRadius.lg)
                 } else {
                     ForEach(aiViewModel.conversationHistory.suffix(8)) { message in
@@ -779,18 +1578,18 @@ If the user asks about something you cannot see clearly, say what is unclear and
         }
         .frame(maxWidth: .infinity)
         .padding(AppSpacing.md)
-        .background(AppColors.memorizeCard)
+        .background(Color.white)
     }
 
     private func liveMessageOverlay(systemImage: String, message: String) -> some View {
         VStack(spacing: 12) {
             Image(systemName: systemImage)
                 .font(.system(size: 34, weight: .semibold))
-                .foregroundColor(Color.white.opacity(0.42))
+                .foregroundColor(.white.opacity(0.42))
 
             Text(message)
                 .font(AppTypography.subheadline)
-                .foregroundColor(Color.white.opacity(0.7))
+                .foregroundColor(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, AppSpacing.lg)
         }
@@ -871,11 +1670,11 @@ private struct LiveConversationBubble: View {
     private var bubble: some View {
         Text(message.content)
             .font(AppTypography.subheadline)
-            .foregroundColor(.white)
+            .foregroundColor(Color(hex: "1F2420"))
             .lineSpacing(3)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(message.role == .assistant ? AppColors.memorizeCard : AppColors.memorizeAccent.opacity(0.88))
+            .background(message.role == .assistant ? Color(hex: "F4EFE6") : AppColors.memorizeAccent.opacity(0.88))
             .cornerRadius(AppCornerRadius.md)
     }
 }
@@ -887,11 +1686,11 @@ private struct LiveTranscriptBubble: View {
         HStack {
             Text(text)
                 .font(AppTypography.subheadline)
-                .foregroundColor(Color.white.opacity(0.84))
+                .foregroundColor(Color(hex: "1F2420").opacity(0.84))
                 .lineSpacing(3)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(AppColors.memorizeCard.opacity(0.86))
+                .background(Color.white.opacity(0.86))
                 .cornerRadius(AppCornerRadius.md)
             Spacer(minLength: 44)
         }
@@ -1013,13 +1812,13 @@ private struct NotesTabView: View {
                     VStack(spacing: AppSpacing.md) {
                         Image(systemName: "note.text")
                             .font(.system(size: 42))
-                            .foregroundColor(Color.white.opacity(0.3))
+                            .foregroundColor(Color(hex: "8D958E"))
                         Text("memorize.notes_empty_title".localized)
                             .font(AppTypography.headline)
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                         Text("memorize.notes_empty_desc".localized)
                             .font(AppTypography.subheadline)
-                            .foregroundColor(Color.white.opacity(0.55))
+                            .foregroundColor(Color(hex: "6E776F"))
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
@@ -1028,7 +1827,7 @@ private struct NotesTabView: View {
                 } else {
                     Text("memorize.notes".localized)
                         .font(AppTypography.title2)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                         .padding(.top, AppSpacing.lg)
 
                     ForEach(notes) { note in
@@ -1171,6 +1970,8 @@ private struct SavedNoteCard: View {
             return "questionmark.circle.fill"
         case .voiceSummary:
             return "mic.fill"
+        case .studyGuide:
+            return "book.closed.fill"
         }
     }
 }
@@ -1344,34 +2145,41 @@ private struct GeneratedNoteDraftView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.md) {
                     HStack(spacing: 10) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(Color(hex: "2F6A3F"))
                             .frame(width: 36, height: 36)
-                            .background(AppColors.memorizeAccent)
-                            .cornerRadius(AppCornerRadius.sm)
+                            .background(Color(hex: "D8F7D8"))
+                            .clipShape(RoundedRectangle(cornerRadius: AppCornerRadius.sm, style: .continuous))
 
                         VStack(alignment: .leading, spacing: 3) {
                             Text("memorize.notes_generated_title".localized)
                                 .font(AppTypography.caption)
-                                .foregroundColor(Color.white.opacity(0.55))
+                                .foregroundColor(Color(hex: "8D958E"))
                             Text(note.mode.displayTitle)
                                 .font(AppTypography.subheadline)
-                                .foregroundColor(.white.opacity(0.8))
+                                .foregroundColor(Color(hex: "535B54"))
                         }
                     }
 
                     Text(note.title)
                         .font(AppTypography.title2)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                         .fixedSize(horizontal: false, vertical: true)
 
                     Text(note.body)
                         .font(AppTypography.body)
-                        .foregroundColor(Color.white.opacity(0.84))
+                        .foregroundColor(Color(hex: "343A35"))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(AppSpacing.lg)
+                .background(Color.white.opacity(0.96))
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(Color(hex: "E8E1D8"), lineWidth: 1)
+                )
+                .padding(22)
             }
             .background(AppColors.memorizeBackground.ignoresSafeArea())
             .navigationTitle("memorize.notes_review_title".localized)
@@ -1382,7 +2190,7 @@ private struct GeneratedNoteDraftView: View {
                         onClose()
                         dismiss()
                     }
-                    .foregroundColor(Color.white.opacity(0.75))
+                    .foregroundColor(Color(hex: "6E776F"))
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("memorize.notes_save".localized) {
@@ -1390,10 +2198,189 @@ private struct GeneratedNoteDraftView: View {
                         dismiss()
                     }
                     .fontWeight(.semibold)
-                    .foregroundColor(AppColors.memorizeAccent)
+                    .foregroundColor(Color(hex: "2F6A3F"))
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
+        }
+    }
+}
+
+private struct GeneratedSlideDeckDraftView: View {
+    let deck: GeneratedSlideDeck
+    let onClose: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("SLIDE DECK")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .tracking(0.8)
+                            .foregroundColor(Color(hex: "8D958E"))
+
+                        Text(deck.title)
+                            .font(.system(size: 36, weight: .regular, design: .serif))
+                            .foregroundColor(Color(hex: "1F2420"))
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text("\(deck.slides.count) slides")
+                            .font(.system(size: 15, weight: .regular, design: .rounded))
+                            .foregroundColor(Color(hex: "7F877F"))
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 18)
+
+                    VStack(spacing: 14) {
+                        ForEach(Array(deck.slides.enumerated()), id: \.element.id) { index, slide in
+                            slideCard(slide, index: index + 1)
+                        }
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.bottom, 28)
+                }
+            }
+            .background(Color(hex: "FCF7EF").ignoresSafeArea())
+            .navigationTitle("Preview")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        onClose()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color(hex: "2F6A3F"))
+                }
+            }
+            .toolbarColorScheme(.light, for: .navigationBar)
+        }
+    }
+
+    private func slideCard(_ slide: GeneratedSlide, index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Text("\(index)")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(Color(hex: "943C4A"))
+                    .frame(width: 34, height: 34)
+                    .background(Color(hex: "FFE1E5"))
+                    .clipShape(Circle())
+
+                Text(slide.title)
+                    .font(.system(size: 24, weight: .regular, design: .serif))
+                    .foregroundColor(Color(hex: "1F2420"))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+            }
+
+            if !slide.bullets.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(slide.bullets, id: \.self) { bullet in
+                        HStack(alignment: .top, spacing: 8) {
+                            Circle()
+                                .fill(Color(hex: "6FC985"))
+                                .frame(width: 6, height: 6)
+                                .padding(.top, 7)
+
+                            Text(bullet)
+                                .font(.system(size: 16, weight: .regular, design: .rounded))
+                                .foregroundColor(Color(hex: "343A35"))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+
+            if !slide.speakerNotes.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Speaker notes")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .tracking(0.5)
+                        .foregroundColor(Color(hex: "8D958E"))
+
+                    Text(slide.speakerNotes)
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .foregroundColor(Color(hex: "6E776F"))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(hex: "F6F0E7"))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.96))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color(hex: "E8E1D8"), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+    }
+}
+
+private struct GeneratedPaperDraftView: View {
+    let paper: GeneratedPaper
+    let onClose: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("PAPER")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .tracking(0.8)
+                            .foregroundColor(Color(hex: "8D958E"))
+
+                        Text(paper.title)
+                            .font(.system(size: 36, weight: .regular, design: .serif))
+                            .foregroundColor(Color(hex: "1F2420"))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 18)
+
+                    Text(paper.body)
+                        .font(.system(size: 17, weight: .regular, design: .serif))
+                        .lineSpacing(6)
+                        .foregroundColor(Color(hex: "343A35"))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(20)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white.opacity(0.96))
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .stroke(Color(hex: "E8E1D8"), lineWidth: 1)
+                        )
+                        .padding(.horizontal, 22)
+                        .padding(.bottom, 28)
+                }
+            }
+            .background(Color(hex: "FCF7EF").ignoresSafeArea())
+            .navigationTitle("Preview")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        onClose()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color(hex: "2F6A3F"))
+                }
+            }
+            .toolbarColorScheme(.light, for: .navigationBar)
         }
     }
 }

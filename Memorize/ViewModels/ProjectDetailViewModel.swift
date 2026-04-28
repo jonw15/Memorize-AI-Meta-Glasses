@@ -16,8 +16,14 @@ class ProjectDetailViewModel: ObservableObject {
     @Published var showFilePicker = false
     @Published private(set) var sourceAddedToken: UUID?
     @Published var generatedNoteDraft: GeneratedNote?
+    @Published var generatedSlideDeckDraft: GeneratedSlideDeck?
+    @Published var generatedPaperDraft: GeneratedPaper?
     @Published var isGeneratingNoteDraft = false
+    @Published var isGeneratingSlideDeck = false
+    @Published var isGeneratingPaper = false
     @Published var noteGenerationError: String?
+    @Published var slideDeckGenerationError: String?
+    @Published var paperGenerationError: String?
 
     // Study action state
     @Published var quizQuestions: [QuizQuestion] = []
@@ -350,19 +356,38 @@ class ProjectDetailViewModel: ObservableObject {
         guard !isGeneratingNoteDraft else { return }
         guard generatedNoteDraft == nil else { return }
 
-        let pages = allCompletedPages
-        let title = book.title
         let sessionTranscript = noteSessionTranscript(for: mode)
+        generateNoteDraft(
+            after: mode,
+            from: allCompletedPages,
+            customInstructions: nil,
+            sessionTranscript: sessionTranscript
+        )
+    }
+
+    func generateNoteDraft(
+        after mode: GeneratedNoteKind,
+        from pages: [PageCapture],
+        customInstructions: String? = nil,
+        sessionTranscript: String? = nil
+    ) {
+        let completedPages = pages.filter { $0.status == .completed }
+        guard !completedPages.isEmpty else { return }
+        guard !isGeneratingNoteDraft else { return }
+        guard generatedNoteDraft == nil else { return }
+
+        let title = book.title
         isGeneratingNoteDraft = true
         noteGenerationError = nil
 
         Task {
             do {
                 let note = try await memorizeService.generateStudyNote(
-                    from: pages,
+                    from: completedPages,
                     bookTitle: title,
                     mode: mode,
-                    sessionTranscript: sessionTranscript
+                    sessionTranscript: sessionTranscript,
+                    customInstructions: customInstructions
                 )
                 generatedNoteDraft = note
             } catch {
@@ -386,6 +411,74 @@ class ProjectDetailViewModel: ObservableObject {
 
         generatedNoteDraft = nil
         noteGenerationError = nil
+    }
+
+    func generateSlideDeck(
+        from pages: [PageCapture],
+        customInstructions: String? = nil
+    ) {
+        let completedPages = pages.filter { $0.status == .completed }
+        guard !completedPages.isEmpty else { return }
+        guard !isGeneratingSlideDeck else { return }
+        guard generatedSlideDeckDraft == nil else { return }
+
+        let title = book.title
+        isGeneratingSlideDeck = true
+        slideDeckGenerationError = nil
+
+        Task {
+            do {
+                let deck = try await memorizeService.generateSlideDeck(
+                    from: completedPages,
+                    bookTitle: title,
+                    customInstructions: customInstructions
+                )
+                generatedSlideDeckDraft = deck
+            } catch {
+                slideDeckGenerationError = error.localizedDescription
+                print("❌ [ProjectDetail] Slide deck generation failed: \(error)")
+            }
+            isGeneratingSlideDeck = false
+        }
+    }
+
+    func discardGeneratedSlideDeck() {
+        generatedSlideDeckDraft = nil
+        slideDeckGenerationError = nil
+    }
+
+    func generatePaper(
+        from pages: [PageCapture],
+        customInstructions: String? = nil
+    ) {
+        let completedPages = pages.filter { $0.status == .completed }
+        guard !completedPages.isEmpty else { return }
+        guard !isGeneratingPaper else { return }
+        guard generatedPaperDraft == nil else { return }
+
+        let title = book.title
+        isGeneratingPaper = true
+        paperGenerationError = nil
+
+        Task {
+            do {
+                let paper = try await memorizeService.generatePaper(
+                    from: completedPages,
+                    bookTitle: title,
+                    customInstructions: customInstructions
+                )
+                generatedPaperDraft = paper
+            } catch {
+                paperGenerationError = error.localizedDescription
+                print("❌ [ProjectDetail] Paper generation failed: \(error)")
+            }
+            isGeneratingPaper = false
+        }
+    }
+
+    func discardGeneratedPaper() {
+        generatedPaperDraft = nil
+        paperGenerationError = nil
     }
 
     func deleteNote(id: UUID) {
