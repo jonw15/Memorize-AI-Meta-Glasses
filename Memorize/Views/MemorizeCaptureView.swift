@@ -2909,7 +2909,7 @@ struct PodcastModePickerView: View {
         VStack(spacing: AppSpacing.lg) {
             Text("Podcast Mode")
                 .font(AppTypography.title2)
-                .foregroundColor(.white)
+                .foregroundColor(Color(hex: "1F2420"))
                 .padding(.top, AppSpacing.lg)
 
             VStack(spacing: AppSpacing.md) {
@@ -2919,21 +2919,22 @@ struct PodcastModePickerView: View {
                     HStack(spacing: 12) {
                         Image(systemName: "play.circle.fill")
                             .font(.system(size: 28))
+                            .foregroundColor(podcastAccent)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Play")
                                 .font(AppTypography.headline)
+                                .foregroundColor(Color(hex: "1F2420"))
                             Text("Listen with playback controls")
                                 .font(AppTypography.caption)
-                                .foregroundColor(.white.opacity(0.6))
+                                .foregroundColor(Color(hex: "6E776F"))
                         }
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.4))
+                            .foregroundColor(Color(hex: "8D958E"))
                     }
-                    .foregroundColor(.white)
                     .padding(AppSpacing.md)
-                    .background(podcastAccent.opacity(0.25))
+                    .background(podcastAccent.opacity(0.18))
                     .cornerRadius(AppCornerRadius.md)
                 }
 
@@ -2943,21 +2944,22 @@ struct PodcastModePickerView: View {
                     HStack(spacing: 12) {
                         Image(systemName: "mic.circle.fill")
                             .font(.system(size: 28))
+                            .foregroundColor(podcastAccent)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Interactive")
                                 .font(AppTypography.headline)
+                                .foregroundColor(Color(hex: "1F2420"))
                             Text("Interrupt and talk to the host")
                                 .font(AppTypography.caption)
-                                .foregroundColor(.white.opacity(0.6))
+                                .foregroundColor(Color(hex: "6E776F"))
                         }
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.4))
+                            .foregroundColor(Color(hex: "8D958E"))
                     }
-                    .foregroundColor(.white)
                     .padding(AppSpacing.md)
-                    .background(podcastAccent.opacity(0.25))
+                    .background(podcastAccent.opacity(0.18))
                     .cornerRadius(AppCornerRadius.md)
                 }
             }

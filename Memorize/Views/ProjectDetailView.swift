@@ -546,6 +546,22 @@ private struct CreateTabView: View {
     @State private var showInfographics = false
     @State private var customizationKind: CreateOutputKind?
     @State private var infographicBundlesOverride: [InfographicSourceBundle]?
+    @State private var promptIdea: String = CreateTabView.promptIdeas.randomElement() ?? "Make a 10-slide deck on photosynthesis from my notes."
+
+    static let promptIdeas: [String] = [
+        "Make a 10-slide deck on photosynthesis from my notes.",
+        "Turn chapter 3 into a one-page study guide I can review tonight.",
+        "Write a 3-page paper that explains the main argument in plain English.",
+        "Build an infographic that maps the key terms to real-world examples.",
+        "Quiz me on the trickiest ideas from this week's reading.",
+        "Summarize this in two paragraphs a curious friend would actually read.",
+        "Draft a teaching script I can read aloud in five minutes.",
+        "Pull out the five questions a professor would ask on the final.",
+        "Show me a story that illustrates the cause-and-effect chain in this chapter.",
+        "Make flashcards for the terms I'm most likely to forget.",
+        "Sketch a slide deck my study group can use next session.",
+        "Give me an analogy for the hardest concept in here."
+    ]
 
     private var completedPages: [PageCapture] {
         viewModel.allCompletedPages
@@ -624,11 +640,22 @@ private struct CreateTabView: View {
             }
             .foregroundColor(Color(hex: "943C4A"))
 
-            Text("Make a 10-slide deck on photosynthesis from my notes.")
+            Text(promptIdea)
                 .font(.system(size: 24, weight: .regular, design: .serif))
                 .foregroundColor(Color(hex: "1F2420"))
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        var next = CreateTabView.promptIdeas.randomElement() ?? promptIdea
+                        if CreateTabView.promptIdeas.count > 1 {
+                            while next == promptIdea {
+                                next = CreateTabView.promptIdeas.randomElement() ?? promptIdea
+                            }
+                        }
+                        promptIdea = next
+                    }
+                }
 
             FlowLayout(spacing: 8, lineSpacing: 8) {
                 promptChip("8-slide deck")
@@ -690,7 +717,10 @@ private struct CreateTabView: View {
                     icon: "photo",
                     tint: Color(hex: "CFEFFF"),
                     foreground: Color(hex: "20657E"),
-                    action: { customizationKind = .infographic }
+                    action: {
+                        infographicBundlesOverride = nil
+                        showInfographics = true
+                    }
                 )
 
                 createCard(

@@ -59,10 +59,170 @@ struct MemorizeService {
         let feedback: String
     }
 
+    struct FeynmanFeedback: Codable {
+        struct LandingItem: Codable {
+            let title: String
+            let detail: String
+        }
+        let landingItems: [LandingItem]
+        let focusChips: [String]
+        let refinedSummary: String
+    }
+
     private let visionService: VisionAPIService
 
     init() {
         self.visionService = VisionAPIService()
+    }
+
+    // MARK: - Feynman Feedback
+
+    func generateFeynmanFeedback(
+        topic: String,
+        sourceContext: String,
+        userExplanation: String
+    ) async throws -> FeynmanFeedback {
+        let trimmedExplanation = userExplanation.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedExplanation.isEmpty else {
+            throw NSError(
+                domain: "MemorizeService",
+                code: 9,
+                userInfo: [NSLocalizedDescriptionKey: "Empty explanation"]
+            )
+        }
+
+        let prompt = """
+        You are a learning coach using the Feynman Technique. The student tried to teach a concept in their own words. Compare their explanation against the source material and give honest, specific feedback.
+
+        Topic: \(topic)
+
+        Source material:
+        \(sourceContext)
+
+        Student's explanation:
+        \(trimmedExplanation)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "landingItems": [
+            { "title": "short label", "detail": "one or two sentences quoting or referencing the student's actual wording" }
+          ],
+          "focusChips": ["short focus question", "short focus question", "short focus question"],
+          "refinedSummary": "one or two sentences summarizing what improved if the student takes the focus questions seriously"
+        }
+
+        Requirements:
+        - Provide exactly 4 landingItems. Mix what the student got right with what's missing or fuzzy. Quote or paraphrase the student's actual phrasing where useful.
+        - Each "title" must be 4-7 words. Each "detail" 1-2 short sentences.
+        - Provide exactly 3 focusChips. Each chip is a short question (under 8 words) targeting a gap or weak spot.
+        - "refinedSummary" describes what a tightened second-pass explanation would sound like — 1 short sentence.
+        - Stay grounded in the source. Do not invent facts not present.
+        - No markdown fences and no extra JSON keys.
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return parseFeynmanFeedback(from: result)
+    }
+
+    struct FeynmanRefinementVerdict: Codable {
+        struct Improvement: Codable {
+            let title: String
+            let detail: String
+        }
+        let headline: String
+        let improvements: [Improvement]
+        let remainingGaps: [String]
+        let clarityScore: Int
+    }
+
+    func evaluateFeynmanRefinement(
+        topic: String,
+        sourceContext: String,
+        initialExplanation: String,
+        refinedExplanation: String
+    ) async throws -> FeynmanRefinementVerdict {
+        let trimmedRefined = refinedExplanation.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedRefined.isEmpty else {
+            throw NSError(
+                domain: "MemorizeService",
+                code: 10,
+                userInfo: [NSLocalizedDescriptionKey: "Empty refined explanation"]
+            )
+        }
+
+        let prompt = """
+        You are a learning coach using the Feynman Technique. The student already received feedback on a first explanation, then rewrote it. Compare the two attempts against the source material and judge how much sharper the refinement is.
+
+        Topic: \(topic)
+
+        Source material:
+        \(sourceContext)
+
+        First attempt:
+        \(initialExplanation.trimmingCharacters(in: .whitespacesAndNewlines))
+
+        Refined attempt:
+        \(trimmedRefined)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "headline": "short verdict — 4-6 words",
+          "clarityScore": 7,
+          "improvements": [
+            { "title": "short label", "detail": "one short sentence quoting or referencing what the student added or fixed" }
+          ],
+          "remainingGaps": ["short phrase", "short phrase"]
+        }
+
+        Requirements:
+        - "headline" is 4-6 words, encouraging if the refinement landed (e.g. "Much sharper now", "Mechanism reads cleanly"), or honest if it didn't (e.g. "Still fuzzy in places").
+        - "clarityScore" is an integer 1-10 reflecting overall clarity of the refined attempt against the source.
+        - Provide 2-4 improvements. Each should reference something the student actually changed or added between attempts.
+        - Provide 0-3 remainingGaps — short phrases naming gaps that are still present in the refined attempt.
+        - Stay grounded in what the student wrote and what the source says. Do not invent details.
+        - No markdown fences and no extra JSON keys.
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return parseFeynmanRefinementVerdict(from: result)
+    }
+
+    private func parseFeynmanRefinementVerdict(from response: String) -> FeynmanRefinementVerdict {
+        let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        let jsonString = extractJSONObject(from: cleaned) ?? cleaned
+
+        if let data = jsonString.data(using: .utf8),
+           let parsed = try? JSONDecoder().decode(FeynmanRefinementVerdict.self, from: data) {
+            return parsed
+        }
+
+        return FeynmanRefinementVerdict(
+            headline: "Couldn't read the refinement",
+            improvements: [],
+            remainingGaps: [],
+            clarityScore: 0
+        )
+    }
+
+    private func parseFeynmanFeedback(from response: String) -> FeynmanFeedback {
+        let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        let jsonString = extractJSONObject(from: cleaned) ?? cleaned
+
+        if let data = jsonString.data(using: .utf8),
+           let parsed = try? JSONDecoder().decode(FeynmanFeedback.self, from: data) {
+            return parsed
+        }
+
+        return FeynmanFeedback(
+            landingItems: [
+                FeynmanFeedback.LandingItem(
+                    title: "Couldn't read your draft",
+                    detail: "We couldn't analyze the explanation this time. Try sending it again."
+                )
+            ],
+            focusChips: ["Try again"],
+            refinedSummary: "Tap back to retry the feedback."
+        )
     }
 
     // MARK: - Extract Text (OCR)
