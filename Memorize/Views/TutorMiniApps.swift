@@ -96,7 +96,7 @@ struct TutorMiniAppTheme {
 // MARK: - Mini App Kinds
 
 enum TutorMiniAppKind: String, Identifiable {
-    case feynman, leitner, mnemonics, activeRecall, cornell, spaced
+    case feynman, leitner, mnemonics, activeRecall, cornell, spaced, findMistake
 
     var id: String { rawValue }
 
@@ -108,6 +108,7 @@ enum TutorMiniAppKind: String, Identifiable {
         case .activeRecall: return "TUTOR · ACTIVE RECALL"
         case .cornell: return "TUTOR · CORNELL METHOD"
         case .spaced: return "TUTOR · SPACED REPETITION"
+        case .findMistake: return "TUTOR · FIND THE MISTAKE"
         }
     }
 
@@ -119,6 +120,7 @@ enum TutorMiniAppKind: String, Identifiable {
         case .activeRecall: return .activeRecall
         case .cornell: return .cornell
         case .spaced: return .spaced
+        case .findMistake: return .activeRecall
         }
     }
 
@@ -130,6 +132,7 @@ enum TutorMiniAppKind: String, Identifiable {
         case "active_recall": return .activeRecall
         case "cornell": return .cornell
         case "spaced": return .spaced
+        case "find_mistake": return .findMistake
         default: return nil
         }
     }
@@ -142,6 +145,7 @@ struct TutorMiniAppShell<Content: View>: View {
     let stepTitle: String
     let stepIndex: Int
     let stepCount: Int
+    var counterOverride: String? = nil
     let onClose: () -> Void
     let content: () -> Content
 
@@ -161,7 +165,7 @@ struct TutorMiniAppShell<Content: View>: View {
 
                     Spacer()
 
-                    Text("\(stepIndex + 1) / \(stepCount)")
+                    Text(counterOverride ?? "\(stepIndex + 1) / \(stepCount)")
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundColor(theme.muted)
                 }
@@ -459,15 +463,17 @@ struct TutorMiniAppView: View {
     let kind: TutorMiniAppKind
     let book: Book
     let onClose: () -> Void
+    var onSessionComplete: (String, String) -> Void = { _, _ in }
 
     var body: some View {
         switch kind {
-        case .feynman: FeynmanMiniApp(book: book, onClose: onClose)
+        case .feynman: FeynmanMiniApp(book: book, onClose: onClose, onSessionComplete: onSessionComplete)
         case .leitner: LeitnerMiniApp(book: book, onClose: onClose)
-        case .mnemonics: MnemonicsMiniApp(book: book, onClose: onClose)
+        case .mnemonics: MnemonicsMiniApp(book: book, onClose: onClose, onSessionComplete: onSessionComplete)
         case .activeRecall: ActiveRecallMiniApp(book: book, onClose: onClose)
-        case .cornell: CornellMiniApp(book: book, onClose: onClose)
+        case .cornell: CornellMiniApp(book: book, onClose: onClose, onSessionComplete: onSessionComplete)
         case .spaced: SpacedRepetitionMiniApp(book: book, onClose: onClose)
+        case .findMistake: FindMistakeMiniApp(book: book, onClose: onClose, onSessionComplete: onSessionComplete)
         }
     }
 }
@@ -490,9 +496,7 @@ func tutorSourceItems(from book: Book, limit: Int) -> [TutorSourceItem] {
             .first(where: { $0.status == .completed })?
             .extractedText
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let excerpt = String(firstText.prefix(120))
-            .replacingOccurrences(of: "\n", with: " ")
-        items.append(TutorSourceItem(title: name, excerpt: excerpt))
+        items.append(TutorSourceItem(title: name, excerpt: tutorTrimExcerpt(firstText, maxLength: 200)))
         if items.count >= limit { break }
     }
 
@@ -503,7 +507,7 @@ func tutorSourceItems(from book: Book, limit: Int) -> [TutorSourceItem] {
             let title = String(text.split(separator: "\n").first ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let display = title.isEmpty ? String(text.prefix(40)) : title
             guard seen.insert(display).inserted else { continue }
-            items.append(TutorSourceItem(title: display, excerpt: String(text.prefix(120))))
+            items.append(TutorSourceItem(title: display, excerpt: tutorTrimExcerpt(text, maxLength: 200)))
             if items.count >= limit { break }
         }
     }
@@ -511,14 +515,82 @@ func tutorSourceItems(from book: Book, limit: Int) -> [TutorSourceItem] {
     return items
 }
 
+/// Build the full source-context string the tutor mini-apps feed to the AI.
+/// Pulls every uploaded source (and legacy camera pages), combining each source's completed pages
+/// and capping the per-source budget so the prompt stays under typical model limits.
+func tutorFullSourceContext(
+    from book: Book,
+    perSourceCharLimit: Int = 1800,
+    totalCharLimit: Int = 14_000
+) -> String {
+    var blocks: [String] = []
+    var totalSpent = 0
+
+    for source in book.sources {
+        let title = source.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { continue }
+        let combined = source.pages
+            .filter { $0.status == .completed }
+            .map { $0.extractedText }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !combined.isEmpty else { continue }
+        let trimmed = String(combined.prefix(perSourceCharLimit))
+        let block = "Source: \(title)\n\(trimmed)"
+        if totalSpent + block.count > totalCharLimit { break }
+        blocks.append(block)
+        totalSpent += block.count
+    }
+
+    if blocks.isEmpty {
+        let legacy = book.pages
+            .filter { $0.status == .completed }
+            .map { $0.extractedText }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !legacy.isEmpty {
+            blocks.append("Source: Camera notes\n\(String(legacy.prefix(totalCharLimit)))")
+        }
+    }
+
+    return blocks.joined(separator: "\n\n---\n\n")
+}
+
+private func tutorTrimExcerpt(_ raw: String, maxLength: Int) -> String {
+    let cleaned = raw
+        .replacingOccurrences(of: "\n", with: " ")
+        .replacingOccurrences(of: "  ", with: " ")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard cleaned.count > maxLength else { return cleaned }
+
+    let cutoff = cleaned.index(cleaned.startIndex, offsetBy: maxLength)
+    let prefix = String(cleaned[..<cutoff])
+
+    // Prefer ending on a sentence boundary, fall back to word boundary, then hard cut + ellipsis.
+    if let sentenceEnd = prefix.lastIndex(where: { ".!?".contains($0) }) {
+        let untilEnd = prefix[..<prefix.index(after: sentenceEnd)]
+        if untilEnd.count >= 60 { // require at least one decent sentence before truncating
+            return String(untilEnd)
+        }
+    }
+
+    if let lastSpace = prefix.lastIndex(of: " ") {
+        return String(prefix[..<lastSpace]) + "…"
+    }
+
+    return prefix + "…"
+}
+
 // MARK: - Feynman (4 steps)
 
 private struct FeynmanMiniApp: View {
     let book: Book
     let onClose: () -> Void
+    var onSessionComplete: (String, String) -> Void = { _, _ in }
     private let kind: TutorMiniAppKind = .feynman
     private let memorizeService = MemorizeService()
     @State private var step = 0
+    @State private var hasSavedSession = false
     @State private var teachText = ""
     @State private var refinedText = ""
     @State private var conceptText = ""
@@ -540,10 +612,7 @@ private struct FeynmanMiniApp: View {
     }
 
     private var sourceContext: String {
-        let items = tutorSourceItems(from: book, limit: 6)
-        return items.map { item in
-            "Title: \(item.title)\nExcerpt: \(item.excerpt)"
-        }.joined(separator: "\n\n")
+        tutorFullSourceContext(from: book)
     }
 
     private let stepTitles = [
@@ -737,6 +806,7 @@ private struct FeynmanMiniApp: View {
                     verdict = result
                     isLoadingVerdict = false
                     step = 4
+                    saveFeynmanSession()
                 }
             } catch {
                 await MainActor.run {
@@ -914,6 +984,37 @@ private struct FeynmanMiniApp: View {
         }
     }
 
+    private func saveFeynmanSession() {
+        guard !hasSavedSession else { return }
+        hasSavedSession = true
+        var lines: [String] = [
+            "Feynman Technique session — \(topic)",
+            "",
+            "Verdict: \(verdict?.headline ?? "Session complete")",
+            "Clarity: \(verdict?.clarityScore ?? 0)/10",
+            ""
+        ]
+        if !teachText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("First explanation:")
+            lines.append(teachText)
+            lines.append("")
+        }
+        if !refinedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("Refined explanation:")
+            lines.append(refinedText)
+            lines.append("")
+        }
+        if let improvements = verdict?.improvements, !improvements.isEmpty {
+            lines.append("What improved:")
+            improvements.forEach { lines.append("- \($0.title): \($0.detail)") }
+            lines.append("")
+        }
+        if let gaps = verdict?.remainingGaps, !gaps.isEmpty {
+            lines.append("Still worth revisiting: \(gaps.joined(separator: ", "))")
+        }
+        onSessionComplete(topic, lines.joined(separator: "\n"))
+    }
+
     private func wrapUp(theme: TutorMiniAppTheme) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             TutorSuccessCard(
@@ -1028,9 +1129,7 @@ private struct LeitnerMiniApp: View {
     }
 
     private var sourceContext: String {
-        tutorSourceItems(from: book, limit: 6)
-            .map { "Title: \($0.title)\nExcerpt: \($0.excerpt)" }
-            .joined(separator: "\n\n")
+        tutorFullSourceContext(from: book)
     }
 
     private var cards: [MemorizeService.LeitnerCard] { deck?.cards ?? [] }
@@ -1380,10 +1479,12 @@ private struct LeitnerMiniApp: View {
 private struct MnemonicsMiniApp: View {
     let book: Book
     let onClose: () -> Void
+    var onSessionComplete: (String, String) -> Void = { _, _ in }
     private let kind: TutorMiniAppKind = .mnemonics
     private let memorizeService = MemorizeService()
 
     @State private var step = 0
+    @State private var hasSavedSession = false
     @State private var items: [String] = []
     @State private var orderMatters = false
     @State private var selectedType: MemorizeService.MnemonicType = .sentence
@@ -1415,9 +1516,7 @@ private struct MnemonicsMiniApp: View {
     }
 
     private var sourceContext: String {
-        tutorSourceItems(from: book, limit: 6)
-            .map { "Title: \($0.title)\nExcerpt: \($0.excerpt)" }
-            .joined(separator: "\n\n")
+        tutorFullSourceContext(from: book)
     }
 
     var body: some View {
@@ -1563,14 +1662,49 @@ private struct MnemonicsMiniApp: View {
         }
     }
 
+    private func saveMnemonicsSession() {
+        guard !hasSavedSession else { return }
+        hasSavedSession = true
+        var lines: [String] = [
+            "Mnemonics session — \(topic)",
+            "",
+            "Type: \(selectedType.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)",
+            ""
+        ]
+        if !items.isEmpty {
+            lines.append("Items memorized:")
+            items.forEach { lines.append("- \($0)") }
+            lines.append("")
+        }
+        if let mnemonic, !mnemonic.mnemonic.isEmpty {
+            lines.append("Mnemonic:")
+            lines.append(mnemonic.mnemonic)
+            lines.append("")
+        }
+        if let refined = refinedMnemonic, !refined.isEmpty, refined != mnemonic?.mnemonic {
+            lines.append("Refined mnemonic:")
+            lines.append(refined)
+            lines.append("")
+        }
+        if let evaluation = firstEvaluation {
+            lines.append("First recall score: \(evaluation.score)/100")
+            if !evaluation.weakItems.isEmpty {
+                lines.append("Weak items: \(evaluation.weakItems.joined(separator: ", "))")
+            }
+        }
+        onSessionComplete(topic, lines.joined(separator: "\n"))
+    }
+
     private func refineAndAdvance() {
         guard let firstEvaluation, !isRefining, let mnemonic else {
             step = 4
+            saveMnemonicsSession()
             return
         }
         if firstEvaluation.weakItems.isEmpty {
             refinedMnemonic = mnemonic.mnemonic
             step = 4
+            saveMnemonicsSession()
             return
         }
         isRefining = true
@@ -1587,6 +1721,7 @@ private struct MnemonicsMiniApp: View {
                     refinedMnemonic = updated
                     isRefining = false
                     step = 4
+                    saveMnemonicsSession()
                 }
             } catch {
                 await MainActor.run {
@@ -2015,28 +2150,53 @@ private struct ActiveRecallMiniApp: View {
     let onClose: () -> Void
     private let kind: TutorMiniAppKind = .activeRecall
     private let memorizeService = MemorizeService()
+    private let masteryThreshold: Double = 0.75
+
     @State private var step = 0
-    @State private var recallSet: MemorizeService.ActiveRecallSet?
-    @State private var revealed: Set<Int> = []
-    @State private var grades: [Int: Bool] = [:]
-    @State private var isLoading = false
+    @State private var prompts: [MemorizeService.RecallPrompt] = []
+    @State private var attempts: [MemorizeService.RecallAttempt] = []
+    @State private var queue: [MemorizeService.RecallPrompt] = []
+    @State private var queueIndex = 0
+    @State private var inRetryPhase = false
+
+    @State private var userAnswer = ""
+    @State private var confidence: String?
+    @State private var currentAttempt: MemorizeService.RecallAttempt?
+
+    @State private var isLoadingPrompts = false
+    @State private var isEvaluating = false
     @State private var loadError: String?
 
-    private let stepTitles = ["Why this works", "Retrieval round", "How it went"]
+    private let stepTitles = ["Learning target", "Recall round", "Mastery summary"]
 
     private var topic: String {
         tutorSourceItems(from: book, limit: 1).first?.title ?? "Your topic"
     }
 
-    private var sourceContext: String {
-        tutorSourceItems(from: book, limit: 6)
-            .map { "Title: \($0.title)\nExcerpt: \($0.excerpt)" }
-            .joined(separator: "\n\n")
+    private var sourceItem: TutorSourceItem? {
+        tutorSourceItems(from: book, limit: 1).first
     }
 
-    private var rightCount: Int { grades.values.filter { $0 }.count }
-    private var missCount: Int { grades.values.filter { !$0 }.count }
-    private var totalCount: Int { recallSet?.questions.count ?? 0 }
+    private var contentChunk: String {
+        tutorFullSourceContext(from: book)
+    }
+
+    private var sourceId: String { book.id.uuidString }
+
+    private var currentPrompt: MemorizeService.RecallPrompt? {
+        guard queueIndex < queue.count else { return nil }
+        return queue[queueIndex]
+    }
+
+    private var totalQueueLength: Int { queue.count }
+
+    private var masteryScore: Int {
+        guard !prompts.isEmpty else { return 0 }
+        var lastByPrompt: [String: Int] = [:]
+        for a in attempts { lastByPrompt[a.promptId] = a.score }
+        let total = prompts.map { lastByPrompt[$0.id] ?? 0 }.reduce(0, +)
+        return total / prompts.count
+    }
 
     var body: some View {
         let theme = kind.theme
@@ -2050,249 +2210,208 @@ private struct ActiveRecallMiniApp: View {
             ) {
                 Group {
                     switch step {
-                    case 0: whyItWorks(theme: theme)
-                    case 1: retrieval(theme: theme)
-                    default: howItWent(theme: theme)
+                    case 0: targetStep(theme: theme)
+                    case 1: recallStep(theme: theme)
+                    default: summaryStep(theme: theme)
                     }
                 }
             }
 
             TutorMiniAppFooter(
                 theme: theme,
-                showBack: step > 0,
+                showBack: step > 0 && currentAttempt == nil,
                 primaryTitle: footerTitle,
                 primaryIcon: step == stepTitles.count - 1 ? "checkmark" : "chevron.right",
                 primaryDisabled: footerDisabled,
-                onBack: { if step > 0 { step -= 1 } },
+                onBack: handleBack,
                 onPrimary: handlePrimary
             )
         }
+        .onAppear { loadPromptsIfNeeded() }
     }
 
     private var footerTitle: String {
         switch step {
-        case 0: return isLoading ? "Reading…" : "Begin retrieval"
-        case 1: return "See score"
+        case 0: return isLoadingPrompts ? "Reading…" : "Begin retrieval"
+        case 1:
+            if let attempt = currentAttempt {
+                if attempt.score < Int(masteryThreshold * 100) {
+                    return "Try again"
+                }
+                return queueIndex < queue.count - 1 ? "Next prompt" : (hasMoreWeakWork ? "Retry weak prompts" : "Finish round")
+            }
+            return isEvaluating ? "Grading…" : "Submit answer"
         default: return "Finish"
         }
     }
 
     private var footerDisabled: Bool {
         switch step {
-        case 0: return isLoading || tutorSourceItems(from: book, limit: 1).isEmpty
-        case 1: return grades.count < totalCount && totalCount > 0
+        case 0: return isLoadingPrompts || prompts.isEmpty
+        case 1:
+            if currentAttempt != nil { return false }
+            return isEvaluating
+                || userAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || confidence == nil
         default: return false
         }
     }
 
+    private var hasMoreWeakWork: Bool {
+        guard !inRetryPhase else { return false }
+        let weak = memorizeService.identifyWeakPrompts(attempts: attempts, masteryThreshold: masteryThreshold)
+        return !weak.isEmpty
+    }
+
     private func handlePrimary() {
-        if step == 0 {
-            requestQuestions()
-            return
-        }
-        if step < stepTitles.count - 1 {
-            step += 1
-        } else {
+        switch step {
+        case 0:
+            step = 1
+        case 1:
+            if let attempt = currentAttempt {
+                advanceAfterFeedback(lastAttempt: attempt)
+            } else {
+                submitAnswer()
+            }
+        default:
             onClose()
         }
     }
 
-    private func requestQuestions() {
-        guard !isLoading else { return }
-        if recallSet != nil {
-            step = 1
-            return
-        }
-        isLoading = true
+    private func handleBack() {
+        guard step > 0 else { return }
+        if currentAttempt != nil { return }
+        step -= 1
+    }
+
+    private func loadPromptsIfNeeded() {
+        guard prompts.isEmpty, !isLoadingPrompts, !contentChunk.isEmpty else { return }
+        isLoadingPrompts = true
         loadError = nil
         Task {
             do {
-                let result = try await memorizeService.generateActiveRecallSet(topic: topic, sourceContext: sourceContext)
+                let result = try await memorizeService.generateRecallPrompts(
+                    sourceId: sourceId,
+                    contentChunk: contentChunk
+                )
                 await MainActor.run {
-                    recallSet = result
-                    isLoading = false
-                    step = 1
+                    prompts = result
+                    queue = result
+                    queueIndex = 0
+                    isLoadingPrompts = false
                 }
             } catch {
                 await MainActor.run {
                     loadError = error.localizedDescription
-                    isLoading = false
+                    isLoadingPrompts = false
                 }
             }
         }
     }
 
-    private func whyItWorks(theme: TutorMiniAppTheme) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 10) {
-                TutorSectionLabel(text: "WHY THIS WORKS", theme: theme)
-                Text("Pulling beats re-reading.")
-                    .font(.system(size: 19, weight: .bold, design: .rounded))
-                    .foregroundColor(theme.title)
-                Text("Re-reading feels productive but the memory trace doesn't deepen. Forcing yourself to retrieve — even when you almost can't — is what makes it stick.")
-                    .font(.system(size: 14, weight: .regular, design: .rounded))
-                    .foregroundColor(theme.body)
-                    .lineSpacing(3)
-            }
-            VStack(spacing: 10) {
-                tip(num: "1", title: "Close the book", detail: "Try to answer before peeking. Effort is the point.", theme: theme)
-                tip(num: "2", title: "Wrong is fine", detail: "A near-miss strengthens memory more than a confident look-up.", theme: theme)
-                tip(num: "3", title: "Five questions", detail: "Pulled from your sources you haven't reviewed in a while.", theme: theme)
-            }
-            HStack(spacing: 10) {
-                Image(systemName: "lightbulb.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(theme.primary)
-                Text("Tip: say your answer out loud before you tap — speaking forces commitment.")
-                    .font(.system(size: 13, weight: .regular, design: .rounded))
-                    .foregroundColor(theme.body)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.primary.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(theme.primary.opacity(0.18), lineWidth: 1))
-
-            if tutorSourceItems(from: book, limit: 1).isEmpty {
-                emptySourcesPlaceholder(theme: theme)
-            }
-            if isLoading {
-                TutorThinkingCard(
-                    theme: theme,
-                    title: "Pulling 5 retrieval prompts",
-                    subtitle: "Sweeping your sources for what to test…"
+    private func submitAnswer() {
+        guard let prompt = currentPrompt, let confidenceValue = confidence, !isEvaluating else { return }
+        let trimmed = userAnswer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let isRetry = inRetryPhase || attempts.contains { $0.promptId == prompt.id }
+        isEvaluating = true
+        Task {
+            do {
+                let attempt = try await memorizeService.evaluateRecallAnswer(
+                    prompt: prompt,
+                    userAnswer: trimmed,
+                    confidence: confidenceValue,
+                    isRetry: isRetry
                 )
-            }
-            if let loadError {
-                tutorErrorCard(theme: theme, message: loadError)
-            }
-        }
-    }
-
-    private func tip(num: String, title: String, detail: String, theme: TutorMiniAppTheme) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            ZStack {
-                Circle().fill(theme.primary.opacity(0.12)).frame(width: 28, height: 28)
-                Text(num).font(.system(size: 13, weight: .bold, design: .rounded)).foregroundColor(theme.primary)
-            }
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundColor(theme.title)
-                Text(detail)
-                    .font(.system(size: 13, weight: .regular, design: .rounded))
-                    .foregroundColor(theme.body)
-                    .lineSpacing(2)
-            }
-            Spacer()
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
-    }
-
-    private func retrieval(theme: TutorMiniAppTheme) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            TutorBodyText(text: "One question at a time. Try in your head, reveal the answer, then mark how you did.", theme: theme)
-            if let recallSet, !recallSet.questions.isEmpty {
-                ForEach(Array(recallSet.questions.enumerated()), id: \.offset) { idx, q in
-                    questionRow(index: idx, question: q, theme: theme)
+                await MainActor.run {
+                    attempts.append(attempt)
+                    currentAttempt = attempt
+                    isEvaluating = false
                 }
-            } else {
-                tutorLoadingCard(theme: theme)
-            }
-        }
-    }
-
-    private func questionRow(index: Int, question: MemorizeService.ActiveRecallQuestion, theme: TutorMiniAppTheme) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(question.prompt)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundColor(theme.title)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer()
-                if !revealed.contains(index) {
-                    Button {
-                        revealed.insert(index)
-                    } label: {
-                        Text("Reveal")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                            .foregroundColor(theme.primary)
-                    }
-                }
-            }
-
-            if revealed.contains(index) {
-                Text(question.answer)
-                    .font(.system(size: 13, weight: .regular, design: .rounded))
-                    .foregroundColor(theme.body)
-                    .lineSpacing(2)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(theme.primary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-                HStack(spacing: 8) {
-                    Button { grades[index] = true } label: {
-                        gradeChip(text: "Got it", isOn: grades[index] == true, color: theme.primary, theme: theme)
-                    }
-                    Button { grades[index] = false } label: {
-                        gradeChip(text: "Missed", isOn: grades[index] == false, color: Color(hex: "B0444C"), theme: theme)
-                    }
-                    Spacer()
+            } catch {
+                await MainActor.run {
+                    loadError = error.localizedDescription
+                    isEvaluating = false
                 }
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
     }
 
-    private func gradeChip(text: String, isOn: Bool, color: Color, theme: TutorMiniAppTheme) -> some View {
-        Text(text)
-            .font(.system(size: 12, weight: .bold, design: .rounded))
-            .foregroundColor(isOn ? .white : color)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .background(isOn ? color : color.opacity(0.12))
-            .clipShape(Capsule())
+    private func advanceAfterFeedback(lastAttempt: MemorizeService.RecallAttempt) {
+        let needsRetry = lastAttempt.score < Int(masteryThreshold * 100)
+        let isLastInQueue = queueIndex >= queue.count - 1
+
+        if needsRetry {
+            // Retry same prompt (immediate)
+            currentAttempt = nil
+            userAnswer = ""
+            confidence = nil
+            return
+        }
+
+        if isLastInQueue {
+            if !inRetryPhase {
+                let weakIDs = memorizeService.identifyWeakPrompts(attempts: attempts, masteryThreshold: masteryThreshold)
+                let weakPrompts = prompts.filter { weakIDs.contains($0.id) }
+                if !weakPrompts.isEmpty {
+                    queue = weakPrompts
+                    queueIndex = 0
+                    inRetryPhase = true
+                    currentAttempt = nil
+                    userAnswer = ""
+                    confidence = nil
+                    return
+                }
+            }
+            // No more work — go to summary
+            step = 2
+            return
+        }
+
+        queueIndex += 1
+        currentAttempt = nil
+        userAnswer = ""
+        confidence = nil
     }
 
-    private func howItWent(theme: TutorMiniAppTheme) -> some View {
+    // MARK: Steps
+
+    private func targetStep(theme: TutorMiniAppTheme) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            TutorSuccessCard(
-                title: totalCount > 0 ? "\(rightCount) / \(totalCount) retrieved." : "No questions",
-                subtitle: missCount == 0
-                    ? "Clean round. We'll stretch the next interval."
-                    : "\(missCount) slipped — we'll bring \(missCount == 1 ? "it" : "them") back tomorrow when it's almost faded.",
-                theme: theme
-            )
-            HStack(spacing: 10) {
-                TutorMetric(value: "\(rightCount)", label: "RIGHT", theme: theme)
-                TutorMetric(value: "\(missCount)", label: "MISS", theme: theme)
-                TutorMetric(value: "\(totalCount)", label: "TOTAL", theme: theme)
+            VStack(alignment: .leading, spacing: 6) {
+                TutorSectionLabel(text: "LEARNING TARGET", theme: theme)
+                Text(sourceItem?.title ?? topic)
+                    .font(.system(size: 22, weight: .regular, design: .serif))
+                    .foregroundColor(theme.title)
+                if let excerpt = sourceItem?.excerpt, !excerpt.isEmpty {
+                    Text(excerpt)
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundColor(theme.body)
+                        .lineSpacing(3)
+                }
             }
-            if let questions = recallSet?.questions, !questions.isEmpty {
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+
+            if isLoadingPrompts {
+                TutorThinkingCard(theme: theme, title: "Building recall prompts", subtitle: "Pulling 3–5 retrieval questions from this chunk…")
+            } else if !prompts.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    TutorSectionLabel(text: "QUESTION BY QUESTION", theme: theme)
-                    ForEach(Array(questions.enumerated()), id: \.offset) { idx, q in
-                        let correct = grades[idx] == true
+                    TutorSectionLabel(text: "RECALL ROUND · \(prompts.count) PROMPTS", theme: theme)
+                    ForEach(prompts, id: \.id) { p in
                         HStack(spacing: 10) {
-                            ZStack {
-                                Circle().fill(correct ? theme.primary.opacity(0.15) : Color(hex: "B0444C").opacity(0.18)).frame(width: 22, height: 22)
-                                Image(systemName: correct ? "checkmark" : "xmark")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(correct ? theme.primary : Color(hex: "B0444C"))
-                            }
-                            Text(q.prompt)
-                                .font(.system(size: 13, weight: .regular, design: .rounded))
-                                .foregroundColor(theme.title)
+                            promptTypeChip(p.promptType, theme: theme)
+                            Text(p.difficulty.capitalized)
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .tracking(0.4)
+                                .foregroundColor(difficultyColor(p.difficulty))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(difficultyColor(p.difficulty).opacity(0.12))
+                                .clipShape(Capsule())
                             Spacer()
                         }
                         .padding(.vertical, 8)
@@ -2302,6 +2421,284 @@ private struct ActiveRecallMiniApp: View {
                     }
                 }
             }
+
+            if tutorSourceItems(from: book, limit: 1).isEmpty && !isLoadingPrompts {
+                emptySourcesPlaceholder(theme: theme)
+            }
+            if let loadError {
+                tutorErrorCard(theme: theme, message: loadError)
+            }
+        }
+    }
+
+    private func recallStep(theme: TutorMiniAppTheme) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(inRetryPhase ? "RETRY · WEAK PROMPT \(queueIndex + 1)/\(totalQueueLength)" : "PROMPT \(queueIndex + 1)/\(totalQueueLength)")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .tracking(0.6)
+                    .foregroundColor(theme.muted)
+                Spacer()
+                if let p = currentPrompt {
+                    promptTypeChip(p.promptType, theme: theme)
+                }
+            }
+
+            if let prompt = currentPrompt {
+                Text(prompt.prompt)
+                    .font(.system(size: 18, weight: .regular, design: .serif))
+                    .foregroundColor(theme.title)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(theme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+
+                if let attempt = currentAttempt {
+                    feedbackCard(attempt: attempt, prompt: prompt, theme: theme)
+                } else {
+                    answerCard(theme: theme)
+                    confidencePicker(theme: theme)
+                    if isEvaluating {
+                        TutorThinkingCard(theme: theme, title: "Grading your answer", subtitle: "Comparing against the key points…")
+                    }
+                }
+            } else {
+                tutorLoadingCard(theme: theme)
+            }
+
+            if let loadError {
+                tutorErrorCard(theme: theme, message: loadError)
+            }
+        }
+    }
+
+    private func answerCard(theme: TutorMiniAppTheme) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TutorSectionLabel(text: "FROM MEMORY", theme: theme)
+            ZStack(alignment: .topLeading) {
+                if userAnswer.isEmpty {
+                    Text("Type your answer…")
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .foregroundColor(theme.muted)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 14)
+                }
+                TextEditor(text: $userAnswer)
+                    .font(.system(size: 14, weight: .regular, design: .rounded))
+                    .foregroundColor(Color(hex: "1F2420"))
+                    .tint(theme.primary)
+                    .scrollContentBackground(.hidden)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .frame(minHeight: 130)
+            }
+            .background(theme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+        }
+    }
+
+    private func confidencePicker(theme: TutorMiniAppTheme) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TutorSectionLabel(text: "CONFIDENCE", theme: theme)
+            HStack(spacing: 8) {
+                confidenceChip("low", label: "Low", theme: theme)
+                confidenceChip("medium", label: "Medium", theme: theme)
+                confidenceChip("high", label: "High", theme: theme)
+            }
+        }
+    }
+
+    private func confidenceChip(_ value: String, label: String, theme: TutorMiniAppTheme) -> some View {
+        let isOn = confidence == value
+        return Button { confidence = value } label: {
+            Text(label)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundColor(isOn ? theme.primaryText : theme.primary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(isOn ? theme.primary : theme.primary.opacity(0.12))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func feedbackCard(attempt: MemorizeService.RecallAttempt, prompt: MemorizeService.RecallPrompt, theme: TutorMiniAppTheme) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                TutorMetric(value: "\(attempt.score)", label: "SCORE", theme: theme)
+                TutorMetric(value: "\(attempt.correctPoints.count)", label: "RIGHT", theme: theme)
+                TutorMetric(value: "\(attempt.missingPoints.count)", label: "MISSING", theme: theme)
+            }
+
+            if attempt.falseConfidence {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(Color(hex: "C99526"))
+                    Text("False confidence — you rated this high but missed key points.")
+                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .foregroundColor(theme.body)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(hex: "FFF1D6"))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            if !attempt.feedback.isEmpty {
+                Text(attempt.feedback)
+                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                    .foregroundColor(theme.body)
+                    .lineSpacing(3)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(theme.primary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            if !attempt.missingPoints.isEmpty {
+                pointList(title: "MISSING", points: attempt.missingPoints, color: Color(hex: "B0444C"), theme: theme)
+            }
+            if !attempt.incorrectPoints.isEmpty {
+                pointList(title: "INCORRECT", points: attempt.incorrectPoints, color: Color(hex: "C99526"), theme: theme)
+            }
+            if !attempt.correctPoints.isEmpty {
+                pointList(title: "GOT IT", points: attempt.correctPoints, color: theme.primary, theme: theme)
+            }
+        }
+    }
+
+    private func pointList(title: String, points: [String], color: Color, theme: TutorMiniAppTheme) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .tracking(0.5)
+                .foregroundColor(color)
+            ForEach(Array(points.enumerated()), id: \.offset) { _, point in
+                HStack(alignment: .top, spacing: 8) {
+                    Circle().fill(color).frame(width: 5, height: 5).padding(.top, 7)
+                    Text(point)
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundColor(theme.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+    }
+
+    private func summaryStep(theme: TutorMiniAppTheme) -> some View {
+        let score = masteryScore
+        return VStack(alignment: .leading, spacing: 14) {
+            TutorSuccessCard(
+                title: score >= Int(masteryThreshold * 100) ? "Mastery hit." : "Solid round.",
+                subtitle: "Mastery score: \(score)/100. \(prompts.count) prompts, \(attempts.count) attempts.",
+                theme: theme
+            )
+            HStack(spacing: 10) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(theme.primary)
+                Text("Lesson complete · session saved")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(theme.title)
+                Spacer()
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.primary.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(theme.primary.opacity(0.22), lineWidth: 1))
+
+            HStack(spacing: 10) {
+                TutorMetric(value: "\(score)", label: "MASTERY", theme: theme)
+                TutorMetric(value: "\(attempts.filter { !$0.isRetry }.count)", label: "FIRST TRY", theme: theme)
+                TutorMetric(value: "\(attempts.filter { $0.isRetry }.count)", label: "RETRIES", theme: theme)
+            }
+
+            let falseConfidenceAttempts = attempts.filter { $0.falseConfidence }
+            if !falseConfidenceAttempts.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    TutorSectionLabel(text: "FALSE CONFIDENCE", theme: theme)
+                    ForEach(falseConfidenceAttempts, id: \.id) { a in
+                        if let p = prompts.first(where: { $0.id == a.promptId }) {
+                            Text("• \(p.prompt)")
+                                .font(.system(size: 13, weight: .regular, design: .rounded))
+                                .foregroundColor(theme.body)
+                        }
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(hex: "FFF1D6"))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                TutorSectionLabel(text: "PROMPT BY PROMPT", theme: theme)
+                ForEach(prompts, id: \.id) { p in
+                    let last = attempts.last(where: { $0.promptId == p.id })
+                    HStack(spacing: 10) {
+                        ZStack {
+                            Circle()
+                                .fill((last?.score ?? 0) >= Int(masteryThreshold * 100) ? theme.primary.opacity(0.15) : Color(hex: "B0444C").opacity(0.18))
+                                .frame(width: 22, height: 22)
+                            Image(systemName: (last?.score ?? 0) >= Int(masteryThreshold * 100) ? "checkmark" : "xmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor((last?.score ?? 0) >= Int(masteryThreshold * 100) ? theme.primary : Color(hex: "B0444C"))
+                        }
+                        Text(p.prompt)
+                            .font(.system(size: 13, weight: .regular, design: .rounded))
+                            .foregroundColor(theme.title)
+                            .lineLimit(2)
+                        Spacer()
+                        Text("\(last?.score ?? 0)")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundColor(theme.muted)
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(theme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+            }
+        }
+    }
+
+    private func promptTypeChip(_ type: String, theme: TutorMiniAppTheme) -> some View {
+        Text(promptTypeLabel(type))
+            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .tracking(0.4)
+            .foregroundColor(theme.primary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(theme.primary.opacity(0.12))
+            .clipShape(Capsule())
+    }
+
+    private func promptTypeLabel(_ type: String) -> String {
+        switch type {
+        case "definition": return "Definition"
+        case "why_how": return "Why / How"
+        case "steps_process": return "Process"
+        case "compare_contrast": return "Compare"
+        case "application_example": return "Apply"
+        default: return type.capitalized
+        }
+    }
+
+    private func difficultyColor(_ difficulty: String) -> Color {
+        switch difficulty {
+        case "easy": return Color(hex: "276B32")
+        case "medium": return Color(hex: "C99526")
+        case "hard": return Color(hex: "B0444C")
+        default: return Color(hex: "8D958E")
         }
     }
 }
@@ -2311,9 +2708,11 @@ private struct ActiveRecallMiniApp: View {
 private struct CornellMiniApp: View {
     let book: Book
     let onClose: () -> Void
+    var onSessionComplete: (String, String) -> Void = { _, _ in }
     private let kind: TutorMiniAppKind = .cornell
     private let memorizeService = MemorizeService()
     @State private var step = 0
+    @State private var hasSavedSession = false
     @State private var cornellSet: MemorizeService.CornellSet?
     @State private var revealed: Set<Int> = []
     @State private var summaryText = ""
@@ -2327,9 +2726,7 @@ private struct CornellMiniApp: View {
     }
 
     private var sourceContext: String {
-        tutorSourceItems(from: book, limit: 6)
-            .map { "Title: \($0.title)\nExcerpt: \($0.excerpt)" }
-            .joined(separator: "\n\n")
+        tutorFullSourceContext(from: book)
     }
 
     var body: some View {
@@ -2384,8 +2781,31 @@ private struct CornellMiniApp: View {
         if step < stepTitles.count - 1 {
             step += 1
         } else {
+            saveCornellSession()
             onClose()
         }
+    }
+
+    private func saveCornellSession() {
+        guard !hasSavedSession else { return }
+        hasSavedSession = true
+        var lines: [String] = [
+            "Cornell Method session — \(topic)",
+            ""
+        ]
+        if let rows = cornellSet?.rows, !rows.isEmpty {
+            lines.append("Cues & body:")
+            for row in rows {
+                lines.append("- \(row.cue): \(row.body)")
+            }
+            lines.append("")
+        }
+        let trimmedSummary = summaryText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedSummary.isEmpty {
+            lines.append("Your summary:")
+            lines.append(trimmedSummary)
+        }
+        onSessionComplete(topic, lines.joined(separator: "\n"))
     }
 
     private func loadIfNeeded() {
@@ -2397,7 +2817,6 @@ private struct CornellMiniApp: View {
                 let result = try await memorizeService.generateCornellSet(topic: topic, sourceContext: sourceContext)
                 await MainActor.run {
                     cornellSet = result
-                    summaryText = result.summaryStarter
                     isLoading = false
                 }
             } catch {
@@ -2509,17 +2928,26 @@ private struct CornellMiniApp: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 TutorSectionLabel(text: "YOUR SUMMARY", theme: theme)
-                TextEditor(text: $summaryText)
-                    .font(.system(size: 14, weight: .regular, design: .rounded))
-                    .foregroundColor(Color(hex: "1F2420"))
-                    .tint(theme.primary)
-                    .scrollContentBackground(.hidden)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .frame(minHeight: 160)
-                    .background(theme.surface)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+                ZStack(alignment: .topLeading) {
+                    if summaryText.isEmpty {
+                        Text("Start writing here…")
+                            .font(.system(size: 14, weight: .regular, design: .rounded))
+                            .foregroundColor(theme.muted)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 14)
+                    }
+                    TextEditor(text: $summaryText)
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .foregroundColor(Color(hex: "1F2420"))
+                        .tint(theme.primary)
+                        .scrollContentBackground(.hidden)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .frame(minHeight: 160)
+                }
+                .background(theme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
             }
 
             HStack(spacing: 10) {
@@ -2552,9 +2980,7 @@ private struct SpacedRepetitionMiniApp: View {
     }
 
     private var sourceContext: String {
-        tutorSourceItems(from: book, limit: 6)
-            .map { "Title: \($0.title)\nExcerpt: \($0.excerpt)" }
-            .joined(separator: "\n\n")
+        tutorFullSourceContext(from: book)
     }
 
     private var dueCards: [MemorizeService.SpacedReview] { schedule?.dueNow ?? [] }
@@ -2967,5 +3393,543 @@ private struct TutorFlowLayout: Layout {
     private struct RowItem {
         let subview: LayoutSubview
         let size: CGSize
+    }
+}
+
+// MARK: - Find the Mistake (3 steps)
+
+private struct FindMistakeMiniApp: View {
+    let book: Book
+    let onClose: () -> Void
+    var onSessionComplete: (String, String) -> Void = { _, _ in }
+    private let kind: TutorMiniAppKind = .findMistake
+    private let memorizeService = MemorizeService()
+    private let masteryThreshold: Double = 0.75
+
+    @State private var step = 0
+    @State private var hasSavedSession = false
+    @State private var items: [MemorizeService.FixMistakeItem] = []
+    @State private var attempts: [MemorizeService.FixAttempt] = []
+    @State private var queue: [MemorizeService.FixMistakeItem] = []
+    @State private var queueIndex = 0
+    @State private var inRetryPhase = false
+
+    @State private var selectedOptionIndex: Int?
+    @State private var currentAttempt: MemorizeService.FixAttempt?
+
+    @State private var isLoadingItems = false
+    @State private var loadError: String?
+
+    private let stepTitles = ["Source", "Spot the mistake", "Mastery summary"]
+
+    private var topic: String {
+        tutorSourceItems(from: book, limit: 1).first?.title ?? "Your topic"
+    }
+
+    private var sourceItem: TutorSourceItem? {
+        tutorSourceItems(from: book, limit: 1).first
+    }
+
+    private var sourceText: String {
+        tutorFullSourceContext(from: book)
+    }
+
+    private var sourceId: String { book.id.uuidString }
+
+    private var currentItem: MemorizeService.FixMistakeItem? {
+        guard queueIndex < queue.count else { return nil }
+        return queue[queueIndex]
+    }
+
+    private var totalQueueLength: Int { queue.count }
+
+    private var masteryScore: Int {
+        guard !items.isEmpty else { return 0 }
+        var lastByItem: [String: Int] = [:]
+        for a in attempts { lastByItem[a.itemId] = a.score }
+        let total = items.map { lastByItem[$0.id] ?? 0 }.reduce(0, +)
+        return total / items.count
+    }
+
+    var body: some View {
+        let theme = kind.theme
+        VStack(spacing: 0) {
+            TutorMiniAppShell(
+                kind: kind,
+                stepTitle: stepTitles[step],
+                stepIndex: step,
+                stepCount: stepTitles.count,
+                counterOverride: shellCounterOverride,
+                onClose: onClose
+            ) {
+                Group {
+                    switch step {
+                    case 0: targetStep(theme: theme)
+                    case 1: spotStep(theme: theme)
+                    default: summaryStep(theme: theme)
+                    }
+                }
+            }
+
+            TutorMiniAppFooter(
+                theme: theme,
+                showBack: step > 0 && currentAttempt == nil,
+                primaryTitle: footerTitle,
+                primaryIcon: step == stepTitles.count - 1 ? "checkmark" : "chevron.right",
+                primaryDisabled: footerDisabled,
+                onBack: { if step > 0 && currentAttempt == nil { step -= 1 } },
+                onPrimary: handlePrimary
+            )
+        }
+        .onAppear { loadItemsIfNeeded() }
+    }
+
+    private var shellCounterOverride: String? {
+        guard step == 1, totalQueueLength > 0 else { return nil }
+        return "\(min(queueIndex + 1, totalQueueLength)) / \(totalQueueLength)"
+    }
+
+    private var footerTitle: String {
+        switch step {
+        case 0: return isLoadingItems ? "Reading…" : "Begin"
+        case 1:
+            if let attempt = currentAttempt {
+                if !attempt.isCorrect { return "Try again" }
+                return queueIndex < queue.count - 1 ? "Next item" : (hasMoreWeakWork ? "Retry weak items" : "Finish round")
+            }
+            return "Submit"
+        default: return "Finish"
+        }
+    }
+
+    private var footerDisabled: Bool {
+        switch step {
+        case 0: return isLoadingItems || items.isEmpty
+        case 1:
+            if currentAttempt != nil { return false }
+            return selectedOptionIndex == nil
+        default: return false
+        }
+    }
+
+    private var hasMoreWeakWork: Bool {
+        guard !inRetryPhase else { return false }
+        let weak = memorizeService.identifyWeakFixItems(attempts: attempts, masteryThreshold: masteryThreshold)
+        return !weak.isEmpty
+    }
+
+    private func handlePrimary() {
+        switch step {
+        case 0:
+            step = 1
+        case 1:
+            if let attempt = currentAttempt {
+                advanceAfterFeedback(lastAttempt: attempt)
+            } else {
+                submitCorrection()
+            }
+        default:
+            onClose()
+        }
+    }
+
+    private func loadItemsIfNeeded() {
+        guard items.isEmpty, !isLoadingItems, !sourceText.isEmpty else { return }
+        isLoadingItems = true
+        loadError = nil
+        Task {
+            do {
+                let result = try await memorizeService.generateFixMistakeItems(
+                    sourceId: sourceId,
+                    sourceText: sourceText
+                )
+                await MainActor.run {
+                    items = result
+                    queue = result
+                    queueIndex = 0
+                    isLoadingItems = false
+                }
+            } catch {
+                await MainActor.run {
+                    loadError = error.localizedDescription
+                    isLoadingItems = false
+                }
+            }
+        }
+    }
+
+    private func submitCorrection() {
+        guard let item = currentItem, let selected = selectedOptionIndex else { return }
+        let isRetry = inRetryPhase || attempts.contains { $0.itemId == item.id }
+        let attempt = memorizeService.evaluateCorrection(
+            item: item,
+            selectedOptionIndex: selected,
+            isRetry: isRetry
+        )
+        attempts.append(attempt)
+        currentAttempt = attempt
+    }
+
+    private func advanceAfterFeedback(lastAttempt: MemorizeService.FixAttempt) {
+        let needsRetry = !lastAttempt.isCorrect
+        let isLastInQueue = queueIndex >= queue.count - 1
+
+        if needsRetry {
+            currentAttempt = nil
+            selectedOptionIndex = nil
+            return
+        }
+
+        if isLastInQueue {
+            if !inRetryPhase {
+                let weakIDs = memorizeService.identifyWeakFixItems(attempts: attempts, masteryThreshold: masteryThreshold)
+                let weakItems = items.filter { weakIDs.contains($0.id) }
+                if !weakItems.isEmpty {
+                    queue = weakItems
+                    queueIndex = 0
+                    inRetryPhase = true
+                    currentAttempt = nil
+                    selectedOptionIndex = nil
+                    return
+                }
+            }
+            step = 2
+            saveFindMistakeSession()
+            return
+        }
+
+        queueIndex += 1
+        currentAttempt = nil
+        selectedOptionIndex = nil
+    }
+
+    private func saveFindMistakeSession() {
+        guard !hasSavedSession else { return }
+        hasSavedSession = true
+        var lines: [String] = [
+            "Find the Mistake session — \(topic)",
+            "",
+            "Mastery score: \(masteryScore)/100",
+            "Items: \(items.count) · Attempts: \(attempts.count)",
+            ""
+        ]
+        let firstTry = attempts.filter { !$0.isRetry }
+        let retries = attempts.filter { $0.isRetry }
+        lines.append("First-try correct: \(firstTry.filter { $0.isCorrect }.count)/\(firstTry.count)")
+        if !retries.isEmpty {
+            lines.append("Retries: \(retries.count)")
+        }
+        lines.append("")
+        let weak = memorizeService.identifyWeakFixItems(attempts: attempts, masteryThreshold: masteryThreshold)
+        if !weak.isEmpty {
+            lines.append("Items still worth revisiting:")
+            for id in weak {
+                if let item = items.first(where: { $0.id == id }) {
+                    lines.append("- \(item.correctStatement)")
+                }
+            }
+        }
+        onSessionComplete(topic, lines.joined(separator: "\n"))
+    }
+
+    // MARK: Steps
+
+    private func targetStep(theme: TutorMiniAppTheme) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                TutorSectionLabel(text: "SOURCE", theme: theme)
+                Text(sourceItem?.title ?? topic)
+                    .font(.system(size: 22, weight: .regular, design: .serif))
+                    .foregroundColor(theme.title)
+                if let excerpt = sourceItem?.excerpt, !excerpt.isEmpty {
+                    Text(excerpt)
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundColor(theme.body)
+                        .lineSpacing(3)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+
+            TutorBodyText(
+                text: "We'll show you statements that contain ONE plausible mistake. Read each one and pick the option that fixes it correctly.",
+                theme: theme
+            )
+
+            if isLoadingItems {
+                TutorThinkingCard(theme: theme, title: "Building flawed statements", subtitle: "Pulling 3–5 items from your source…")
+            } else if !items.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    TutorSectionLabel(text: "ROUND · \(items.count) ITEMS", theme: theme)
+                    ForEach(items, id: \.id) { item in
+                        HStack(spacing: 10) {
+                            errorTypeChip(item.errorType, theme: theme)
+                            Text(item.difficulty.capitalized)
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .tracking(0.4)
+                                .foregroundColor(difficultyColor(item.difficulty))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(difficultyColor(item.difficulty).opacity(0.12))
+                                .clipShape(Capsule())
+                            Spacer()
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(theme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+            }
+
+            if tutorSourceItems(from: book, limit: 1).isEmpty && !isLoadingItems {
+                emptySourcesPlaceholder(theme: theme)
+            }
+            if let loadError {
+                tutorErrorCard(theme: theme, message: loadError)
+            }
+        }
+    }
+
+    private func spotStep(theme: TutorMiniAppTheme) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(inRetryPhase ? "RETRY · WEAK ITEM \(queueIndex + 1)/\(totalQueueLength)" : "ITEM \(queueIndex + 1)/\(totalQueueLength)")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .tracking(0.6)
+                    .foregroundColor(theme.muted)
+                Spacer()
+                if let item = currentItem {
+                    errorTypeChip(item.errorType, theme: theme)
+                }
+            }
+
+            if let item = currentItem {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(Color(hex: "B0444C"))
+                        Text("STATEMENT WITH A MISTAKE")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .tracking(0.6)
+                            .foregroundColor(Color(hex: "B0444C"))
+                    }
+                    Text(item.incorrectStatement)
+                        .font(.system(size: 16, weight: .regular, design: .serif))
+                        .foregroundColor(theme.title)
+                        .lineSpacing(4)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(hex: "FCE3E3"))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "B0444C").opacity(0.25), lineWidth: 1))
+
+                optionsList(item: item, theme: theme)
+                if let attempt = currentAttempt {
+                    feedbackCard(attempt: attempt, item: item, theme: theme)
+                }
+            } else {
+                tutorLoadingCard(theme: theme)
+            }
+
+            if let loadError {
+                tutorErrorCard(theme: theme, message: loadError)
+            }
+        }
+    }
+
+    private func optionsList(item: MemorizeService.FixMistakeItem, theme: TutorMiniAppTheme) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TutorSectionLabel(text: "PICK THE CORRECT VERSION", theme: theme)
+            ForEach(Array(item.options.enumerated()), id: \.offset) { idx, optionText in
+                optionRow(index: idx, item: item, text: optionText, theme: theme)
+            }
+        }
+    }
+
+    private func optionRow(index: Int, item: MemorizeService.FixMistakeItem, text: String, theme: TutorMiniAppTheme) -> some View {
+        let isAnswered = currentAttempt != nil
+        let isSelected = selectedOptionIndex == index
+        let isCorrectAnswer = index == item.correctOptionIndex
+        let userPickedThis = currentAttempt?.selectedOptionIndex == index
+
+        let backgroundColor: Color = {
+            if !isAnswered { return isSelected ? theme.primary.opacity(0.12) : theme.surface }
+            if isCorrectAnswer { return Color(hex: "D6F4D8") }
+            if userPickedThis { return Color(hex: "FCE3E3") }
+            return theme.surface
+        }()
+
+        let borderColor: Color = {
+            if !isAnswered { return isSelected ? theme.primary.opacity(0.55) : Color(hex: "EAE4DC") }
+            if isCorrectAnswer { return Color(hex: "276B32").opacity(0.55) }
+            if userPickedThis { return Color(hex: "B0444C").opacity(0.55) }
+            return Color(hex: "EAE4DC")
+        }()
+
+        let letter = ["A", "B", "C", "D"][min(index, 3)]
+
+        return Button {
+            guard !isAnswered else { return }
+            selectedOptionIndex = index
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Text(letter)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundColor(isSelected || isAnswered && (isCorrectAnswer || userPickedThis) ? .white : theme.muted)
+                    .frame(width: 26, height: 26)
+                    .background(
+                        Circle().fill({
+                            if isAnswered, isCorrectAnswer { return Color(hex: "276B32") }
+                            if isAnswered, userPickedThis { return Color(hex: "B0444C") }
+                            if isSelected { return theme.primary }
+                            return Color(hex: "F4EFE6")
+                        }())
+                    )
+
+                Text(text)
+                    .font(.system(size: 14, weight: .regular, design: .rounded))
+                    .foregroundColor(theme.title)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if isAnswered, isCorrectAnswer {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(Color(hex: "276B32"))
+                } else if isAnswered, userPickedThis {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(Color(hex: "B0444C"))
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(backgroundColor)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(borderColor, lineWidth: 1.5))
+        }
+        .buttonStyle(.plain)
+        .disabled(isAnswered)
+    }
+
+    private func feedbackCard(attempt: MemorizeService.FixAttempt, item: MemorizeService.FixMistakeItem, theme: TutorMiniAppTheme) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: attempt.isCorrect ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(attempt.isCorrect ? Color(hex: "276B32") : Color(hex: "B0444C"))
+                Text(attempt.isCorrect ? "Correct." : "Not quite.")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundColor(attempt.isCorrect ? Color(hex: "276B32") : Color(hex: "B0444C"))
+                Spacer()
+            }
+
+            if !attempt.feedback.isEmpty {
+                Text(attempt.feedback)
+                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                    .foregroundColor(theme.body)
+                    .lineSpacing(3)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(theme.primary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+    }
+
+    private func summaryStep(theme: TutorMiniAppTheme) -> some View {
+        let score = masteryScore
+        return VStack(alignment: .leading, spacing: 14) {
+            TutorSuccessCard(
+                title: score >= Int(masteryThreshold * 100) ? "Mistakes squared away." : "Round complete.",
+                subtitle: "Mastery score: \(score)/100. \(items.count) items, \(attempts.count) attempts.",
+                theme: theme
+            )
+            HStack(spacing: 10) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(theme.primary)
+                Text("Lesson complete · session saved")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(theme.title)
+                Spacer()
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.primary.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(theme.primary.opacity(0.22), lineWidth: 1))
+
+            HStack(spacing: 10) {
+                TutorMetric(value: "\(score)", label: "MASTERY", theme: theme)
+                TutorMetric(value: "\(attempts.filter { !$0.isRetry }.count)", label: "FIRST TRY", theme: theme)
+                TutorMetric(value: "\(attempts.filter { $0.isRetry }.count)", label: "RETRIES", theme: theme)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                TutorSectionLabel(text: "ITEM BY ITEM", theme: theme)
+                ForEach(items, id: \.id) { item in
+                    let last = attempts.last(where: { $0.itemId == item.id })
+                    HStack(spacing: 10) {
+                        ZStack {
+                            Circle()
+                                .fill((last?.score ?? 0) >= Int(masteryThreshold * 100) ? theme.primary.opacity(0.15) : Color(hex: "B0444C").opacity(0.18))
+                                .frame(width: 22, height: 22)
+                            Image(systemName: (last?.score ?? 0) >= Int(masteryThreshold * 100) ? "checkmark" : "xmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor((last?.score ?? 0) >= Int(masteryThreshold * 100) ? theme.primary : Color(hex: "B0444C"))
+                        }
+                        Text(item.incorrectStatement)
+                            .font(.system(size: 13, weight: .regular, design: .rounded))
+                            .foregroundColor(theme.title)
+                            .lineLimit(2)
+                        Spacer()
+                        Text("\(last?.score ?? 0)")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundColor(theme.muted)
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(theme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+            }
+        }
+    }
+
+    private func errorTypeChip(_ type: String, theme: TutorMiniAppTheme) -> some View {
+        Text(errorTypeLabel(type))
+            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .tracking(0.4)
+            .foregroundColor(theme.primary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(theme.primary.opacity(0.12))
+            .clipShape(Capsule())
+    }
+
+    private func errorTypeLabel(_ type: String) -> String {
+        switch type {
+        case "wrong_fact": return "Wrong fact"
+        case "missing_component": return "Missing piece"
+        case "reversed_logic": return "Reversed logic"
+        case "misdefinition": return "Bad definition"
+        case "sequence_error": return "Sequence error"
+        default: return type.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+
+    private func difficultyColor(_ difficulty: String) -> Color {
+        switch difficulty {
+        case "easy": return Color(hex: "276B32")
+        case "medium": return Color(hex: "C99526")
+        case "hard": return Color(hex: "B0444C")
+        default: return Color(hex: "8D958E")
+        }
     }
 }

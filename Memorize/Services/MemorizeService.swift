@@ -460,7 +460,7 @@ struct MemorizeService {
         ))
     }
 
-    // MARK: - Active Recall
+    // MARK: - Active Recall (legacy)
 
     struct ActiveRecallQuestion: Codable {
         let prompt: String
@@ -496,6 +496,373 @@ struct MemorizeService {
 
         let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
         return parseJSON(result, fallback: ActiveRecallSet(questions: [], pep: "Try again — pulling from memory is what makes it stick."))
+    }
+
+    // MARK: - Active Recall (v2 — retrieval session model)
+
+    struct RecallPrompt: Codable, Identifiable {
+        let id: String
+        let sourceId: String
+        let prompt: String
+        let expectedAnswer: String
+        let keyPoints: [String]
+        let promptType: String   // definition | why_how | steps_process | compare_contrast | application_example
+        let difficulty: String   // easy | medium | hard
+    }
+
+    struct RecallAttempt: Codable, Identifiable {
+        let id: String
+        let promptId: String
+        let userAnswer: String
+        let confidence: String  // low | medium | high
+        let correctPoints: [String]
+        let missingPoints: [String]
+        let incorrectPoints: [String]
+        let score: Int          // 0–100
+        let isRetry: Bool
+        let feedback: String
+        let createdAt: Date
+
+        var falseConfidence: Bool {
+            confidence == "high" && score < 75
+        }
+    }
+
+    func generateRecallPrompts(sourceId: String, contentChunk: String) async throws -> [RecallPrompt] {
+        let prompt = """
+        You are an active-recall coach. Generate 3–5 recall prompts from the content chunk below. Each prompt must require RETRIEVAL (not recognition) and target a meaningful concept.
+
+        Content chunk:
+        \(contentChunk)
+
+        Mix these prompt types — every set should include at least three different ones:
+        - "definition"            → ask the student to define a key term in their own words
+        - "why_how"               → ask why/how something works
+        - "steps_process"         → ask the steps or sequence
+        - "compare_contrast"      → ask how two ideas differ or relate
+        - "application_example"   → ask the student to apply the idea to a new example
+
+        Difficulty rules:
+        - "easy"   → straightforward retrieval
+        - "medium" → applied or partially synthesized
+        - "hard"   → multi-step reasoning, why/how, synthesis
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "prompts": [
+            {
+              "id": "p1",
+              "sourceId": "\(sourceId)",
+              "prompt": "short question, no yes/no",
+              "expectedAnswer": "concise 1–2 sentence ideal answer",
+              "keyPoints": ["atomic point 1", "atomic point 2", "atomic point 3"],
+              "promptType": "definition",
+              "difficulty": "easy"
+            }
+          ]
+        }
+
+        Quality rules:
+        - 3–5 prompts. Avoid yes/no questions. Avoid trivial recall.
+        - Prompt under 16 words. Expected answer under 35 words.
+        - keyPoints should be 2–4 atomic facts the answer must include — easy to grade against.
+        - Stay grounded in the chunk. Do not invent facts.
+        - No markdown fences and no extra keys.
+        """
+
+        let result = try await fastVisionService.generateText(prompt: prompt)
+        struct Wrap: Decodable { let prompts: [RecallPrompt] }
+        let wrapped = parseJSON(result, fallback: Wrap(prompts: []))
+        return wrapped.prompts.enumerated().map { idx, p in
+            RecallPrompt(
+                id: p.id.isEmpty ? "p\(idx + 1)" : p.id,
+                sourceId: sourceId,
+                prompt: p.prompt,
+                expectedAnswer: p.expectedAnswer,
+                keyPoints: p.keyPoints,
+                promptType: ["definition", "why_how", "steps_process", "compare_contrast", "application_example"].contains(p.promptType) ? p.promptType : "definition",
+                difficulty: ["easy", "medium", "hard"].contains(p.difficulty) ? p.difficulty : "medium"
+            )
+        }
+    }
+
+    func evaluateRecallAnswer(
+        prompt: RecallPrompt,
+        userAnswer: String,
+        confidence: String,
+        isRetry: Bool = false
+    ) async throws -> RecallAttempt {
+        let trimmed = userAnswer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return RecallAttempt(
+                id: UUID().uuidString,
+                promptId: prompt.id,
+                userAnswer: trimmed,
+                confidence: confidence,
+                correctPoints: [],
+                missingPoints: prompt.keyPoints,
+                incorrectPoints: [],
+                score: 0,
+                isRetry: isRetry,
+                feedback: "Try giving an answer first — even a partial one helps.",
+                createdAt: Date()
+            )
+        }
+
+        let evalPrompt = """
+        Grade a student's recall answer against an expected answer. Score by key-point coverage.
+
+        Prompt:
+        \(prompt.prompt)
+
+        Expected answer:
+        \(prompt.expectedAnswer)
+
+        Key points (atomic, must be covered for full credit):
+        \(prompt.keyPoints.enumerated().map { "- \($0.element)" }.joined(separator: "\n"))
+
+        Student's answer:
+        \(trimmed)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "correctPoints": ["…"],
+          "missingPoints": ["…"],
+          "incorrectPoints": ["…"],
+          "score": 0,
+          "feedback": "1-2 short sentences focused only on what's missing or wrong"
+        }
+
+        Rules:
+        - "correctPoints" — key points the student covered (case/synonym tolerant).
+        - "missingPoints" — key points the student did NOT mention.
+        - "incorrectPoints" — claims the student made that are wrong relative to the expected answer.
+        - "score" — integer 0–100 based on key-point coverage minus incorrect penalties.
+        - "feedback" — short, specific, focused only on gaps. Do not ask the student to reread the source.
+        - No markdown fences and no extra keys.
+        """
+
+        let result = try await fastVisionService.generateText(prompt: evalPrompt)
+        struct EvalWrap: Decodable {
+            let correctPoints: [String]
+            let missingPoints: [String]
+            let incorrectPoints: [String]
+            let score: Int
+            let feedback: String
+        }
+        let wrapped = parseJSON(result, fallback: EvalWrap(
+            correctPoints: [],
+            missingPoints: prompt.keyPoints,
+            incorrectPoints: [],
+            score: 0,
+            feedback: "Couldn't grade your answer — try again."
+        ))
+        return RecallAttempt(
+            id: UUID().uuidString,
+            promptId: prompt.id,
+            userAnswer: trimmed,
+            confidence: confidence,
+            correctPoints: wrapped.correctPoints,
+            missingPoints: wrapped.missingPoints,
+            incorrectPoints: wrapped.incorrectPoints,
+            score: max(0, min(100, wrapped.score)),
+            isRetry: isRetry,
+            feedback: wrapped.feedback,
+            createdAt: Date()
+        )
+    }
+
+    // MARK: - Find the Mistake
+
+    struct FixMistakeItem: Codable, Identifiable {
+        let id: String
+        let sourceId: String
+        let incorrectStatement: String
+        let correctStatement: String
+        let options: [String]            // exactly 4 candidate corrections
+        let correctOptionIndex: Int      // 0–3
+        let optionExplanations: [String] // one per option, explains why it's wrong (or "Correct.")
+        let errorType: String  // wrong_fact | missing_component | reversed_logic | misdefinition | sequence_error
+        let difficulty: String // easy | medium | hard
+    }
+
+    struct FixAttempt: Codable, Identifiable {
+        let id: String
+        let itemId: String
+        let selectedOptionIndex: Int
+        let isCorrect: Bool
+        let score: Int   // 100 if correct, 0 if wrong
+        let isRetry: Bool
+        let feedback: String
+        let createdAt: Date
+    }
+
+    func generateFixMistakeItems(sourceId: String, sourceText: String) async throws -> [FixMistakeItem] {
+        let wordCount = sourceText
+            .split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+            .count
+        let targetCount = max(8, min(15, wordCount / 120))
+
+        let prompt = """
+        You are a learning coach building a multiple-choice "Find the Mistake" exercise. Generate \(targetCount) items from the source below. Each item shows an INCORRECT statement and gives the student 4 candidate corrections — one is right, three are plausible-but-still-wrong distractors.
+
+        Source material:
+        \(sourceText)
+
+        Error types — pick a mix across the set:
+        - "wrong_fact"          → swap a number, name, or detail with a plausible-but-wrong one
+        - "missing_component"   → drop a key idea so the statement reads complete but isn't
+        - "reversed_logic"      → flip cause/effect or invert a relationship
+        - "misdefinition"       → use the right term but with a wrong definition
+        - "sequence_error"      → put a process's steps in the wrong order
+
+        Difficulty rules:
+        - "easy"   → mistake is easy to spot if you read carefully
+        - "medium" → requires real understanding to notice
+        - "hard"   → subtle; the wrong statement looks right unless you know the concept
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "items": [
+            {
+              "id": "fm1",
+              "sourceId": "\(sourceId)",
+              "incorrectStatement": "the plausible-but-wrong statement",
+              "correctStatement": "the corrected version, 1-2 lines max",
+              "options": ["candidate 1", "candidate 2", "candidate 3", "candidate 4"],
+              "correctOptionIndex": 0,
+              "optionExplanations": [
+                "why this option is right or wrong, 1 short sentence",
+                "…",
+                "…",
+                "…"
+              ],
+              "errorType": "wrong_fact",
+              "difficulty": "easy"
+            }
+          ]
+        }
+
+        Quality rules:
+        - Generate exactly \(targetCount) items, covering as much of the source as possible without repeating the same concept twice.
+        - Spread items across the full source (don't cluster them all on the first paragraph).
+        - Vary errorType across the set — include at least 3 of the 5 error types listed above.
+        - Incorrect statement must be plausible — close to the source phrasing, NOT absurd. Exactly ONE primary mistake.
+        - Correct statement is concise (1-2 lines, under 40 words). It MUST appear verbatim as one of the four options.
+        - "options" — exactly 4 strings. ONE is the correctStatement. The other 3 are plausible-but-still-wrong corrections (e.g. fix the original mistake but introduce a subtly different one, or fix only part of the issue).
+        - "correctOptionIndex" — index (0-3) of the correct option in the options array.
+        - "optionExplanations" — exactly 4 entries, aligned with options. For the correct one say "Correct." For wrong ones say in 1 short sentence why they're still wrong (don't be condescending).
+        - Distractors must be in the same register and length as the correct option — not obviously shorter or vaguer.
+        - Stay grounded in the source. Do not invent unrelated facts.
+        - No markdown fences, no extra keys.
+        """
+
+        let result = try await fastVisionService.generateText(prompt: prompt)
+        struct Wrap: Decodable { let items: [FixMistakeItem] }
+        let wrapped = parseJSON(result, fallback: Wrap(items: []))
+        let validErrorTypes: Set<String> = ["wrong_fact", "missing_component", "reversed_logic", "misdefinition", "sequence_error"]
+        let validDifficulties: Set<String> = ["easy", "medium", "hard"]
+        return wrapped.items.enumerated().compactMap { idx, item in
+            let trimmedIncorrect = item.incorrectStatement.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedCorrect = item.correctStatement.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedIncorrect.isEmpty, !trimmedCorrect.isEmpty else { return nil }
+
+            // Normalize options to exactly 4. If the AI returns fewer, pad with the correctStatement as a fallback option.
+            // If it returns more, take the first 4 (preserving the marked correctOptionIndex if it lands inside).
+            var normalizedOptions = item.options
+            var safeIndex = max(0, item.correctOptionIndex)
+            if normalizedOptions.count < 4 {
+                while normalizedOptions.count < 4 {
+                    normalizedOptions.append(trimmedCorrect)
+                }
+            } else if normalizedOptions.count > 4 {
+                if safeIndex >= 4 {
+                    // Move the correct option into the first 4 by swapping with index 0
+                    normalizedOptions.swapAt(0, safeIndex)
+                    safeIndex = 0
+                }
+                normalizedOptions = Array(normalizedOptions.prefix(4))
+            }
+            safeIndex = min(safeIndex, 3)
+
+            // Make sure the correctStatement is actually one of the options
+            if !normalizedOptions.contains(trimmedCorrect) {
+                normalizedOptions[safeIndex] = trimmedCorrect
+            }
+
+            var explanations = item.optionExplanations
+            while explanations.count < 4 { explanations.append("") }
+            explanations = Array(explanations.prefix(4))
+
+            return FixMistakeItem(
+                id: item.id.isEmpty ? "fm\(idx + 1)" : item.id,
+                sourceId: sourceId,
+                incorrectStatement: trimmedIncorrect,
+                correctStatement: trimmedCorrect,
+                options: normalizedOptions,
+                correctOptionIndex: safeIndex,
+                optionExplanations: explanations,
+                errorType: validErrorTypes.contains(item.errorType) ? item.errorType : "wrong_fact",
+                difficulty: validDifficulties.contains(item.difficulty) ? item.difficulty : "medium"
+            )
+        }
+    }
+
+    func evaluateCorrection(
+        item: FixMistakeItem,
+        selectedOptionIndex: Int,
+        isRetry: Bool = false
+    ) -> FixAttempt {
+        let isCorrect = selectedOptionIndex == item.correctOptionIndex
+        let explanation: String
+        if selectedOptionIndex >= 0, selectedOptionIndex < item.optionExplanations.count {
+            explanation = item.optionExplanations[selectedOptionIndex]
+        } else {
+            explanation = ""
+        }
+
+        let feedback: String
+        if isCorrect {
+            feedback = explanation.isEmpty ? "Correct." : explanation
+        } else {
+            let wrongPart = explanation.isEmpty ? "Not quite — that option still has an issue." : explanation
+            feedback = "\(wrongPart) The correct version: \(item.correctStatement)"
+        }
+
+        return FixAttempt(
+            id: UUID().uuidString,
+            itemId: item.id,
+            selectedOptionIndex: selectedOptionIndex,
+            isCorrect: isCorrect,
+            score: isCorrect ? 100 : 0,
+            isRetry: isRetry,
+            feedback: feedback,
+            createdAt: Date()
+        )
+    }
+
+    func identifyWeakFixItems(attempts: [FixAttempt], masteryThreshold: Double) -> [String] {
+        let threshold = Int(masteryThreshold * 100)
+        var lastScoreByItem: [String: Int] = [:]
+        for attempt in attempts {
+            lastScoreByItem[attempt.itemId] = attempt.score
+        }
+        return lastScoreByItem
+            .filter { $0.value < threshold }
+            .keys
+            .map { $0 }
+    }
+
+    func identifyWeakPrompts(attempts: [RecallAttempt], masteryThreshold: Double) -> [String] {
+        let threshold = Int(masteryThreshold * 100)
+        var lastScoreByPrompt: [String: Int] = [:]
+        for attempt in attempts {
+            lastScoreByPrompt[attempt.promptId] = attempt.score
+        }
+        return lastScoreByPrompt
+            .filter { $0.value < threshold }
+            .keys
+            .map { $0 }
     }
 
     // MARK: - Cornell
@@ -812,20 +1179,67 @@ struct MemorizeService {
 
         Respond with ONLY the single emoji character, nothing else. No text, no spaces, no quotes.
         Choose something creative and specific to the subject matter, not generic book emojis.
+
+        STRICT CONTENT RULES — NEVER pick any of these categories:
+        - Weapons or violence: knives, swords, guns, bombs, fists, fire, blood, skulls, crossed-bones
+        - Drugs, alcohol, smoking, syringes, pills
+        - Body parts (mouths, lips, tongues, blood drops, etc.)
+        - Religious/political symbols
+        - Sad/angry/distressed faces
+        - Any other emoji that could feel violent, scary, or inappropriate to a general audience
+
+        If the most literal emoji would violate these rules, choose a metaphorical, abstract, or peaceful alternative
+        (e.g. for a book about cooking knives → 🍳; for a thriller → 🔍; for a war book → 🕊️; for finance → 📈).
+        Prefer everyday objects, nature, abstract symbols, charts, plants, animals, weather, or food (non-meat).
         """
 
         let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
         let emoji = result.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Take only the first character cluster (emoji) in case the model returns more
-        if let first = emoji.first {
+        if let first = emoji.first, isAcceptableEmoji(String(first)) {
             return String(first)
         }
         return "\u{1F4D6}" // fallback: open book
     }
 
+    private func isAcceptableEmoji(_ emoji: String) -> Bool {
+        let blocked: Set<String> = [
+            // weapons
+            "🔪", "🗡", "🗡️", "⚔", "⚔️", "🛡", "🛡️", "🏹", "🪓", "🔨", "⛏", "⛏️", "🪚", "🪛", "🪒",
+            "🔫", "💣", "🧨", "💥", "🪃",
+            // violence / fire / blood
+            "👊", "🤜", "🤛", "✊", "🤚", "🩸", "🦴", "💀", "☠", "☠️", "🪦", "⚰️", "⚱️", "🔥", "🚬",
+            // drugs / alcohol
+            "💊", "💉", "🍷", "🍺", "🍻", "🥃", "🍸", "🍹", "🍶",
+            // religious / political
+            "✝", "✝️", "☪", "☪️", "✡", "✡️", "☸", "☸️", "🕉", "🕉️", "☯", "☯️", "🪯", "⛩", "⛩️", "🕎",
+            "☦", "☦️", "🛐",
+            // distress / negativity
+            "😢", "😭", "😠", "😡", "🤬", "😱", "😨", "🥵", "🥶", "🤕", "🤒", "🤮", "🤢", "🤧", "🤥",
+            "👹", "👺", "👻", "👽", "🤡",
+            // sensitive body parts
+            "👅", "👄", "🫦", "🫀", "🫁", "🧠"
+        ]
+        return !blocked.contains(emoji)
+    }
+
     // MARK: - Generate Quiz
 
-    func generateQuiz(from pages: [PageCapture], questionCount: Int? = nil) async throws -> [QuizQuestion] {
+    enum QuizDifficulty: String {
+        case easy, medium, hard
+        var promptInstruction: String {
+            switch self {
+            case .easy:   return "EASY — direct recall. Keep wording obvious. Distractors are clearly different from the correct answer."
+            case .medium: return "MEDIUM — applied understanding. Plausible distractors that test if the learner truly grasped the concept."
+            case .hard:   return "HARD — multi-step reasoning, edge cases, and synthesis. Distractors should be subtly wrong, not obviously off."
+            }
+        }
+    }
+
+    func generateQuiz(
+        from pages: [PageCapture],
+        questionCount: Int? = nil,
+        difficulty: QuizDifficulty = .medium
+    ) async throws -> [QuizQuestion] {
         let completedPages = pages.filter { $0.status == .completed }
         guard !completedPages.isEmpty else { return [] }
 
@@ -834,12 +1248,16 @@ struct MemorizeService {
             .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
             .joined(separator: "\n\n")
 
-        let recommendedQuestionCap = min(max(questionCount ?? 10, 5), 10)
+        let targetCount = min(max(questionCount ?? 6, 3), 15)
 
         let prompt = """
         You are an expert learning designer focused on maximizing retention through active recall.
 
         Your task is to generate a concise, high-quality quiz from the source material below.
+
+        TARGET QUESTION COUNT: exactly \(targetCount) questions.
+
+        DIFFICULTY: \(difficulty.promptInstruction)
 
         GOALS:
         - Reinforce key concepts (not test everything)
@@ -860,14 +1278,7 @@ struct MemorizeService {
 
         ---
 
-        STEP 2: DETERMINE QUESTION COUNT
-        - Let N = number of key concepts
-        - question_count = min(max(N, 5), 10)
-        - Keep the final question count at or below \(recommendedQuestionCap) if the source is short
-
-        ---
-
-        STEP 3: SELECT CONCEPTS TO TEST
+        STEP 2: SELECT CONCEPTS TO TEST
         - Prioritize:
           1. Concepts repeated multiple times
           2. Concepts with definitions or explanations
@@ -876,8 +1287,8 @@ struct MemorizeService {
 
         ---
 
-        STEP 4: GENERATE QUESTIONS
-        Structure:
+        STEP 3: GENERATE QUESTIONS
+        Structure (proportions, scaled to the target count):
         - 60% Core Understanding (main ideas)
         - 30% Key Details (important supporting info)
         - 10% Application (real-world or reasoning)
@@ -889,13 +1300,14 @@ struct MemorizeService {
         - Prefer conceptual understanding over memorization
         - Each question must have exactly 4 answer options
         - Ensure questions can be answered using only the source material
+        - Match the difficulty band described above for both the question stem AND the distractors
 
         ---
 
-        STEP 5: FORMAT OUTPUT
+        STEP 4: FORMAT OUTPUT
         Return ONLY valid JSON in this exact structure:
         {
-          "total_questions": number,
+          "total_questions": \(targetCount),
           "concepts": [
             "concept 1",
             "concept 2"
@@ -913,7 +1325,7 @@ struct MemorizeService {
         }
 
         CONSTRAINTS:
-        - Total questions must NOT exceed 10
+        - Generate exactly \(targetCount) questions
         - Avoid repeating the same idea in multiple questions
         - Keep explanations concise (1-2 sentences)
         - Use only plain JSON with no markdown fences or extra commentary

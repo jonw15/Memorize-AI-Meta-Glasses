@@ -129,6 +129,19 @@ class ProjectDetailViewModel: ObservableObject {
         storage.updateBook(book)
     }
 
+    func saveTutorSessionSummary(title: String, body: String) {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBody.isEmpty else { return }
+        let resolvedTitle = trimmedTitle.isEmpty ? "Tutor session" : trimmedTitle
+        let note = GeneratedNote(
+            title: resolvedTitle,
+            body: trimmedBody,
+            mode: .tutor
+        )
+        saveGeneratedNote(note)
+    }
+
     func addUserNote(title: String, body: String) {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -322,11 +335,13 @@ class ProjectDetailViewModel: ObservableObject {
 
     // MARK: - Study Actions
 
-    func generateQuiz() {
+    func generateQuiz(
+        questionCount: Int? = nil,
+        difficulty: MemorizeService.QuizDifficulty = .medium
+    ) {
         let pages = allCompletedPages
-        let strategy = usesPDFQuizLengthHeuristic ? "page_based" : "word_based"
-        let questionCount = targetQuizQuestionCount
-        print("🧪 [ProjectDetail] generateQuiz — allPages: \(book.allPages.count), completed: \(pages.count), legacy pages: \(book.pages.count), sources: \(book.sources.count), strategy: \(strategy), words: \(sourceWordCount), questions: \(questionCount)")
+        let resolvedCount = questionCount ?? targetQuizQuestionCount
+        print("🧪 [ProjectDetail] generateQuiz — questions: \(resolvedCount), difficulty: \(difficulty.rawValue)")
         guard !pages.isEmpty else {
             print("🧪 [ProjectDetail] No completed pages — skipping quiz")
             return
@@ -336,7 +351,11 @@ class ProjectDetailViewModel: ObservableObject {
 
         Task {
             do {
-                let questions = try await memorizeService.generateQuiz(from: pages, questionCount: questionCount)
+                let questions = try await memorizeService.generateQuiz(
+                    from: pages,
+                    questionCount: resolvedCount,
+                    difficulty: difficulty
+                )
                 quizQuestions = questions
                 showQuiz = true
             } catch {

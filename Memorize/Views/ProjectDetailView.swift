@@ -21,6 +21,7 @@ struct ProjectDetailView: View {
     @State private var showSourcesPanel = false
     @State private var isDeletingProject = false
     @State private var tutorStartedAt: Date?
+    @State private var hasAutoOpenedSources = false
     private let minimumNoteGenerationDuration: TimeInterval = 10
 
     enum ProjectTab {
@@ -41,10 +42,7 @@ struct ProjectDetailView: View {
         navigationContainer
             .onAppear {
                 viewModel.reload()
-            }
-            .onChange(of: viewModel.sourceAddedToken) { _, token in
-                guard token != nil else { return }
-                openTutorAfterSourceUpload()
+                autoOpenSourcesIfEmpty()
             }
             .fileImporter(
                 isPresented: $viewModel.showFilePicker,
@@ -316,11 +314,14 @@ struct ProjectDetailView: View {
         }
     }
 
-    private func openTutorAfterSourceUpload() {
+    private func autoOpenSourcesIfEmpty() {
+        guard !hasAutoOpenedSources else { return }
+        let hasAnySources = !viewModel.book.sources.isEmpty || !viewModel.book.pages.isEmpty
+        guard !hasAnySources else { return }
+        hasAutoOpenedSources = true
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 450_000_000)
-            guard viewModel.hasContent else { return }
-            showTutor = true
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            showSourcesPanel = true
         }
     }
 

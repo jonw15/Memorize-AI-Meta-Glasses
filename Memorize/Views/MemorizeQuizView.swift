@@ -50,37 +50,9 @@ struct MemorizeQuizView: View {
             .toolbarColorScheme(.light, for: .navigationBar)
         }
         .task {
-            // Let the audio session from the previous screen fully release
+            // Voice answering and TTS are temporarily disabled in Pop Quiz —
+            // the user taps to answer; no Gemini Live audio session is opened.
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
-            voiceAssistant.enableVoiceAnswering { action in
-                switch action {
-                case .answer(let answerIndex):
-                    selectAnswer(answerIndex)
-                case .next:
-                    goToNextQuestion()
-                }
-            }
-            print("🧪 [Quiz] Voice answering enabled, speaking first question...")
-            speakCurrentQuestionIfNeeded()
-        }
-        .onChange(of: currentIndex) { _ in
-            speakCurrentQuestionIfNeeded()
-        }
-        .onChange(of: showResults) { isShowingResults in
-            if isShowingResults {
-                voiceAssistant.disableVoiceAnswering()
-            } else {
-                voiceAssistant.enableVoiceAnswering { action in
-                    switch action {
-                    case .answer(let answerIndex):
-                        selectAnswer(answerIndex)
-                    case .next:
-                        goToNextQuestion()
-                    }
-                }
-                speakCurrentQuestionIfNeeded()
-            }
         }
         .onDisappear {
             voiceAssistant.disableVoiceAnswering()
@@ -331,20 +303,8 @@ struct MemorizeQuizView: View {
 
         questions[currentIndex].selectedIndex = index
 
-        let explanation = questions[currentIndex].explanation?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let isCorrect = index == questions[currentIndex].correctIndex
-        if isCorrect {
-            let feedback = explanation.isEmpty ? "Correct." : "Correct. \(explanation)"
-            voiceAssistant.speakFeedback(feedback, immediate: fromTap)
-        } else {
-            let correctIndex = questions[currentIndex].correctIndex
-            let correctLetter = ["A", "B", "C", "D"][correctIndex]
-            let correctText = questions[currentIndex].options[correctIndex]
-            let feedbackBase = "Wrong. The correct answer is \(correctLetter): \(correctText)."
-            let feedback = explanation.isEmpty ? feedbackBase : "\(feedbackBase) \(explanation)"
-            voiceAssistant.speakFeedback(feedback, immediate: fromTap)
-        }
+        // Voice feedback temporarily disabled in Pop Quiz — keep tap-only flow.
+        _ = fromTap
     }
 
     private func questionTypeLabel(for rawType: String?) -> String? {

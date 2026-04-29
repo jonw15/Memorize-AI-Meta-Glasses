@@ -29,10 +29,10 @@ struct TutorMethodCard: Identifiable {
             tone: Color(hex: "6A4F8E")
         ),
         TutorMethodCard(
-            id: "active_recall",
-            title: "Active Recall",
-            detail: "8 prompts · Retrieve",
-            icon: "brain.head.profile",
+            id: "find_mistake",
+            title: "Find the Mistake",
+            detail: "Spot · Correct",
+            icon: "exclamationmark.magnifyingglass",
             tone: Color(hex: "2E5C3A")
         ),
         TutorMethodCard(
@@ -72,6 +72,7 @@ struct StudyTabView: View {
     @State private var selectedPersona: MemorizeExplainPersona = .highSchoolStudent
     @State private var showVoiceSummary = false
     @State private var showInfographics = false
+    @State private var showPopQuizConfig = false
     @State private var presentedTutorMiniApp: TutorMiniAppKind?
     @State private var modeStartedAt: [GeneratedNoteKind: Date] = [:]
     private let minimumNoteGenerationDuration: TimeInterval = 10
@@ -163,6 +164,13 @@ struct StudyTabView: View {
                 viewModel.startPodcastWithMode(mode)
             }
             .presentationDetents([.height(280)])
+        }
+        // Pop quiz config
+        .sheet(isPresented: $showPopQuizConfig) {
+            PopQuizConfigSheet { count, difficulty in
+                viewModel.generateQuiz(questionCount: count, difficulty: difficulty)
+            }
+            .presentationDetents([.height(440)])
         }
         // Podcast player
         .fullScreenCover(isPresented: $viewModel.showPodcastPlayer, onDismiss: {
@@ -263,7 +271,10 @@ struct StudyTabView: View {
             TutorMiniAppView(
                 kind: kind,
                 book: viewModel.book,
-                onClose: { presentedTutorMiniApp = nil }
+                onClose: { presentedTutorMiniApp = nil },
+                onSessionComplete: { title, body in
+                    viewModel.saveTutorSessionSummary(title: title, body: body)
+                }
             )
         }
     }
@@ -354,7 +365,7 @@ struct StudyTabView: View {
                 icon: "bolt.fill",
                 accessoryIcon: nil,
                 tone: Color(hex: "F5A92D"),
-                action: { viewModel.generateQuiz() }
+                action: { showPopQuizConfig = true }
             )
 
             learnCard(
@@ -587,5 +598,121 @@ struct StudyTabView: View {
         }
         .disabled(!hasContent || viewModel.isGeneratingQuiz || viewModel.isGeneratingExplanation)
         .opacity(hasContent ? 1.0 : 0.5)
+    }
+}
+
+private struct PopQuizConfigSheet: View {
+    let onGenerate: (Int, MemorizeService.QuizDifficulty) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var questionCount: Int = 6
+    @State private var difficulty: MemorizeService.QuizDifficulty = .medium
+
+    private let lengthOptions: [Int] = [3, 6, 10, 15]
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Capsule()
+                .fill(Color(hex: "DED8CF"))
+                .frame(width: 54, height: 5)
+                .padding(.top, 12)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Pop quiz")
+                    .font(.system(size: 26, weight: .regular, design: .serif))
+                    .foregroundColor(Color(hex: "1F2420"))
+                Text("Set the length and difficulty before generating.")
+                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                    .foregroundColor(Color(hex: "8D958E"))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 22)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("LENGTH")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .tracking(0.6)
+                    .foregroundColor(Color(hex: "8D958E"))
+                HStack(spacing: 8) {
+                    ForEach(lengthOptions, id: \.self) { count in
+                        Button { questionCount = count } label: {
+                            Text("\(count)")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundColor(questionCount == count ? .white : Color(hex: "1F2420"))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(questionCount == count ? Color(hex: "C99526") : Color.white)
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                Text(lengthHint)
+                    .font(.system(size: 11, weight: .regular, design: .rounded))
+                    .foregroundColor(Color(hex: "8D958E"))
+            }
+            .padding(.horizontal, 22)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("DIFFICULTY")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .tracking(0.6)
+                    .foregroundColor(Color(hex: "8D958E"))
+                HStack(spacing: 8) {
+                    difficultyChip(.easy, label: "Easy", color: Color(hex: "276B32"))
+                    difficultyChip(.medium, label: "Medium", color: Color(hex: "C99526"))
+                    difficultyChip(.hard, label: "Hard", color: Color(hex: "B0444C"))
+                }
+            }
+            .padding(.horizontal, 22)
+
+            Spacer()
+
+            Button {
+                onGenerate(questionCount, difficulty)
+                dismiss()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 14, weight: .bold))
+                    Text("Generate quiz")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color(hex: "1F2420"))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 22)
+            .padding(.bottom, 18)
+        }
+        .background(Color(hex: "FCF7EF").ignoresSafeArea())
+    }
+
+    private var lengthHint: String {
+        switch questionCount {
+        case 3: return "Quick check — 3 questions, ~2 min."
+        case 6: return "Standard pop quiz — 6 questions, ~4 min."
+        case 10: return "Full review — 10 questions, ~7 min."
+        case 15: return "Deep review — 15 questions, ~10 min."
+        default: return "\(questionCount) questions"
+        }
+    }
+
+    private func difficultyChip(_ value: MemorizeService.QuizDifficulty, label: String, color: Color) -> some View {
+        let isOn = difficulty == value
+        return Button { difficulty = value } label: {
+            Text(label)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundColor(isOn ? .white : color)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 11)
+                .background(isOn ? color : color.opacity(0.12))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
