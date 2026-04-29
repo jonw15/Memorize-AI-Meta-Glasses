@@ -84,6 +84,26 @@ struct VisionAPIService {
 
     // MARK: - Public Methods
 
+    /// Send a text-only prompt (no image). Faster than analyzeImage when no vision is needed.
+    func generateText(prompt: String) async throws -> String {
+        let request = ChatCompletionRequest(
+            model: model,
+            messages: [
+                ChatCompletionRequest.Message(
+                    role: "user",
+                    content: [
+                        ChatCompletionRequest.Message.Content(
+                            type: "text",
+                            text: prompt,
+                            imageUrl: nil
+                        )
+                    ]
+                )
+            ]
+        )
+        return try await makeRequest(request)
+    }
+
     /// Analyze image and get description
     func analyzeImage(_ image: UIImage, prompt: String = "What is depicted in this image?") async throws -> String {
         // Downscale large images to speed up upload and API processing

@@ -22,13 +22,6 @@ struct TutorMethodCard: Identifiable {
             tone: Color(hex: "9B3949")
         ),
         TutorMethodCard(
-            id: "leitner",
-            title: "Leitner System",
-            detail: "20 cards · Boxed",
-            icon: "square.stack.3d.up.fill",
-            tone: Color(hex: "1E5D5A")
-        ),
-        TutorMethodCard(
             id: "mnemonics",
             title: "Mnemonics",
             detail: "Visual · Story",

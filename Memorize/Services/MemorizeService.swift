@@ -70,9 +70,21 @@ struct MemorizeService {
     }
 
     private let visionService: VisionAPIService
+    private let fastVisionService: VisionAPIService
 
     init() {
         self.visionService = VisionAPIService()
+        let fastModel: String = {
+            switch VisionAPIConfig.provider {
+            case .google: return "gemini-2.5-flash-lite"
+            case .openrouter: return "google/gemini-2.5-flash-lite"
+            }
+        }()
+        self.fastVisionService = VisionAPIService(
+            apiKey: VisionAPIConfig.apiKey,
+            baseURL: VisionAPIConfig.baseURL,
+            model: fastModel
+        )
     }
 
     // MARK: - Feynman Feedback
@@ -228,6 +240,183 @@ struct MemorizeService {
 
     // MARK: - Mnemonics
 
+    enum MnemonicType: String, Codable {
+        case acronym, sentence, visualImagery = "visual_imagery", storyChain = "story_chain"
+    }
+
+    struct MnemonicTrigger: Codable {
+        let item: String
+        let trigger: String
+        let triggerType: String   // first_letter | keyword | visual_image
+    }
+
+    struct MnemonicResult: Codable {
+        let items: [String]
+        let triggers: [MnemonicTrigger]
+        let mnemonicType: String
+        let mnemonic: String
+        let orderMatters: Bool
+    }
+
+    struct MnemonicRecallEvaluation: Codable {
+        let correctItems: [String]
+        let missedItems: [String]
+        let outOfOrderItems: [String]
+        let score: Int          // 0–100
+        let weakItems: [String]
+        let comment: String
+    }
+
+    func extractMnemonicItems(topic: String, sourceContext: String) async throws -> (items: [String], orderMatters: Bool) {
+        let prompt = """
+        You are a memory coach. Pull a SHORT list of the most important items to memorize about "\(topic)" from the source below.
+
+        Source material:
+        \(sourceContext)
+
+        Return ONLY valid JSON in this exact shape:
+        { "items": ["item1", "item2"], "orderMatters": true }
+
+        Requirements:
+        - Return 5–7 items. Each is 1–4 words.
+        - Set orderMatters = true if the items have a natural sequence (steps, planets, layers); false if order is incidental.
+        - Stay grounded in the source. No invented items.
+        - No markdown fences and no extra keys.
+        """
+        let result = try await fastVisionService.generateText(prompt: prompt)
+        struct Wrap: Decodable { let items: [String]; let orderMatters: Bool }
+        let wrapped = parseJSON(result, fallback: Wrap(items: [], orderMatters: false))
+        return (wrapped.items, wrapped.orderMatters)
+    }
+
+    func generateMnemonic(
+        topic: String,
+        items: [String],
+        mnemonicType: MnemonicType
+    ) async throws -> MnemonicResult {
+        let typeStr = mnemonicType.rawValue
+        let prompt = """
+        You are a memory coach. Build a vivid, easy-to-recall \(typeStr) mnemonic for these items about "\(topic)":
+        \(items.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n"))
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "mnemonic": "the mnemonic text — short, vivid, unusual, easy to recall",
+          "triggers": [
+            { "item": "item1", "trigger": "M (or keyword/image)", "triggerType": "first_letter" }
+          ]
+        }
+
+        Mnemonic-type rules:
+        - acronym: build a pronounceable acronym from first letters; mnemonic = "ACRONYM — expanded gloss".
+        - sentence: a short sentence whose word initials match the item initials in order.
+        - visual_imagery: one or two sentences painting a single concrete scene that links the items.
+        - story_chain: a 2–3 sentence mini-story linking each item to the next in order.
+
+        Trigger rules:
+        - For acronym/sentence → triggerType = "first_letter".
+        - For visual_imagery/story_chain → triggerType = "visual_image" or "keyword".
+        - One trigger per item.
+
+        Quality rules:
+        - Keep it short and vivid. Avoid generic phrasing.
+        - Triggers must map back to the original items.
+        - No markdown fences and no extra keys.
+        """
+        let result = try await fastVisionService.generateText(prompt: prompt)
+        struct Wrap: Decodable { let mnemonic: String; let triggers: [MnemonicTrigger] }
+        let wrapped = parseJSON(result, fallback: Wrap(mnemonic: "", triggers: []))
+        return MnemonicResult(
+            items: items,
+            triggers: wrapped.triggers,
+            mnemonicType: typeStr,
+            mnemonic: wrapped.mnemonic,
+            orderMatters: false
+        )
+    }
+
+    func evaluateMnemonicRecall(
+        originalItems: [String],
+        userRecall: [String],
+        orderMatters: Bool
+    ) async throws -> MnemonicRecallEvaluation {
+        let originalList = originalItems.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
+        let userList = userRecall.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
+
+        let prompt = """
+        Compare a student's recall against the original list.
+
+        Original items (orderMatters=\(orderMatters ? "true" : "false")):
+        \(originalList)
+
+        Student's recall:
+        \(userList)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "correctItems": ["..."],
+          "missedItems": ["..."],
+          "outOfOrderItems": ["..."],
+          "score": 80,
+          "weakItems": ["..."],
+          "comment": "one short encouraging line"
+        }
+
+        Rules:
+        - "correctItems" — items present in the student's recall (case/spelling-tolerant).
+        - "missedItems" — items in original list but not in student's recall.
+        - "outOfOrderItems" — only populated if orderMatters=true; items the student listed but in the wrong position.
+        - "score" 0–100. Penalize missed items and (if orderMatters) order errors.
+        - "weakItems" — union of missedItems and outOfOrderItems, deduped.
+        - "comment" — 1 short sentence, encouraging, specific.
+        - No markdown fences and no extra keys.
+        """
+        let result = try await fastVisionService.generateText(prompt: prompt)
+        return parseJSON(result, fallback: MnemonicRecallEvaluation(
+            correctItems: [],
+            missedItems: originalItems,
+            outOfOrderItems: [],
+            score: 0,
+            weakItems: originalItems,
+            comment: "We couldn't read your recall — try again."
+        ))
+    }
+
+    func refineMnemonic(
+        topic: String,
+        items: [String],
+        mnemonicType: MnemonicType,
+        previousMnemonic: String,
+        weakItems: [String]
+    ) async throws -> String {
+        let prompt = """
+        Improve a \(mnemonicType.rawValue) mnemonic for "\(topic)" so the student stops missing the weak items.
+
+        Items:
+        \(items.joined(separator: ", "))
+
+        Previous mnemonic:
+        \(previousMnemonic)
+
+        Weak items the student missed or scrambled:
+        \(weakItems.joined(separator: ", "))
+
+        Return ONLY valid JSON in this exact shape:
+        { "mnemonic": "the improved mnemonic, short and vivid" }
+
+        Rules:
+        - Make weak items MORE vivid or concrete in the new mnemonic.
+        - Simplify confusing parts.
+        - Keep the same mnemonic type structure.
+        - No markdown fences and no extra keys.
+        """
+        let result = try await fastVisionService.generateText(prompt: prompt)
+        struct Wrap: Decodable { let mnemonic: String }
+        return parseJSON(result, fallback: Wrap(mnemonic: previousMnemonic)).mnemonic
+    }
+
+    // MARK: - Mnemonics (legacy 3-angle generator, kept for reference)
+
     struct MnemonicAngles: Codable {
         let acronymTitle: String
         let acronymBody: String
@@ -349,10 +538,14 @@ struct MemorizeService {
 
     // MARK: - Leitner
 
-    struct LeitnerCard: Codable {
+    struct LeitnerCard: Codable, Identifiable {
+        let id: String
         let front: String
         let back: String
-        let suggestedBox: Int
+        let cardType: String       // definition | explanation | fill_blank | why | process
+        let difficulty: String     // easy | medium | hard
+        let box: Int               // default = 1
+        let sourceId: String
     }
 
     struct LeitnerDeck: Codable {
@@ -360,30 +553,96 @@ struct MemorizeService {
         let intro: String
     }
 
-    func generateLeitnerDeck(topic: String, sourceContext: String) async throws -> LeitnerDeck {
+    func generateLeitnerDeck(topic: String, sourceContext: String, sourceId: String) async throws -> LeitnerDeck {
+        let wordCount = sourceContext
+            .split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+            .count
+        let targetCount = max(6, min(20, wordCount / 100))
+
         let prompt = """
-        You are a spaced-recall coach. Build a Leitner-style flashcard deck for "\(topic)" from the source material below. Suggest an initial box (1-5) for each card based on how core or advanced it is — core/foundational facts in box 1, advanced/nuanced in 4-5.
+        You are an expert flashcard author. Build Leitner-style flashcards for "\(topic)" using ONLY the source material below.
 
         Source material:
         \(sourceContext)
 
+        Generate a MIX of card types — every deck should include several of each:
+        - "definition"   — define a key term in your own words
+        - "explanation"  — explain what something does or means
+        - "fill_blank"   — a sentence with one blank "____" the student must fill in
+        - "why"          — ask why something happens or matters
+        - "process"      — ask the steps or sequence of a process
+
+        Difficulty rules:
+        - "easy"   → direct recall, basic definitions
+        - "medium" → applied understanding or explanation
+        - "hard"   → multi-step reasoning, "why", synthesis
+
+        Quality rules:
+        - Each card targets ONE meaningful concept. No vague "What is mentioned…" prompts.
+        - Rephrase into simple, clear language. Do NOT copy long sentences from the source.
+        - Front under 12 words. Back must be 1-2 short lines (under 30 words). Recall, not recognition.
+        - Generate roughly \(targetCount) cards (~1 per 80-120 words). Prioritize the most important concepts.
+        - Deduplicate near-identical cards; keep variety across cardType and difficulty.
+
+        All cards start in box = 1.
+
         Return ONLY valid JSON in this exact shape:
         {
+          "intro": "one-sentence framing for this deck",
           "cards": [
-            { "front": "short prompt", "back": "1-2 sentence answer", "suggestedBox": 1 }
-          ],
-          "intro": "one-sentence intro framing why these cards"
+            {
+              "id": "stable short id, e.g. 'card-1'",
+              "front": "short prompt",
+              "back": "1-2 line answer in plain language",
+              "cardType": "definition",
+              "difficulty": "easy",
+              "box": 1,
+              "sourceId": "\(sourceId)"
+            }
+          ]
         }
 
-        Requirements:
-        - 6-10 cards. Front under 8 words. Back under 30 words.
-        - suggestedBox is an integer 1-5.
-        - Stay grounded. No invented facts.
-        - No markdown, no extra keys, no fences.
+        - cardType MUST be one of: definition, explanation, fill_blank, why, process
+        - difficulty MUST be one of: easy, medium, hard
+        - box must be the integer 1
+        - sourceId must equal "\(sourceId)" exactly
+        - No markdown fences and no extra keys.
         """
 
         let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
-        return parseJSON(result, fallback: LeitnerDeck(cards: [], intro: "Boxed-cards review."))
+        let deck = parseJSON(result, fallback: LeitnerDeck(cards: [], intro: "Boxed-cards review."))
+        return LeitnerDeck(
+            cards: filterFlashcards(deck.cards, sourceId: sourceId),
+            intro: deck.intro
+        )
+    }
+
+    private func filterFlashcards(_ cards: [LeitnerCard], sourceId: String) -> [LeitnerCard] {
+        let validTypes: Set<String> = ["definition", "explanation", "fill_blank", "why", "process"]
+        let validDifficulties: Set<String> = ["easy", "medium", "hard"]
+        var seenFronts = Set<String>()
+        var result: [LeitnerCard] = []
+        var counter = 0
+        for card in cards {
+            let trimmedFront = card.front.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !trimmedFront.isEmpty else { continue }
+            guard !card.back.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            guard seenFronts.insert(trimmedFront).inserted else { continue }
+            counter += 1
+            let normalizedType = validTypes.contains(card.cardType) ? card.cardType : "explanation"
+            let normalizedDifficulty = validDifficulties.contains(card.difficulty) ? card.difficulty : "medium"
+            let normalizedId = card.id.isEmpty ? "card-\(counter)" : card.id
+            result.append(LeitnerCard(
+                id: normalizedId,
+                front: card.front,
+                back: card.back,
+                cardType: normalizedType,
+                difficulty: normalizedDifficulty,
+                box: 1,
+                sourceId: sourceId
+            ))
+        }
+        return result
     }
 
     // MARK: - Spaced Repetition
