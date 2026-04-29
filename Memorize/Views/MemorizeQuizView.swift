@@ -162,18 +162,6 @@ struct MemorizeQuizView: View {
                 .padding(.horizontal, AppSpacing.md)
             }
 
-            // Voice hint
-            if question.selectedIndex == nil {
-                HStack(spacing: 6) {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 12))
-                    Text("Say A, B, C, or D to answer")
-                        .font(AppTypography.caption)
-                }
-                .foregroundColor(Color(hex: "8D958E"))
-                .padding(.top, AppSpacing.xs)
-            }
-
             Spacer()
 
             // Next / See Results button

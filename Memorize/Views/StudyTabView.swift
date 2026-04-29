@@ -41,13 +41,6 @@ struct TutorMethodCard: Identifiable {
             detail: "3 steps · Notes",
             icon: "note.text",
             tone: Color(hex: "8C7E3A")
-        ),
-        TutorMethodCard(
-            id: "spaced",
-            title: "Spaced Repetition",
-            detail: "Today · 8 due",
-            icon: "calendar",
-            tone: Color(hex: "4F8C5C")
         )
     ]
 }

@@ -129,6 +129,27 @@ class ProjectDetailViewModel: ObservableObject {
         storage.updateBook(book)
     }
 
+    func addUserNote(title: String, body: String) {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty || !trimmedBody.isEmpty else { return }
+
+        let resolvedTitle: String
+        if !trimmedTitle.isEmpty {
+            resolvedTitle = trimmedTitle
+        } else {
+            let firstLine = trimmedBody.split(separator: "\n").first.map(String.init) ?? trimmedBody
+            resolvedTitle = String(firstLine.prefix(60))
+        }
+
+        let note = GeneratedNote(
+            title: resolvedTitle,
+            body: trimmedBody,
+            mode: .userNote
+        )
+        saveGeneratedNote(note)
+    }
+
     func renameNote(id: UUID, to newTitle: String) {
         let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,

@@ -1922,6 +1922,8 @@ private struct NotesTabView: View {
     @ObservedObject var viewModel: ProjectDetailViewModel
     @State private var selectedNote: GeneratedNote?
     @State private var notePendingDelete: GeneratedNote?
+    @State private var quickNote: String = ""
+    @State private var showCompose = false
 
     private var notes: [GeneratedNote] {
         viewModel.book.notes.sorted { $0.createdAt > $1.createdAt }
@@ -1930,6 +1932,19 @@ private struct NotesTabView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AppSpacing.md) {
+                Text("memorize.notes".localized)
+                    .font(AppTypography.title2)
+                    .foregroundColor(Color(hex: "1F2420"))
+                    .padding(.top, AppSpacing.lg)
+
+                Text("Auto-generated from your Learn sessions — plus anything you write yourself.")
+                    .font(.system(size: 14, weight: .regular, design: .rounded))
+                    .foregroundColor(Color(hex: "6E776F"))
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                quickNoteBar
+
                 if notes.isEmpty {
                     VStack(spacing: AppSpacing.md) {
                         Image(systemName: "note.text")
@@ -1944,13 +1959,14 @@ private struct NotesTabView: View {
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 70)
+                    .padding(.vertical, 50)
                     .padding(.horizontal, AppSpacing.lg)
                 } else {
-                    Text("memorize.notes".localized)
-                        .font(AppTypography.title2)
-                        .foregroundColor(Color(hex: "1F2420"))
-                        .padding(.top, AppSpacing.lg)
+                    Text("ALL NOTES")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .tracking(0.6)
+                        .foregroundColor(Color(hex: "8D958E"))
+                        .padding(.top, AppSpacing.sm)
 
                     ForEach(notes) { note in
                         SavedNoteCard(
@@ -1967,6 +1983,15 @@ private struct NotesTabView: View {
             }
             .padding(.horizontal, AppSpacing.md)
             .padding(.bottom, AppSpacing.xl)
+        }
+        .sheet(isPresented: $showCompose) {
+            NewNoteComposeSheet(
+                initialBody: quickNote
+            ) { title, body in
+                viewModel.addUserNote(title: title, body: body)
+                quickNote = ""
+            }
+            .presentationDetents([.large])
         }
         .sheet(item: $selectedNote) { note in
             SavedNoteDetailView(
@@ -2007,6 +2032,146 @@ private struct NotesTabView: View {
                 }
             }
         )
+    }
+
+    private var quickNoteBar: some View {
+        HStack(spacing: 10) {
+            ZStack(alignment: .leading) {
+                if quickNote.isEmpty {
+                    Text("Jot a quick note…")
+                        .font(.system(size: 15, weight: .regular, design: .rounded))
+                        .foregroundColor(Color(hex: "8D958E"))
+                        .padding(.horizontal, 16)
+                        .allowsHitTesting(false)
+                }
+                TextField("", text: $quickNote)
+                    .font(.system(size: 15, weight: .regular, design: .rounded))
+                    .foregroundColor(Color(hex: "1F2420"))
+                    .tint(Color(hex: "276B32"))
+                    .padding(.horizontal, 16)
+                    .submitLabel(.done)
+                    .onSubmit { saveQuickNoteIfReady() }
+            }
+            .frame(height: 44)
+            .background(Color.white)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+
+            Button {
+                showCompose = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Color(hex: "1F2420"))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func saveQuickNoteIfReady() {
+        let trimmed = quickNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        viewModel.addUserNote(title: "", body: trimmed)
+        quickNote = ""
+    }
+}
+
+private struct NewNoteComposeSheet: View {
+    let initialBody: String
+    let onSave: (String, String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var bodyText: String = ""
+
+    private var canSave: Bool {
+        !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("TITLE")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .tracking(0.6)
+                            .foregroundColor(Color(hex: "8D958E"))
+                        ZStack(alignment: .leading) {
+                            if title.isEmpty {
+                                Text("Give it a title…")
+                                    .font(.system(size: 17, weight: .regular, design: .rounded))
+                                    .foregroundColor(Color(hex: "8D958E"))
+                                    .padding(.horizontal, 14)
+                                    .allowsHitTesting(false)
+                            }
+                            TextField("", text: $title)
+                                .font(.system(size: 17, weight: .regular, design: .rounded))
+                                .foregroundColor(Color(hex: "1F2420"))
+                                .tint(Color(hex: "276B32"))
+                                .padding(14)
+                        }
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("NOTE")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .tracking(0.6)
+                            .foregroundColor(Color(hex: "8D958E"))
+                        ZStack(alignment: .topLeading) {
+                            if bodyText.isEmpty {
+                                Text("Start typing…")
+                                    .font(.system(size: 16, weight: .regular, design: .rounded))
+                                    .foregroundColor(Color(hex: "A5AAA4"))
+                                    .padding(.horizontal, 18)
+                                    .padding(.vertical, 18)
+                            }
+                            TextEditor(text: $bodyText)
+                                .font(.system(size: 16, weight: .regular, design: .rounded))
+                                .foregroundColor(Color(hex: "1F2420"))
+                                .tint(Color(hex: "276B32"))
+                                .scrollContentBackground(.hidden)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .frame(minHeight: 280)
+                        }
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+                    }
+                }
+                .padding(20)
+            }
+            .background(AppColors.memorizeBackground.ignoresSafeArea())
+            .navigationTitle("New note")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundColor(Color(hex: "6E776F"))
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        onSave(title, bodyText)
+                        dismiss()
+                    } label: {
+                        Text("Save note")
+                            .fontWeight(.semibold)
+                    }
+                    .disabled(!canSave)
+                    .foregroundColor(canSave ? Color(hex: "276B32") : Color(hex: "A5AAA4"))
+                }
+            }
+            .toolbarColorScheme(.light, for: .navigationBar)
+        }
+        .onAppear { bodyText = initialBody }
     }
 }
 
@@ -2059,20 +2224,10 @@ private struct SavedNoteCard: View {
 
                 Spacer()
 
-                Text("memorize.notes_read".localized)
-                    .font(AppTypography.caption)
-                    .foregroundColor(Color(hex: "6E776F"))
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(Color(hex: "8D958E"))
             }
-
-            Text(note.previewText)
-                .font(AppTypography.subheadline)
-                .foregroundColor(Color(hex: "1F2420").opacity(0.74))
-                .lineSpacing(3)
-                .lineLimit(4)
-                .multilineTextAlignment(.leading)
         }
         .padding(AppSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2105,6 +2260,8 @@ private struct SavedNoteCard: View {
             return "mic.fill"
         case .studyGuide:
             return "book.closed.fill"
+        case .userNote:
+            return "pencil.line"
         }
     }
 }

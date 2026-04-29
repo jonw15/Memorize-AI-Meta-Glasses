@@ -135,16 +135,16 @@ struct SourcesTabView: View {
     }
 
     private var sourcesHeader: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("memorize.sources".localized)
-                    .font(.system(size: 36, weight: .regular, design: .serif))
+                    .font(.system(size: 28, weight: .regular, design: .serif))
                     .foregroundColor(Color(hex: "1F2420"))
 
                 Text("memorize.sources_sheet_desc".localized)
-                    .font(.system(size: 21, weight: .regular, design: .rounded))
+                    .font(.system(size: 14, weight: .regular, design: .rounded))
                     .foregroundColor(Color(hex: "8D958E"))
-                    .lineSpacing(2)
+                    .lineSpacing(1)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -154,9 +154,9 @@ struct SourcesTabView: View {
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 17, weight: .medium))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundColor(Color(hex: "1F2420"))
-                    .frame(width: 46, height: 46)
+                    .frame(width: 32, height: 32)
                     .background(Color.white.opacity(0.9))
                     .clipShape(Circle())
                     .overlay(
@@ -169,7 +169,15 @@ struct SourcesTabView: View {
     }
 
     private var actionTiles: some View {
-        HStack(spacing: 14) {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: 10),
+                GridItem(.flexible(), spacing: 10),
+                GridItem(.flexible(), spacing: 10),
+                GridItem(.flexible(), spacing: 10)
+            ],
+            spacing: 10
+        ) {
             sourceActionTile(
                 icon: "arrow.up.to.line",
                 title: "memorize.upload_pdf".localized,
@@ -199,6 +207,16 @@ struct SourcesTabView: View {
             ) {
                 showCameraCapture = true
             }
+
+            sourceActionTile(
+                icon: "play.rectangle.fill",
+                title: "YouTube",
+                tint: Color(hex: "FCE3E3"),
+                foreground: Color(hex: "B0444C")
+            ) {
+                viewModel.youtubeImportError = nil
+                showYouTubeImporter = true
+            }
         }
     }
 
@@ -210,47 +228,47 @@ struct SourcesTabView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(spacing: 18) {
+            VStack(spacing: 10) {
                 Image(systemName: icon)
-                    .font(.system(size: 24, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(foreground)
-                    .frame(width: 58, height: 58)
+                    .frame(width: 40, height: 40)
                     .background(tint)
-                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
 
                 Text(title)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundColor(Color(hex: "1F2420"))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.78)
+                    .minimumScaleFactor(0.7)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 22)
+            .padding(.vertical, 14)
             .background(Color.white.opacity(0.95))
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 5)
+            .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
         }
         .buttonStyle(.plain)
     }
 
     private var projectSourcesSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 7) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
                 Text("memorize.in_this_project".localized)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .tracking(0.7)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .tracking(0.6)
                     .foregroundColor(Color(hex: "8D958E"))
 
                 Text("·")
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
                     .foregroundColor(Color(hex: "8D958E").opacity(0.7))
 
                 Text("\(projectSourceCount)")
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
                     .foregroundColor(Color(hex: "8D958E"))
             }
 
@@ -368,34 +386,34 @@ struct SourcesTabView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 18) {
+            HStack(spacing: 12) {
                 Image(systemName: icon)
-                    .font(.system(size: 23, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(foreground)
-                    .frame(width: 60, height: 60)
+                    .frame(width: 40, height: 40)
                     .background(tint)
-                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(category)
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
                         .tracking(0.5)
                         .foregroundColor(Color(hex: "A0A49D"))
 
                     Text(title)
-                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
                         .foregroundColor(Color(hex: "1F2420"))
                         .lineLimit(1)
                         .minimumScaleFactor(0.76)
 
                     Text(detail)
-                        .font(.system(size: 17, weight: .regular, design: .rounded))
+                        .font(.system(size: 12, weight: .regular, design: .rounded))
                         .foregroundColor(Color(hex: "8D958E"))
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
                 }
 
-                Spacer(minLength: 8)
+                Spacer(minLength: 6)
 
                 if let onDelete {
                     Menu {
@@ -404,24 +422,24 @@ struct SourcesTabView: View {
                         }
                     } label: {
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(Color(hex: "9DA49D"))
                     }
                 } else {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(Color(hex: "9DA49D"))
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 18)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .background(Color.white.opacity(0.95))
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.055), radius: 10, x: 0, y: 5)
+            .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
         }
         .buttonStyle(.plain)
     }
@@ -709,15 +727,29 @@ struct YouTubeLinkImportView: View {
                     .foregroundColor(Color(hex: "6E776F"))
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                TextField("memorize.youtube_link_placeholder".localized, text: $link)
-                    .font(AppTypography.body)
-                    .foregroundColor(Color(hex: "1F2420"))
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.URL)
-                    .autocorrectionDisabled()
-                    .padding(AppSpacing.sm)
-                    .background(Color.white.opacity(0.94))
-                    .cornerRadius(AppCornerRadius.md)
+                ZStack(alignment: .leading) {
+                    if link.isEmpty {
+                        Text("memorize.youtube_link_placeholder".localized)
+                            .font(AppTypography.body)
+                            .foregroundColor(Color(hex: "8D958E"))
+                            .padding(.horizontal, AppSpacing.sm)
+                            .allowsHitTesting(false)
+                    }
+                    TextField("", text: $link)
+                        .font(AppTypography.body)
+                        .foregroundColor(Color(hex: "1F2420"))
+                        .tint(Color(hex: "276B32"))
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                        .autocorrectionDisabled()
+                        .padding(AppSpacing.sm)
+                }
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: AppCornerRadius.md, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppCornerRadius.md, style: .continuous)
+                        .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+                )
 
                 if let errorMessage, !errorMessage.isEmpty {
                     Text(errorMessage)

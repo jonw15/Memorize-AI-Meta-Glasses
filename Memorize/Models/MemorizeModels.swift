@@ -108,6 +108,7 @@ enum GeneratedNoteKind: String, Codable {
     case quiz
     case voiceSummary
     case studyGuide
+    case userNote
 
     var displayTitle: String {
         switch self {
@@ -127,6 +128,8 @@ enum GeneratedNoteKind: String, Codable {
             return "memorize.voice_summary".localized
         case .studyGuide:
             return "Study guide"
+        case .userNote:
+            return "My note"
         }
     }
 
@@ -148,6 +151,8 @@ enum GeneratedNoteKind: String, Codable {
             return "voice summary study mode"
         case .studyGuide:
             return "study guide"
+        case .userNote:
+            return "user-written note"
         }
     }
 }

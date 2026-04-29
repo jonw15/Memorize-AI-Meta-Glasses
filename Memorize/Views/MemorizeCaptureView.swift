@@ -2450,7 +2450,7 @@ struct MemorizeReadAloudView: View {
 
                 Text(bookTitle)
                     .font(AppTypography.title2)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .padding(.horizontal, AppSpacing.lg)
@@ -2465,17 +2465,17 @@ struct MemorizeReadAloudView: View {
 
                 Text("memorize.read_aloud_header".localized)
                     .font(AppTypography.subheadline)
-                    .foregroundColor(Color.white.opacity(0.6))
+                    .foregroundColor(Color(hex: "1F2420").opacity(0.6))
 
                 // Loading indicator
                 if !hasStartedPlaying {
                     HStack(spacing: 8) {
                         ProgressView()
-                            .tint(.white)
+                            .tint(Color(hex: "1F2420"))
                             .scaleEffect(0.8)
                         Text("memorize.read_aloud_loading".localized)
                             .font(AppTypography.caption)
-                            .foregroundColor(Color.white.opacity(0.6))
+                            .foregroundColor(Color(hex: "1F2420").opacity(0.6))
                     }
                     .padding(AppSpacing.md)
                 }
@@ -2502,11 +2502,15 @@ struct MemorizeReadAloudView: View {
                 } label: {
                     Text("memorize.done".localized)
                         .font(AppTypography.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color.white.opacity(0.1))
+                        .background(Color.white)
                         .cornerRadius(AppCornerRadius.md)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppCornerRadius.md)
+                                .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+                        )
                 }
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.bottom, AppSpacing.lg)
@@ -2520,7 +2524,7 @@ struct MemorizeReadAloudView: View {
                         disconnectAndDismiss()
                     } label: {
                         Image(systemName: "chevron.left")
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -2528,11 +2532,11 @@ struct MemorizeReadAloudView: View {
                         showVoicePicker = true
                     } label: {
                         Image(systemName: "person.crop.circle")
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                     }
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
         }
         .sheet(isPresented: $showVoicePicker) {
             GeminiVoicePickerView(selectedVoice: $selectedVoice, accent: readAloudAccent)
@@ -2577,7 +2581,7 @@ struct MemorizeReadAloudView: View {
                 } label: {
                     Image(systemName: "gobackward.15")
                         .font(.system(size: 28, weight: .medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                 }
 
                 // Play / Pause
@@ -2595,7 +2599,7 @@ struct MemorizeReadAloudView: View {
                 } label: {
                     Image(systemName: "goforward.15")
                         .font(.system(size: 28, weight: .medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                 }
             }
             .padding(.vertical, AppSpacing.sm)
