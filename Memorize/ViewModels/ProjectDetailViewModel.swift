@@ -129,6 +129,15 @@ class ProjectDetailViewModel: ObservableObject {
         storage.updateBook(book)
     }
 
+    func renameNote(id: UUID, to newTitle: String) {
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let index = book.notes.firstIndex(where: { $0.id == id }) else { return }
+        book.notes[index].title = trimmed
+        book.updatedAt = Date()
+        storage.updateBook(book)
+    }
+
     private func autoDetectTitle() {
         let pages = book.allPages.filter { $0.status == .completed }
         guard !pages.isEmpty else { return }
@@ -399,7 +408,26 @@ class ProjectDetailViewModel: ObservableObject {
     }
 
     func saveGeneratedNote(_ note: GeneratedNote) {
-        book.notes.insert(note, at: 0)
+        let prefix = note.mode.displayTitle
+        let trimmedTitle = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newTitle: String
+        if trimmedTitle.isEmpty {
+            newTitle = prefix
+        } else if trimmedTitle.localizedCaseInsensitiveContains(prefix) {
+            newTitle = trimmedTitle
+        } else {
+            newTitle = "\(prefix) · \(trimmedTitle)"
+        }
+
+        let titledNote = GeneratedNote(
+            id: note.id,
+            title: newTitle,
+            body: note.body,
+            mode: note.mode,
+            createdAt: note.createdAt
+        )
+
+        book.notes.insert(titledNote, at: 0)
         book.updatedAt = Date()
 
         if storage.bookExists(book.id) {

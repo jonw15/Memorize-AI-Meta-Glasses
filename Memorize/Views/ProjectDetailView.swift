@@ -146,7 +146,8 @@ struct ProjectDetailView: View {
                     Button {
                         dismiss()
                     } label: {
-                        Image(systemName: "chevron.left")
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
                             .foregroundColor(Color(hex: "1F2420"))
                     }
                 }
@@ -613,6 +614,7 @@ private struct CreateTabView: View {
             CreateCustomizationSheet(
                 kind: kind,
                 sourceBundles: infographicSourceBundles,
+                savedNotes: viewModel.book.notes,
                 onGenerate: handleCustomization
             )
             .presentationDetents([.large])
@@ -664,10 +666,13 @@ private struct CreateTabView: View {
                 }
 
             FlowLayout(spacing: 8, lineSpacing: 8) {
-                promptChip("8-slide deck")
-                promptChip("Study guide")
-                promptChip("Infographic")
-                promptChip("Paper")
+                promptChip("8-slide deck", action: { customizationKind = .slideDeck })
+                promptChip("Study guide", action: { customizationKind = .studyGuide })
+                promptChip("Infographic", action: {
+                    infographicBundlesOverride = nil
+                    showInfographics = true
+                })
+                promptChip("Paper", action: { customizationKind = .paper })
             }
         }
         .padding(20)
@@ -680,18 +685,23 @@ private struct CreateTabView: View {
         )
     }
 
-    private func promptChip(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 15, weight: .bold, design: .rounded))
-            .foregroundColor(Color(hex: "943C4A"))
-            .padding(.horizontal, 13)
-            .padding(.vertical, 7)
-            .background(Color.white.opacity(0.74))
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(Color(hex: "FF98A6"), lineWidth: 1)
-            )
+    private func promptChip(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundColor(Color(hex: "943C4A"))
+                .padding(.horizontal, 13)
+                .padding(.vertical, 7)
+                .background(Color.white.opacity(0.74))
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(Color(hex: "FF98A6"), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(!hasContent)
+        .opacity(hasContent ? 1 : 0.55)
     }
 
     private var makeSection: some View {
@@ -951,6 +961,7 @@ private struct CreateCustomization {
     let kind: CreateOutputKind
     let length: String
     let selectedBundles: [InfographicSourceBundle]
+    let selectedNotes: [GeneratedNote]
     let focusNotes: String
 
     var instructions: String {
@@ -961,6 +972,13 @@ private struct CreateCustomization {
             "Target length: \(length)",
             "Use these selected sources or notes: \(sourceNames.isEmpty ? "selected project sources" : sourceNames)"
         ]
+
+        if !selectedNotes.isEmpty {
+            let noteBlock = selectedNotes.map { note in
+                "[\(note.mode.displayTitle)] \(note.title)\n\(note.body)"
+            }.joined(separator: "\n\n---\n\n")
+            lines.append("Reference these previously saved notes:\n\(noteBlock)")
+        }
 
         if !trimmedNotes.isEmpty {
             lines.append("Learner focus notes: \(trimmedNotes)")
@@ -984,20 +1002,24 @@ private struct CreateCustomization {
 private struct CreateCustomizationSheet: View {
     let kind: CreateOutputKind
     let sourceBundles: [InfographicSourceBundle]
+    let savedNotes: [GeneratedNote]
     let onGenerate: (CreateCustomization) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedLength: String
     @State private var selectedSourceIDs: Set<UUID>
+    @State private var selectedNoteIDs: Set<UUID> = []
     @State private var focusNotes = ""
 
     init(
         kind: CreateOutputKind,
         sourceBundles: [InfographicSourceBundle],
+        savedNotes: [GeneratedNote] = [],
         onGenerate: @escaping (CreateCustomization) -> Void
     ) {
         self.kind = kind
         self.sourceBundles = sourceBundles
+        self.savedNotes = savedNotes
         self.onGenerate = onGenerate
         _selectedLength = State(initialValue: kind.defaultLength)
         _selectedSourceIDs = State(initialValue: Set(sourceBundles.map(\.id)))
@@ -1007,8 +1029,12 @@ private struct CreateCustomizationSheet: View {
         sourceBundles.filter { selectedSourceIDs.contains($0.id) }
     }
 
+    private var selectedSavedNotes: [GeneratedNote] {
+        savedNotes.filter { selectedNoteIDs.contains($0.id) }
+    }
+
     private var canGenerate: Bool {
-        !selectedBundles.isEmpty
+        !selectedBundles.isEmpty || !selectedSavedNotes.isEmpty
     }
 
     var body: some View {
@@ -1027,6 +1053,9 @@ private struct CreateCustomizationSheet: View {
                         header
                         lengthSection
                         sourcesSection
+                        if !savedNotes.isEmpty {
+                            notesPickerSection
+                        }
                         notesSection
                     }
                     .padding(.horizontal, 24)
@@ -1039,6 +1068,62 @@ private struct CreateCustomizationSheet: View {
                 generateBar
             }
         }
+    }
+
+    private var notesPickerSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                sectionLabel("Saved notes to reference")
+                Spacer()
+                Text("\(selectedSavedNotes.count)")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundColor(Color(hex: "7F877F"))
+            }
+
+            VStack(spacing: 10) {
+                ForEach(savedNotes) { note in
+                    savedNoteRow(note)
+                }
+            }
+        }
+    }
+
+    private func savedNoteRow(_ note: GeneratedNote) -> some View {
+        let isSelected = selectedNoteIDs.contains(note.id)
+        return Button {
+            if isSelected {
+                selectedNoteIDs.remove(note.id)
+            } else {
+                selectedNoteIDs.insert(note.id)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(isSelected ? Color(hex: "6FC985") : Color(hex: "A5AAA4"))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(note.title)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(Color(hex: "1F2420"))
+                        .lineLimit(2)
+
+                    Text(note.formattedDate)
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundColor(Color(hex: "8D958E"))
+                }
+
+                Spacer()
+            }
+            .padding(15)
+            .background(Color.white.opacity(0.94))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(isSelected ? Color(hex: "6FC985").opacity(0.55) : Color(hex: "E8E1D8"), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private var header: some View {
@@ -1210,6 +1295,7 @@ private struct CreateCustomizationSheet: View {
                     kind: kind,
                     length: selectedLength,
                     selectedBundles: selectedBundles,
+                    selectedNotes: selectedSavedNotes,
                     focusNotes: focusNotes
                 )
                 onGenerate(config)
@@ -1888,6 +1974,12 @@ private struct NotesTabView: View {
                 onDelete: {
                     viewModel.deleteNote(id: note.id)
                     selectedNote = nil
+                },
+                onRename: { newTitle in
+                    viewModel.renameNote(id: note.id, to: newTitle)
+                    if let updated = viewModel.book.notes.first(where: { $0.id == note.id }) {
+                        selectedNote = updated
+                    }
                 }
             )
         }
@@ -2020,8 +2112,11 @@ private struct SavedNoteCard: View {
 private struct SavedNoteDetailView: View {
     let note: GeneratedNote
     let onDelete: () -> Void
+    var onRename: (String) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
+    @State private var showRenameAlert = false
+    @State private var renameDraft: String = ""
 
     private var shareText: String {
         "\(note.title)\n\n\(note.body)"
@@ -2040,10 +2135,24 @@ private struct SavedNoteDetailView: View {
                             .background(Color(hex: "D6F4D8"))
                             .cornerRadius(AppCornerRadius.sm)
 
-                        Text(note.title)
-                            .font(AppTypography.title2)
-                            .foregroundColor(Color(hex: "1F2420"))
-                            .fixedSize(horizontal: false, vertical: true)
+                        Button {
+                            renameDraft = note.title
+                            showRenameAlert = true
+                        } label: {
+                            HStack(alignment: .top, spacing: 8) {
+                                Text(note.title)
+                                    .font(AppTypography.title2)
+                                    .foregroundColor(Color(hex: "1F2420"))
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(Color(hex: "8D958E"))
+                                    .padding(.top, 6)
+                                Spacer(minLength: 0)
+                            }
+                        }
+                        .buttonStyle(.plain)
 
                         Text(note.formattedDate)
                             .font(AppTypography.caption)
@@ -2081,6 +2190,14 @@ private struct SavedNoteDetailView: View {
                 }
             }
             .toolbarColorScheme(.light, for: .navigationBar)
+            .alert("Rename note", isPresented: $showRenameAlert) {
+                TextField("Note title", text: $renameDraft)
+                Button("Save") {
+                    let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { onRename(trimmed) }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
         }
     }
 }
@@ -2461,19 +2578,19 @@ private struct GeneratedPaperDraftView: View {
             .navigationTitle("Preview")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 12) {
-                        ShareLink(item: shareText) {
-                            Image(systemName: "square.and.arrow.up")
-                                .foregroundColor(Color(hex: "1F2420"))
-                        }
-                        Button("Done") {
-                            onClose()
-                            dismiss()
-                        }
-                        .fontWeight(.semibold)
-                        .foregroundColor(Color(hex: "2F6A3F"))
+                ToolbarItem(placement: .navigationBarLeading) {
+                    ShareLink(item: shareText) {
+                        Image(systemName: "square.and.arrow.up")
+                            .foregroundColor(Color(hex: "1F2420"))
                     }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        onClose()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color(hex: "2F6A3F"))
                 }
             }
             .toolbarColorScheme(.light, for: .navigationBar)

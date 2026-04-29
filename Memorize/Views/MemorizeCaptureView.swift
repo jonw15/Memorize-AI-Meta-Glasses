@@ -1879,6 +1879,7 @@ struct MemorizeInfographicsView: View {
                             .foregroundColor(Color(hex: "8D958E"))
                     }
                 }
+                .frame(maxWidth: .infinity)
                 Spacer()
             } else if infographics.isEmpty && !isGenerating {
                 Spacer()
@@ -1894,6 +1895,7 @@ struct MemorizeInfographicsView: View {
                             .padding(.horizontal, AppSpacing.lg)
                     }
                 }
+                .frame(maxWidth: .infinity)
                 Spacer()
             } else {
                 ScrollView {
@@ -1966,6 +1968,7 @@ struct MemorizeInfographicsView: View {
             .padding(.horizontal, AppSpacing.md)
             .padding(.bottom, AppSpacing.lg)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func orientationButton(_ option: InfographicOrientation, height: CGFloat) -> some View {

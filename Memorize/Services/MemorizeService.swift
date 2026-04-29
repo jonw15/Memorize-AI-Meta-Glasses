@@ -204,6 +204,244 @@ struct MemorizeService {
         )
     }
 
+    // MARK: - Feynman Concept Intro
+
+    func generateFeynmanConcept(topic: String, sourceContext: String) async throws -> String {
+        let prompt = """
+        You are a tutor introducing the topic "\(topic)" using ONLY the source material below. Write a short, plain-language explanation a curious 12-year-old could grasp before they try to teach it back.
+
+        Source material:
+        \(sourceContext)
+
+        Return ONLY valid JSON in this exact shape:
+        { "concept": "3-5 sentences in plain English. Define the term, name the key parts, and end with a single sentence about why it matters." }
+
+        Requirements:
+        - Strictly grounded in the source. No invented facts.
+        - 3-5 sentences total. Plain words. No markdown.
+        - No fences, no extra keys.
+        """
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        struct Wrap: Decodable { let concept: String }
+        return parseJSON(result, fallback: Wrap(concept: "")).concept
+    }
+
+    // MARK: - Mnemonics
+
+    struct MnemonicAngles: Codable {
+        let acronymTitle: String
+        let acronymBody: String
+        let storyTitle: String
+        let storyBody: String
+        let palaceTitle: String
+        let palaceBody: String
+    }
+
+    func generateMnemonics(topic: String, sourceContext: String) async throws -> MnemonicAngles {
+        let prompt = """
+        You are a memory coach. Build three concrete mnemonic angles for the topic "\(topic)" using ONLY the source material below. Each angle must be specific to this source.
+
+        Source material:
+        \(sourceContext)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "acronymTitle": "the acronym in quotes, e.g. \\\"PQCPN\\\"",
+          "acronymBody": "what each letter stands for + a short pronounceable mnemonic phrase, all in 1-2 sentences",
+          "storyTitle": "a short story hook, 4-7 words",
+          "storyBody": "a 2-3 sentence vivid mini-story that walks through the concept end-to-end with concrete imagery",
+          "palaceTitle": "memory-palace location prompt, 3-6 words (e.g. \\\"Walk through your kitchen\\\")",
+          "palaceBody": "map 4-6 key terms from \(topic) onto landmarks in that location, format as 'Landmark = Term' pairs separated by '. '"
+        }
+
+        Requirements:
+        - All content must be grounded in the source material above. Do not invent terms.
+        - Keep each body 1-3 sentences max.
+        - No markdown, no extra keys, no fences.
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return parseJSON(result, fallback: MnemonicAngles(
+            acronymTitle: "—",
+            acronymBody: "Couldn't generate this angle.",
+            storyTitle: "—",
+            storyBody: "Couldn't generate this angle.",
+            palaceTitle: "—",
+            palaceBody: "Couldn't generate this angle."
+        ))
+    }
+
+    // MARK: - Active Recall
+
+    struct ActiveRecallQuestion: Codable {
+        let prompt: String
+        let answer: String
+    }
+
+    struct ActiveRecallSet: Codable {
+        let questions: [ActiveRecallQuestion]
+        let pep: String
+    }
+
+    func generateActiveRecallSet(topic: String, sourceContext: String) async throws -> ActiveRecallSet {
+        let prompt = """
+        You are a retrieval-practice coach. Build a 5-question active recall round for the topic "\(topic)" using ONLY the source material below.
+
+        Source material:
+        \(sourceContext)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "questions": [
+            { "prompt": "short question grounded in the source", "answer": "1-2 sentence ideal answer pulled from the source" }
+          ],
+          "pep": "one short encouraging sentence about why retrieval beats re-reading"
+        }
+
+        Requirements:
+        - Exactly 5 questions. Mix recall, application, and tricky-but-fair.
+        - Each prompt under 12 words. Each answer under 30 words.
+        - Stay grounded in the source. No invented facts.
+        - No markdown, no extra keys, no fences.
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return parseJSON(result, fallback: ActiveRecallSet(questions: [], pep: "Try again — pulling from memory is what makes it stick."))
+    }
+
+    // MARK: - Cornell
+
+    struct CornellRow: Codable {
+        let cue: String
+        let body: String
+    }
+
+    struct CornellSet: Codable {
+        let rows: [CornellRow]
+        let summaryStarter: String
+    }
+
+    func generateCornellSet(topic: String, sourceContext: String) async throws -> CornellSet {
+        let prompt = """
+        You are a Cornell-method note coach. Split the source material on "\(topic)" into Cornell-style cue / body rows.
+
+        Source material:
+        \(sourceContext)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "rows": [
+            { "cue": "short cue question or phrase", "body": "1-3 sentence answer pulled from the source" }
+          ],
+          "summaryStarter": "one-sentence opener the student can use to begin their own summary"
+        }
+
+        Requirements:
+        - 4-6 rows. Each cue under 8 words. Each body under 40 words.
+        - Cues should be questions or sharp phrases that probe the body.
+        - Stay grounded. No invented terms.
+        - No markdown, no extra keys, no fences.
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return parseJSON(result, fallback: CornellSet(rows: [], summaryStarter: "In short, this material covers…"))
+    }
+
+    // MARK: - Leitner
+
+    struct LeitnerCard: Codable {
+        let front: String
+        let back: String
+        let suggestedBox: Int
+    }
+
+    struct LeitnerDeck: Codable {
+        let cards: [LeitnerCard]
+        let intro: String
+    }
+
+    func generateLeitnerDeck(topic: String, sourceContext: String) async throws -> LeitnerDeck {
+        let prompt = """
+        You are a spaced-recall coach. Build a Leitner-style flashcard deck for "\(topic)" from the source material below. Suggest an initial box (1-5) for each card based on how core or advanced it is — core/foundational facts in box 1, advanced/nuanced in 4-5.
+
+        Source material:
+        \(sourceContext)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "cards": [
+            { "front": "short prompt", "back": "1-2 sentence answer", "suggestedBox": 1 }
+          ],
+          "intro": "one-sentence intro framing why these cards"
+        }
+
+        Requirements:
+        - 6-10 cards. Front under 8 words. Back under 30 words.
+        - suggestedBox is an integer 1-5.
+        - Stay grounded. No invented facts.
+        - No markdown, no extra keys, no fences.
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return parseJSON(result, fallback: LeitnerDeck(cards: [], intro: "Boxed-cards review."))
+    }
+
+    // MARK: - Spaced Repetition
+
+    struct SpacedReview: Codable {
+        let card: String
+        let answer: String
+        let intervalDays: Int
+    }
+
+    struct SpacedSchedule: Codable {
+        let dueNow: [SpacedReview]
+        let upcoming: [SpacedReview]
+        let intro: String
+    }
+
+    func generateSpacedSchedule(topic: String, sourceContext: String) async throws -> SpacedSchedule {
+        let prompt = """
+        You are a spaced-repetition planner. Build today's review queue + an upcoming preview for "\(topic)" using the source material below.
+
+        Source material:
+        \(sourceContext)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "intro": "one short sentence about what's due today and why",
+          "dueNow": [
+            { "card": "short prompt", "answer": "1-2 sentence answer", "intervalDays": 1 }
+          ],
+          "upcoming": [
+            { "card": "short prompt", "answer": "1-2 sentence answer", "intervalDays": 4 }
+          ]
+        }
+
+        Requirements:
+        - 5-8 cards in dueNow with intervalDays = 1.
+        - 3-6 cards in upcoming with intervalDays in {2, 4, 7, 14}.
+        - Each card prompt under 8 words. Each answer under 30 words.
+        - Stay grounded. No invented facts.
+        - No markdown, no extra keys, no fences.
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return parseJSON(result, fallback: SpacedSchedule(dueNow: [], upcoming: [], intro: "Today's review."))
+    }
+
+    // MARK: - Generic JSON parser
+
+    private func parseJSON<T: Decodable>(_ response: String, fallback: T) -> T {
+        let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        let jsonString = extractJSONObject(from: cleaned) ?? cleaned
+        if let data = jsonString.data(using: .utf8),
+           let parsed = try? JSONDecoder().decode(T.self, from: data) {
+            return parsed
+        }
+        return fallback
+    }
+
     private func parseFeynmanFeedback(from response: String) -> FeynmanFeedback {
         let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
         let jsonString = extractJSONObject(from: cleaned) ?? cleaned
