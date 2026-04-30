@@ -3384,14 +3384,20 @@ struct MemorizePodcastPlayerView: View {
                 pendingListenerTranscript = ""
                 listenerTranscriptTask?.cancel()
             } else {
-                // Interrupt and arm mic — set isAnsweringListenerQuestion
-                // immediately so the onAudioDone from the interrupted
-                // podcast doesn't trigger the continuation path.
+                // Interrupt and arm mic. Set the UI flag synchronously, then
+                // sequence the audio-pipeline calls in a Task with small staggers
+                // so the AVAudioSession isn't reconfigured 3× in the same run-loop
+                // pass (which was freezing the main thread ~50% of the time).
                 isAnsweringListenerQuestion = true
-                service.activateConversationMode(startRecordingIfNeeded: true)
-                service.interruptPlayback(expectServerInterruption: true)
-                service.sendSilentAudioToInterrupt()
-                rearmInteractivePodcastMic(service, activateConversation: false)
+                Task { @MainActor in
+                    service.interruptPlayback(expectServerInterruption: true)
+                    try? await Task.sleep(nanoseconds: 30_000_000)
+                    service.sendSilentAudioToInterrupt()
+                    try? await Task.sleep(nanoseconds: 60_000_000)
+                    service.activateConversationMode(startRecordingIfNeeded: true)
+                    try? await Task.sleep(nanoseconds: 30_000_000)
+                    rearmInteractivePodcastMic(service, activateConversation: false)
+                }
             }
         } label: {
             ZStack {
@@ -3429,8 +3435,13 @@ struct MemorizePodcastPlayerView: View {
 
                     Text(listenerQuestionArmed && !isMuted ? "LISTENING" : "TAP TO INTERRUPT")
                         .font(.system(size: 11, weight: .bold))
-                        .tracking(1.2)
+                        .tracking(1.0)
                         .foregroundColor(Color(hex: "1F2420").opacity(0.9))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                        .padding(.horizontal, 18)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

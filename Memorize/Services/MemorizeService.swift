@@ -1561,12 +1561,12 @@ struct MemorizeService {
             """
         } else {
             prompt = """
-            You are an expert study note writer. Create short, simple AI-generated notes after the learner finishes a \(mode.promptName).
+            You are writing a SHORT note after the learner finishes a \(mode.promptName) session. The note should feel like a quick reflection on what THEY just said and did — not a textbook summary.
 
             Project title:
             \(titleText.isEmpty ? "Untitled project" : titleText)
 
-            Source material:
+            Source material (for fact-checking only — do NOT pad the note with this):
             \(sourceText)
 
             \(interactionSection)
@@ -1576,34 +1576,27 @@ struct MemorizeService {
             Return ONLY valid JSON in this exact shape:
             {
               "title": "short note title",
-              "body": "study notes text"
+              "body": "note text"
             }
 
             Requirements:
-            - The title should be specific to the source and under 8 words.
-            - The body must follow this exact plain-text structure and order:
+            - The title should reference what the learner actually focused on, under 8 words.
+            - The body must be SHORT — under 120 words total.
+            - The body must follow this exact plain-text structure:
 
-              Summary
-              1-2 short sentences summarizing the source topic and main takeaway.
+              What you said
+              2–3 short sentences quoting or paraphrasing the learner's actual words from the session. Be specific to what they said. If they were unsure, say so.
 
-              <Specific Topic Heading>
-              1-2 short sentences about the most important concept or discussion point.
+              What to fix
+              1–2 short sentences about the one or two things they got wrong, fuzzy on, or skipped. Reference their actual phrasing.
 
-              Next steps
-              [User] Action title: One simple thing to review or practice next.
-              [AI Tutor] Action title: One short correction, reminder, or follow-up if relevant.
+              Try next
+              One short, concrete thing to do or review next.
 
-              Details
-              2-4 short bullets. Include what the user said/answered/asked and the AI feedback if a session transcript exists.
-
-            - Include only 1-2 specific topic headings between Summary and Next steps.
-            - Topic headings should be short, specific, and written as plain heading lines, not markdown.
-            - The Next steps section must use bracketed owners like [User] or [AI Tutor].
-            - If a session transcript was provided, Details should briefly include what the user said/answered/asked and the AI's feedback, corrections, or coaching.
-            - If no session transcript was provided, Details should focus on source-grounded study details.
+            - If no session transcript was provided, write all three sections from a source-grounded perspective but keep the same headings and the same tight word budget.
             - Do not invent user speech, answers, or AI feedback that is not in the transcript.
-            - Keep the body under 250 words.
-            - Prefer plain language over exhaustive detail.
+            - No bullets, no markdown, no headers other than the three labels above.
+            - Plain English only. No filler ("Today we learned…").
             - No markdown fences and no extra JSON keys.
             """
         }
