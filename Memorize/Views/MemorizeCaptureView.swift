@@ -31,10 +31,13 @@ func clippedMemorizeLiveText(_ text: String, maxChars: Int) -> String {
 
 func buildMemorizeLiveSourceContext(
     from pages: [PageCapture],
-    maxPages: Int,
-    maxCharsPerPage: Int,
-    maxTotalChars: Int
+    maxPages: Int = .max,
+    maxCharsPerPage: Int = .max,
+    maxTotalChars: Int = .max
 ) -> String {
+    // No-cap by default — Gemini Flash's input window comfortably handles even
+    // multi-source projects. Callers can still pass explicit caps if a particular
+    // path needs to keep the prompt small.
     let completedPages = pages.filter { $0.status == .completed }
     guard !completedPages.isEmpty else { return "" }
 
@@ -48,8 +51,9 @@ func buildMemorizeLiveSourceContext(
     }
 
     let sections = selectedPages.compactMap { page -> String? in
-        let excerpt = clippedMemorizeLiveText(page.extractedText, maxChars: maxCharsPerPage)
-        guard !excerpt.isEmpty else { return nil }
+        let raw = page.extractedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+        let excerpt = maxCharsPerPage == .max ? raw : clippedMemorizeLiveText(raw, maxChars: maxCharsPerPage)
         return "--- Page \(page.pageNumber) ---\n\(excerpt)"
     }
 
@@ -60,7 +64,7 @@ func buildMemorizeLiveSourceContext(
         context += "\n\n[Reference notes condensed from \(completedPages.count) pages.]"
     }
 
-    if context.count > maxTotalChars {
+    if maxTotalChars != .max, context.count > maxTotalChars {
         context = clippedMemorizeLiveText(context, maxChars: maxTotalChars)
         context += "\n[... additional context omitted ...]"
     }
@@ -3752,12 +3756,7 @@ struct MemorizePodcastPlayerView: View {
     // MARK: - Gemini Setup
 
     private func setupAndConnect() {
-        let sourceContext = buildMemorizeLiveSourceContext(
-            from: completedPages,
-            maxPages: 20,
-            maxCharsPerPage: 8000,
-            maxTotalChars: 60000
-        )
+        let sourceContext = buildMemorizeLiveSourceContext(from: completedPages)
 
         if sourceContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             errorMessage = "No text content available. Capture some pages first."
@@ -4683,12 +4682,7 @@ struct MemorizeExplainView: View {
     // MARK: - Setup
 
     private func setupAndConnect(summaryText: String) {
-        let sourceContext = buildMemorizeLiveSourceContext(
-            from: pages,
-            maxPages: 6,
-            maxCharsPerPage: 300,
-            maxTotalChars: 3200
-        )
+        let sourceContext = buildMemorizeLiveSourceContext(from: pages)
         let compactSummary = clippedMemorizeLiveText(summaryText, maxChars: 1800)
         let personaInstruction = viewModel.explanationPersona.promptInstruction
 
@@ -5714,12 +5708,7 @@ struct MemorizeInteractView: View {
     // MARK: - Setup
 
     private func setupAndConnect() {
-        let sourceContext = buildMemorizeLiveSourceContext(
-            from: pages,
-            maxPages: 8,
-            maxCharsPerPage: 340,
-            maxTotalChars: 4200
-        )
+        let sourceContext = buildMemorizeLiveSourceContext(from: pages)
 
         let systemPrompt: String
         print("🗣️ [Interact] customSystemPrompt is \(customSystemPrompt == nil ? "nil" : "set (\(customSystemPrompt!.prefix(50))...)")")

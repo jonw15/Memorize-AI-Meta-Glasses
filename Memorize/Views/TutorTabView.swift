@@ -400,12 +400,7 @@ struct TutorTabView: View {
     }
 
     private var sourceContext: String {
-        buildMemorizeLiveSourceContext(
-            from: viewModel.allCompletedPages,
-            maxPages: 8,
-            maxCharsPerPage: 340,
-            maxTotalChars: 4200
-        )
+        buildMemorizeLiveSourceContext(from: viewModel.allCompletedPages)
     }
 
     private var hasContent: Bool {

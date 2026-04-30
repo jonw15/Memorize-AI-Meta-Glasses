@@ -516,15 +516,11 @@ func tutorSourceItems(from book: Book, limit: Int) -> [TutorSourceItem] {
 }
 
 /// Build the full source-context string the tutor mini-apps feed to the AI.
-/// Pulls every uploaded source (and legacy camera pages), combining each source's completed pages
-/// and capping the per-source budget so the prompt stays under typical model limits.
-func tutorFullSourceContext(
-    from book: Book,
-    perSourceCharLimit: Int = 1800,
-    totalCharLimit: Int = 14_000
-) -> String {
+/// Pulls every uploaded source (and legacy camera pages) and concatenates all of their
+/// completed pages — no character cap. Gemini Flash's input window (~1M tokens / ~4M chars)
+/// comfortably handles even a multi-source project.
+func tutorFullSourceContext(from book: Book) -> String {
     var blocks: [String] = []
-    var totalSpent = 0
 
     for source in book.sources {
         let title = source.name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -535,11 +531,7 @@ func tutorFullSourceContext(
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !combined.isEmpty else { continue }
-        let trimmed = String(combined.prefix(perSourceCharLimit))
-        let block = "Source: \(title)\n\(trimmed)"
-        if totalSpent + block.count > totalCharLimit { break }
-        blocks.append(block)
-        totalSpent += block.count
+        blocks.append("Source: \(title)\n\(combined)")
     }
 
     if blocks.isEmpty {
@@ -549,7 +541,7 @@ func tutorFullSourceContext(
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if !legacy.isEmpty {
-            blocks.append("Source: Camera notes\n\(String(legacy.prefix(totalCharLimit)))")
+            blocks.append("Source: Camera notes\n\(legacy)")
         }
     }
 
