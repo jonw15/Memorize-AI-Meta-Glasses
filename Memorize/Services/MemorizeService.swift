@@ -1725,6 +1725,65 @@ struct MemorizeService {
         return parseGeneratedPaper(from: result)
     }
 
+    func generateBulletPoints(
+        from pages: [PageCapture],
+        bookTitle: String,
+        customInstructions: String? = nil
+    ) async throws -> GeneratedPaper {
+        let completedPages = pages.filter { $0.status == .completed }
+        guard !completedPages.isEmpty else {
+            throw NSError(
+                domain: "MemorizeService",
+                code: 11,
+                userInfo: [NSLocalizedDescriptionKey: "No completed pages available for bullet points"]
+            )
+        }
+
+        let sourceText = completedPages
+            .enumerated()
+            .map { "--- Page \($0.offset + 1) ---\n\($0.element.extractedText)" }
+            .joined(separator: "\n\n")
+
+        let titleText = bookTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let customInstructionText = customInstructions?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let customInstructionSection = customInstructionText.isEmpty
+            ? "Generate a clean bulleted list capturing the most important points."
+            : customInstructionText
+
+        let prompt = """
+        You are an expert at distilling source material into a clean, scannable bulleted list.
+
+        Project title:
+        \(titleText.isEmpty ? "Untitled project" : titleText)
+
+        Creation preferences:
+        \(customInstructionSection)
+
+        Source material:
+        \(sourceText)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "title": "short bullet-list title, under 8 words",
+          "body": "organized bulleted list as plain text"
+        }
+
+        Requirements for the body — follow this structure EXACTLY:
+        - ALWAYS group bullets under 2–4 short, specific section headings. Each heading on its own line, plain text, no markdown, no colon, no all-caps. Examples: "Key concepts", "How it works", "Why it matters".
+        - Insert ONE blank line above each heading (except the first one). Insert NO blank line between a heading and its first bullet.
+        - Each bullet starts with "- " followed by ONE tight sentence (under 18 words, no semicolons, ends with a period).
+        - Each section has 3–5 bullets. Never more than 5.
+        - Use a sub-bullet only when truly needed — start it with "  - " (two leading spaces) under its parent.
+        - Do NOT use markdown bullets ("*"), em dashes as bullets, or numbered lists.
+        - No filler bullets, no restating the same idea twice, no meta commentary like "in summary".
+        - Stay strictly grounded in the source. Do not invent facts, names, or numbers.
+        - No markdown fences and no extra JSON keys.
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return parseGeneratedPaper(from: result)
+    }
+
     private func parseQuizQuestions(from response: String) -> [QuizQuestion] {
         let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
         let jsonObjectString = extractJSONObject(from: cleaned)

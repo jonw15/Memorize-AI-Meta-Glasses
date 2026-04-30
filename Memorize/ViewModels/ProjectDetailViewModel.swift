@@ -21,6 +21,7 @@ class ProjectDetailViewModel: ObservableObject {
     @Published var isGeneratingNoteDraft = false
     @Published var isGeneratingSlideDeck = false
     @Published var isGeneratingPaper = false
+    @Published var isGeneratingBulletPoints = false
     @Published var noteGenerationError: String?
     @Published var slideDeckGenerationError: String?
     @Published var paperGenerationError: String?
@@ -547,6 +548,35 @@ class ProjectDetailViewModel: ObservableObject {
     func discardGeneratedPaper() {
         generatedPaperDraft = nil
         paperGenerationError = nil
+    }
+
+    func generateBulletPoints(
+        from pages: [PageCapture],
+        customInstructions: String? = nil
+    ) {
+        let completedPages = pages.filter { $0.status == .completed }
+        guard !completedPages.isEmpty else { return }
+        guard !isGeneratingBulletPoints, !isGeneratingPaper else { return }
+        guard generatedPaperDraft == nil else { return }
+
+        let title = book.title
+        isGeneratingBulletPoints = true
+        paperGenerationError = nil
+
+        Task {
+            do {
+                let result = try await memorizeService.generateBulletPoints(
+                    from: completedPages,
+                    bookTitle: title,
+                    customInstructions: customInstructions
+                )
+                generatedPaperDraft = result
+            } catch {
+                paperGenerationError = error.localizedDescription
+                print("❌ [ProjectDetail] Bullet points generation failed: \(error)")
+            }
+            isGeneratingBulletPoints = false
+        }
     }
 
     func deleteNote(id: UUID) {

@@ -233,7 +233,7 @@ struct ProjectDetailView: View {
 
     @ViewBuilder
     private var noteGenerationOverlay: some View {
-        if viewModel.isGeneratingNoteDraft || viewModel.isGeneratingSlideDeck || viewModel.isGeneratingPaper {
+        if viewModel.isGeneratingNoteDraft || viewModel.isGeneratingSlideDeck || viewModel.isGeneratingPaper || viewModel.isGeneratingBulletPoints {
             VStack {
                 Spacer()
                 HStack(spacing: 10) {
@@ -271,6 +271,9 @@ struct ProjectDetailView: View {
     private var generationStatusText: String {
         if viewModel.isGeneratingSlideDeck {
             return "Generating slide deck..."
+        }
+        if viewModel.isGeneratingBulletPoints {
+            return "Generating bullet points..."
         }
         if viewModel.isGeneratingPaper {
             return "Generating paper..."
@@ -674,6 +677,7 @@ private struct CreateTabView: View {
                     showInfographics = true
                 })
                 promptChip("Paper", action: { customizationKind = .paper })
+                promptChip("Bullet points", action: { customizationKind = .bulletPoints })
             }
         }
         .padding(20)
@@ -757,6 +761,15 @@ private struct CreateTabView: View {
                     foreground: Color(hex: "20657E"),
                     action: { customizationKind = .paper }
                 )
+
+                createCard(
+                    title: "Bullet points",
+                    subtitle: "Key takeaways as a list",
+                    icon: "list.bullet",
+                    tint: Color(hex: "FFE9B8"),
+                    foreground: Color(hex: "8A641F"),
+                    action: { customizationKind = .bulletPoints }
+                )
             }
         }
     }
@@ -805,7 +818,7 @@ private struct CreateTabView: View {
             .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
         }
         .buttonStyle(.plain)
-        .disabled(!hasContent || viewModel.isGeneratingQuiz || viewModel.isGeneratingNoteDraft || viewModel.isGeneratingSlideDeck || viewModel.isGeneratingPaper)
+        .disabled(!hasContent || viewModel.isGeneratingQuiz || viewModel.isGeneratingNoteDraft || viewModel.isGeneratingSlideDeck || viewModel.isGeneratingPaper || viewModel.isGeneratingBulletPoints)
         .opacity(hasContent ? 1 : 0.45)
     }
 
@@ -832,6 +845,11 @@ private struct CreateTabView: View {
             case .studyGuide:
                 viewModel.generateNoteDraft(
                     after: config.kind.noteMode,
+                    from: selectedBundles.flatMap(\.pages),
+                    customInstructions: instructions
+                )
+            case .bulletPoints:
+                viewModel.generateBulletPoints(
                     from: selectedBundles.flatMap(\.pages),
                     customInstructions: instructions
                 )
@@ -876,6 +894,7 @@ private enum CreateOutputKind: String, Identifiable {
     case studyGuide
     case paper
     case infographic
+    case bulletPoints
 
     var id: String { rawValue }
 
@@ -885,6 +904,7 @@ private enum CreateOutputKind: String, Identifiable {
         case .studyGuide: return "Study guide"
         case .paper: return "Paper"
         case .infographic: return "Infographic"
+        case .bulletPoints: return "Bullet points"
         }
     }
 
@@ -894,6 +914,7 @@ private enum CreateOutputKind: String, Identifiable {
         case .studyGuide: return "Choose how deep the outline should go."
         case .paper: return "Tune the length and research angle."
         case .infographic: return "Pick the scope before opening the visual builder."
+        case .bulletPoints: return "Pick the depth and angle before generating."
         }
     }
 
@@ -903,6 +924,7 @@ private enum CreateOutputKind: String, Identifiable {
         case .studyGuide: return "book.closed"
         case .paper: return "pencil"
         case .infographic: return "photo"
+        case .bulletPoints: return "list.bullet"
         }
     }
 
@@ -911,6 +933,7 @@ private enum CreateOutputKind: String, Identifiable {
         case .slideDeck, .paper: return Color(hex: "FFE1E5")
         case .studyGuide: return Color(hex: "D6F4D8")
         case .infographic: return Color(hex: "CFEFFF")
+        case .bulletPoints: return Color(hex: "FFE9B8")
         }
     }
 
@@ -919,6 +942,7 @@ private enum CreateOutputKind: String, Identifiable {
         case .slideDeck, .paper: return Color(hex: "943C4A")
         case .studyGuide: return Color(hex: "276B32")
         case .infographic: return Color(hex: "20657E")
+        case .bulletPoints: return Color(hex: "8A641F")
         }
     }
 
@@ -928,7 +952,7 @@ private enum CreateOutputKind: String, Identifiable {
             return .infographics
         case .studyGuide:
             return .studyGuide
-        case .paper:
+        case .paper, .bulletPoints:
             return .voiceSummary
         }
     }
@@ -943,6 +967,8 @@ private enum CreateOutputKind: String, Identifiable {
             return ["1 page", "3 pages", "5 pages"]
         case .infographic:
             return ["Simple", "Standard", "Detailed"]
+        case .bulletPoints:
+            return ["Tight (5-7)", "Standard (8-12)", "Detailed (13-18)"]
         }
     }
 
@@ -954,6 +980,8 @@ private enum CreateOutputKind: String, Identifiable {
             return "Standard"
         case .paper:
             return "3 pages"
+        case .bulletPoints:
+            return "Standard (8-12)"
         }
     }
 }
@@ -994,6 +1022,8 @@ private struct CreateCustomization {
             lines.append("Format the body as an essay or research write-up outline with a thesis, evidence, and a clear conclusion.")
         case .infographic:
             lines.append("Use the selected scope to set up the visual infographic generator.")
+        case .bulletPoints:
+            lines.append("Format the body as a clean bulleted list (no prose paragraphs). Each bullet starts with '- ' and is one tight sentence. Group with short headings only when the source naturally divides into sections. No filler bullets, no rephrasing the same idea twice.")
         }
 
         return lines.joined(separator: "\n")
@@ -2699,6 +2729,81 @@ private struct GeneratedSlideDeckDraftView: View {
     }
 }
 
+private struct BulletListBody: View {
+    let text: String
+
+    private struct ParsedLine: Identifiable {
+        let id = UUID()
+        let kind: Kind
+        let text: String
+
+        enum Kind { case heading, bullet, subBullet }
+    }
+
+    private var lines: [ParsedLine] {
+        var result: [ParsedLine] = []
+        for raw in text.components(separatedBy: "\n") {
+            let original = raw
+            let trimmed = original.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { continue }
+            if original.hasPrefix("  - ") || original.hasPrefix("    - ") {
+                let body = trimmed.replacingOccurrences(of: "- ", with: "", options: .anchored)
+                result.append(ParsedLine(kind: .subBullet, text: body))
+            } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("• ") {
+                let body = trimmed
+                    .replacingOccurrences(of: "- ", with: "", options: .anchored)
+                    .replacingOccurrences(of: "• ", with: "", options: .anchored)
+                result.append(ParsedLine(kind: .bullet, text: body))
+            } else {
+                result.append(ParsedLine(kind: .heading, text: trimmed))
+            }
+        }
+        return result
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(lines.enumerated()), id: \.element.id) { idx, line in
+                switch line.kind {
+                case .heading:
+                    Text(line.text)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .tracking(0.4)
+                        .foregroundColor(Color(hex: "8A641F"))
+                        .padding(.top, idx == 0 ? 0 : 14)
+                        .padding(.bottom, 2)
+                case .bullet:
+                    HStack(alignment: .top, spacing: 10) {
+                        Circle()
+                            .fill(Color(hex: "8A641F"))
+                            .frame(width: 5, height: 5)
+                            .padding(.top, 8)
+                        Text(line.text)
+                            .font(.system(size: 16, weight: .regular, design: .rounded))
+                            .foregroundColor(Color(hex: "1F2420"))
+                            .lineSpacing(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                case .subBullet:
+                    HStack(alignment: .top, spacing: 10) {
+                        Rectangle()
+                            .fill(Color(hex: "8A641F").opacity(0.6))
+                            .frame(width: 5, height: 1.5)
+                            .padding(.top, 11)
+                        Text(line.text)
+                            .font(.system(size: 14, weight: .regular, design: .rounded))
+                            .foregroundColor(Color(hex: "3F4642"))
+                            .lineSpacing(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.leading, 20)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 private struct GeneratedPaperDraftView: View {
     let paper: GeneratedPaper
     let onClose: () -> Void
@@ -2709,12 +2814,26 @@ private struct GeneratedPaperDraftView: View {
         "\(paper.title)\n\n\(paper.body)"
     }
 
+    private var isBulletList: Bool {
+        let lines = paper.body
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard !lines.isEmpty else { return false }
+        let bulletLines = lines.filter { $0.hasPrefix("- ") || $0.hasPrefix("• ") }
+        return Double(bulletLines.count) / Double(lines.count) >= 0.5
+    }
+
+    private var eyebrowText: String {
+        isBulletList ? "BULLET POINTS" : "PAPER"
+    }
+
     var body: some View {
         NavigationView {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("PAPER")
+                        Text(eyebrowText)
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                             .tracking(0.8)
                             .foregroundColor(Color(hex: "8D958E"))
@@ -2727,21 +2846,35 @@ private struct GeneratedPaperDraftView: View {
                     .padding(.horizontal, 22)
                     .padding(.top, 18)
 
-                    Text(paper.body)
-                        .font(.system(size: 17, weight: .regular, design: .serif))
-                        .lineSpacing(6)
-                        .foregroundColor(Color(hex: "343A35"))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(20)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.white.opacity(0.96))
-                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                .stroke(Color(hex: "E8E1D8"), lineWidth: 1)
-                        )
-                        .padding(.horizontal, 22)
-                        .padding(.bottom, 28)
+                    Group {
+                        if isBulletList {
+                            BulletListBody(text: paper.body)
+                                .padding(20)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white.opacity(0.96))
+                                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                        .stroke(Color(hex: "E8E1D8"), lineWidth: 1)
+                                )
+                        } else {
+                            Text(paper.body)
+                                .font(.system(size: 17, weight: .regular, design: .serif))
+                                .lineSpacing(6)
+                                .foregroundColor(Color(hex: "343A35"))
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(20)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white.opacity(0.96))
+                                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                        .stroke(Color(hex: "E8E1D8"), lineWidth: 1)
+                                )
+                        }
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.bottom, 28)
                 }
             }
             .background(Color(hex: "FCF7EF").ignoresSafeArea())
