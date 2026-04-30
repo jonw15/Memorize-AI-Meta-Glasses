@@ -344,36 +344,32 @@ struct StudyTabView: View {
             learnCard(
                 title: "Summary",
                 detail: "Voice chat · grounded",
-                icon: "message.fill",
-                accessoryIcon: "ellipsis",
                 tone: Color(hex: "AED9B1"),
+                illustration: AnyView(SummaryIllustration()),
                 action: { showExplainPersonaSelector = true }
             )
 
             learnCard(
                 title: "Live",
-                detail: "Glasses · real-time",
-                icon: "eyeglasses",
-                accessoryIcon: "record.circle",
-                tone: Color(hex: "4146C5"),
+                detail: "Camera · real-time",
+                tone: Color(hex: "3F4FB8"),
+                illustration: AnyView(LiveIllustration()),
                 action: onShowLive
             )
 
             learnCard(
                 title: "Pop quiz",
                 detail: "6 cards · 4 min",
-                icon: "bolt.fill",
-                accessoryIcon: nil,
-                tone: Color(hex: "F5A92D"),
+                tone: Color(hex: "EBA13A"),
+                illustration: AnyView(PopQuizIllustration()),
                 action: { showPopQuizConfig = true }
             )
 
             learnCard(
                 title: "Podcast",
                 detail: "Audio · 12 min",
-                icon: "headphones",
-                accessoryIcon: nil,
                 tone: Color(hex: "4E8FD0"),
+                illustration: AnyView(PodcastIllustration()),
                 action: { viewModel.startPodcast() }
             )
         }
@@ -382,26 +378,15 @@ struct StudyTabView: View {
     private func learnCard(
         title: String,
         detail: String,
-        icon: String,
-        accessoryIcon: String?,
         tone: Color,
+        illustration: AnyView,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             VStack(spacing: 0) {
                 ZStack {
                     tone
-                    Image(systemName: icon)
-                        .font(.system(size: icon == "headphones" ? 60 : 54, weight: .regular))
-                        .foregroundColor(.white.opacity(0.92))
-
-                    if let accessoryIcon {
-                        Image(systemName: accessoryIcon)
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundColor(accessoryIcon == "record.circle" ? Color(hex: "FF6C6C") : .white)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                            .padding(24)
-                    }
+                    illustration
                 }
                 .frame(height: 148)
 
@@ -410,11 +395,16 @@ struct StudyTabView: View {
                         .font(.system(size: 17, weight: .bold, design: .rounded))
                         .foregroundColor(Color(hex: "1F2420"))
 
-                    Text(detail)
-                        .font(.system(size: 13, weight: .regular, design: .rounded))
-                        .foregroundColor(Color(hex: "8D958E"))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkle")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(Color(hex: "8D958E"))
+                        Text(detail)
+                            .font(.system(size: 13, weight: .regular, design: .rounded))
+                            .foregroundColor(Color(hex: "8D958E"))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)
@@ -477,11 +467,9 @@ struct StudyTabView: View {
             VStack(spacing: 0) {
                 ZStack {
                     method.tone
-                    Image(systemName: method.icon)
-                        .font(.system(size: 38, weight: .regular))
-                        .foregroundColor(.white.opacity(0.92))
+                    tutorIllustration(for: method.id)
                 }
-                .frame(height: 120)
+                .frame(height: 130)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(method.title)
@@ -598,6 +586,249 @@ struct StudyTabView: View {
         }
         .disabled(!hasContent || viewModel.isGeneratingQuiz || viewModel.isGeneratingExplanation)
         .opacity(hasContent ? 1.0 : 0.5)
+    }
+
+    @ViewBuilder
+    fileprivate func tutorIllustration(for id: String) -> some View {
+        switch id {
+        case "feynman":
+            FeynmanIllustration()
+        case "mnemonics":
+            MnemonicsIllustration()
+        case "find_mistake":
+            FindMistakeIllustration()
+        case "cornell":
+            CornellIllustration()
+        default:
+            Image(systemName: "sparkles")
+                .font(.system(size: 38))
+                .foregroundColor(.white.opacity(0.9))
+        }
+    }
+}
+
+// MARK: - Card illustrations
+
+private struct SummaryIllustration: View {
+    var body: some View {
+        ZStack {
+            // Big speech bubble
+            Image(systemName: "bubble.left.fill")
+                .font(.system(size: 86, weight: .regular))
+                .foregroundColor(.white)
+                .offset(x: -2, y: -6)
+
+            Image(systemName: "ellipsis")
+                .font(.system(size: 22, weight: .heavy))
+                .foregroundColor(Color(hex: "76A87B"))
+                .offset(x: -6, y: -10)
+
+            // Smaller dot bubble accessory
+            ZStack {
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 36, height: 36)
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundColor(Color(hex: "76A87B"))
+            }
+            .offset(x: 36, y: 26)
+        }
+    }
+}
+
+private struct LiveIllustration: View {
+    var body: some View {
+        ZStack {
+            // Corner brackets framing
+            CornerBrackets()
+                .stroke(Color.white.opacity(0.95), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .frame(width: 110, height: 80)
+
+            // Two glasses lenses
+            HStack(spacing: 8) {
+                Circle()
+                    .stroke(Color.white, lineWidth: 4)
+                    .frame(width: 28, height: 28)
+                Circle()
+                    .stroke(Color.white, lineWidth: 4)
+                    .frame(width: 28, height: 28)
+            }
+            .offset(y: -2)
+
+            // Red record dot
+            Circle()
+                .fill(Color(hex: "FF6C6C"))
+                .frame(width: 9, height: 9)
+                .offset(x: 50, y: -28)
+        }
+    }
+}
+
+private struct CornerBrackets: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let len: CGFloat = 14
+        // top-left
+        p.move(to: CGPoint(x: rect.minX, y: rect.minY + len))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.minX + len, y: rect.minY))
+        // top-right
+        p.move(to: CGPoint(x: rect.maxX - len, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + len))
+        // bottom-left
+        p.move(to: CGPoint(x: rect.minX, y: rect.maxY - len))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX + len, y: rect.maxY))
+        // bottom-right
+        p.move(to: CGPoint(x: rect.maxX - len, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - len))
+        return p
+    }
+}
+
+private struct PopQuizIllustration: View {
+    var body: some View {
+        ZStack {
+            // Paper card
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white)
+                .frame(width: 76, height: 92)
+                .rotationEffect(.degrees(-6))
+                .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 4)
+
+            // Lightning bolt on the card
+            Image(systemName: "bolt.fill")
+                .font(.system(size: 42, weight: .bold))
+                .foregroundColor(Color(hex: "EBA13A"))
+                .rotationEffect(.degrees(-6))
+        }
+    }
+}
+
+private struct PodcastIllustration: View {
+    var body: some View {
+        Image(systemName: "headphones")
+            .font(.system(size: 64, weight: .regular))
+            .foregroundColor(.white)
+    }
+}
+
+private struct FeynmanIllustration: View {
+    var body: some View {
+        ZStack {
+            // Background ellipse glow
+            Ellipse()
+                .fill(Color.white.opacity(0.16))
+                .frame(width: 110, height: 70)
+                .offset(y: 18)
+
+            // Big bubble
+            Image(systemName: "bubble.left.fill")
+                .font(.system(size: 70, weight: .regular))
+                .foregroundColor(.white)
+                .offset(x: -2, y: -4)
+
+            // Squiggle inside
+            Image(systemName: "scribble.variable")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(Color(hex: "9B3949"))
+                .offset(x: -6, y: -10)
+
+            // Small bubble accessory
+            ZStack {
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 28, height: 28)
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundColor(Color(hex: "9B3949"))
+            }
+            .offset(x: 32, y: 22)
+        }
+    }
+}
+
+private struct MnemonicsIllustration: View {
+    var body: some View {
+        ZStack {
+            // Roof triangle
+            Triangle()
+                .fill(Color.white)
+                .frame(width: 88, height: 36)
+                .offset(y: -22)
+
+            // House body
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Color.white)
+                .frame(width: 72, height: 50)
+                .offset(y: 10)
+
+            // Little colored landmarks inside (like memory palace items)
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color(hex: "EBA13A"))
+                    .frame(width: 9, height: 9)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color(hex: "4E8FD0"))
+                    .frame(width: 10, height: 12)
+                Circle()
+                    .fill(Color(hex: "9B3949"))
+                    .frame(width: 9, height: 9)
+            }
+            .offset(y: 10)
+        }
+    }
+}
+
+private struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        p.closeSubpath()
+        return p
+    }
+}
+
+private struct FindMistakeIllustration: View {
+    var body: some View {
+        ZStack {
+            // Brain
+            Image(systemName: "brain.head.profile.fill")
+                .font(.system(size: 64, weight: .regular))
+                .foregroundColor(.white)
+
+            // Lightning bolt accent
+            Image(systemName: "bolt.fill")
+                .font(.system(size: 22, weight: .heavy))
+                .foregroundColor(Color(hex: "F2C84B"))
+                .offset(x: 28, y: -22)
+        }
+    }
+}
+
+private struct CornellIllustration: View {
+    var body: some View {
+        ZStack {
+            // Notebook page
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Color.white)
+                .frame(width: 70, height: 86)
+
+            // Lines on the page
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(0..<6, id: \.self) { i in
+                    Capsule()
+                        .fill(Color(hex: "C9BD7C"))
+                        .frame(width: i % 2 == 0 ? 44 : 36, height: 3)
+                }
+            }
+            .frame(width: 56, alignment: .leading)
+        }
     }
 }
 
