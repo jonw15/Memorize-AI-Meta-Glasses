@@ -1012,7 +1012,19 @@ private struct FeynmanMiniApp: View {
         if let gaps = verdict?.remainingGaps, !gaps.isEmpty {
             lines.append("Still worth revisiting: \(gaps.joined(separator: ", "))")
         }
-        onSessionComplete(topic, lines.joined(separator: "\n"))
+        let rawData = lines.joined(separator: "\n")
+        // Try to add an AI recap on top; fall back to raw body if AI fails.
+        Task {
+            let summary = (try? await memorizeService.summarizeTutorSession(
+                sessionType: "Feynman Technique",
+                topic: topic,
+                rawSessionData: rawData
+            )) ?? ""
+            let body = summary.isEmpty ? rawData : "\(summary)\n\n— — —\n\n\(rawData)"
+            await MainActor.run {
+                onSessionComplete(topic, body)
+            }
+        }
     }
 
     private func wrapUp(theme: TutorMiniAppTheme) -> some View {
@@ -1519,6 +1531,18 @@ private struct MnemonicsMiniApp: View {
         tutorFullSourceContext(from: book)
     }
 
+    private var estimatedListHeight: CGFloat {
+        // Each row has ~32pt of fixed chrome (number badge + buttons + padding) plus
+        // a textfield that wraps. Approximate ~30 chars per line at this width.
+        let perRow: [CGFloat] = items.map { text in
+            let approxCharsPerLine: Double = 28
+            let lineCount = max(1, Int(ceil(Double(max(text.count, 1)) / approxCharsPerLine)))
+            return CGFloat(lineCount) * 22 + 38
+        }
+        let total = perRow.reduce(0, +) + CGFloat(max(items.count - 1, 0)) * 8
+        return max(total, 64)
+    }
+
     var body: some View {
         let theme = kind.theme
         VStack(spacing: 0) {
@@ -1692,7 +1716,18 @@ private struct MnemonicsMiniApp: View {
                 lines.append("Weak items: \(evaluation.weakItems.joined(separator: ", "))")
             }
         }
-        onSessionComplete(topic, lines.joined(separator: "\n"))
+        let rawData = lines.joined(separator: "\n")
+        Task {
+            let summary = (try? await memorizeService.summarizeTutorSession(
+                sessionType: "Mnemonics",
+                topic: topic,
+                rawSessionData: rawData
+            )) ?? ""
+            let body = summary.isEmpty ? rawData : "\(summary)\n\n— — —\n\n\(rawData)"
+            await MainActor.run {
+                onSessionComplete(topic, body)
+            }
+        }
     }
 
     private func refineAndAdvance() {
@@ -1762,7 +1797,7 @@ private struct MnemonicsMiniApp: View {
                 .listStyle(.plain)
                 .scrollDisabled(true)
                 .scrollContentBackground(.hidden)
-                .frame(height: CGFloat(items.count) * 64)
+                .frame(height: estimatedListHeight)
                 .environment(\.editMode, .constant(.active))
 
                 Button {
@@ -1806,18 +1841,23 @@ private struct MnemonicsMiniApp: View {
                     .foregroundColor(theme.primary)
             }
 
-            TextField("Item", text: Binding(
-                get: { index < items.count ? items[index] : "" },
-                set: { newValue in
-                    if index < items.count {
-                        items[index] = newValue
-                        mnemonic = nil
+            TextField(
+                "Item",
+                text: Binding(
+                    get: { index < items.count ? items[index] : "" },
+                    set: { newValue in
+                        if index < items.count {
+                            items[index] = newValue
+                            mnemonic = nil
+                        }
                     }
-                }
-            ))
+                ),
+                axis: .vertical
+            )
             .font(.system(size: 14, weight: .bold, design: .rounded))
             .foregroundColor(theme.title)
             .tint(theme.primary)
+            .lineLimit(1...4)
             .submitLabel(.done)
             .focused($focusedItemIndex, equals: index)
 
@@ -2805,7 +2845,18 @@ private struct CornellMiniApp: View {
             lines.append("Your summary:")
             lines.append(trimmedSummary)
         }
-        onSessionComplete(topic, lines.joined(separator: "\n"))
+        let rawData = lines.joined(separator: "\n")
+        Task {
+            let summary = (try? await memorizeService.summarizeTutorSession(
+                sessionType: "Cornell Method",
+                topic: topic,
+                rawSessionData: rawData
+            )) ?? ""
+            let body = summary.isEmpty ? rawData : "\(summary)\n\n— — —\n\n\(rawData)"
+            await MainActor.run {
+                onSessionComplete(topic, body)
+            }
+        }
     }
 
     private func loadIfNeeded() {
@@ -3629,7 +3680,18 @@ private struct FindMistakeMiniApp: View {
                 }
             }
         }
-        onSessionComplete(topic, lines.joined(separator: "\n"))
+        let rawData = lines.joined(separator: "\n")
+        Task {
+            let summary = (try? await memorizeService.summarizeTutorSession(
+                sessionType: "Find the Mistake",
+                topic: topic,
+                rawSessionData: rawData
+            )) ?? ""
+            let body = summary.isEmpty ? rawData : "\(summary)\n\n— — —\n\n\(rawData)"
+            await MainActor.run {
+                onSessionComplete(topic, body)
+            }
+        }
     }
 
     // MARK: Steps

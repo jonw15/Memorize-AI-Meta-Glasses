@@ -582,11 +582,6 @@ struct MemorizeHomeView: View {
             }
 
             Spacer()
-
-            ProjectProgressRing(
-                progress: projectProgress(for: book),
-                tint: projectRingColor(for: book)
-            )
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 20)

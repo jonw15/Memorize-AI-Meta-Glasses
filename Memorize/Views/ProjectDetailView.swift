@@ -1422,13 +1422,33 @@ If the user asks about something you cannot see clearly, say what is unclear and
     }
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             AppColors.memorizeBackground.ignoresSafeArea()
 
             if let selectedDevice {
                 liveCameraView(for: selectedDevice)
             } else {
                 devicePicker
+            }
+
+            // Floating dismiss — kept above the camera tree so 30fps frame
+            // rebuilds don't flake the button's hit-test region.
+            if selectedDevice != nil {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 40, height: 40)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, AppSpacing.md)
+                .padding(.top, AppSpacing.sm)
+                .zIndex(2)
             }
         }
         .onChange(of: aiViewModel.isConnected) { _, isConnected in
@@ -1568,16 +1588,8 @@ If the user asks about something you cannot see clearly, say what is unclear and
 
     private func liveHeader(for device: CaptureDevice) -> some View {
         HStack(spacing: 12) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(Color(hex: "1F2420"))
-                    .frame(width: 40, height: 40)
-                    .background(Color(hex: "F4EFE6"))
-                    .cornerRadius(AppCornerRadius.sm)
-            }
+            // Spacer so the title doesn't collide with the floating X button overlay.
+            Color.clear.frame(width: 48, height: 40)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("memorize.live_mode".localized)

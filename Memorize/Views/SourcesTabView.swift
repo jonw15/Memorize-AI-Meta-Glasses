@@ -643,11 +643,12 @@ struct SourceTextView: View {
                                     .font(.system(size: 15, weight: .semibold))
                                 Text("memorize.read_aloud".localized)
                                     .font(AppTypography.subheadline)
+                                    .fontWeight(.semibold)
                             }
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
-                            .background(AppColors.memorizeAccent.opacity(0.9))
+                            .background(AppColors.memorizeAccent)
                             .cornerRadius(AppCornerRadius.md)
                         }
                     }

@@ -841,6 +841,42 @@ struct MemorizeService {
         )
     }
 
+    // MARK: - Tutor Session Summary
+
+    /// Generate a short, friendly AI summary of what happened in a tutor session,
+    /// written like a coach reflecting on the student's performance.
+    /// Used by the tutor mini-apps to attach a human-readable recap to the saved note.
+    func summarizeTutorSession(
+        sessionType: String,
+        topic: String,
+        rawSessionData: String
+    ) async throws -> String {
+        let prompt = """
+        You are a learning coach writing a TINY recap of a tutoring session.
+
+        Session type: \(sessionType)
+        Topic: \(topic)
+
+        Raw session data:
+        \(rawSessionData)
+
+        Return ONLY this exact format — two short labeled lines, nothing else:
+
+        How you did: <one sentence, max 25 words, specific to what the student actually wrote>
+        How to improve: <one sentence, max 25 words, one concrete next action>
+
+        Rules:
+        - No headers, no greetings, no bullets, no markdown.
+        - No "Today we tackled…" / "next time…" filler.
+        - Be specific — quote or paraphrase the student's actual words if useful.
+        - Honest, not flattering.
+        - Total output must be under 60 words.
+        """
+
+        let result = try await fastVisionService.generateText(prompt: prompt)
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     func identifyWeakFixItems(attempts: [FixAttempt], masteryThreshold: Double) -> [String] {
         let threshold = Int(masteryThreshold * 100)
         var lastScoreByItem: [String: Int] = [:]
