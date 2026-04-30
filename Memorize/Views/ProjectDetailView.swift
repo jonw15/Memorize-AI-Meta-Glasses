@@ -6,6 +6,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import AVFoundation
+import Speech
 
 struct ProjectDetailView: View {
     @ObservedObject var streamViewModel: StreamSessionViewModel
@@ -2122,6 +2123,11 @@ private struct NotesTabView: View {
     }
 }
 
+private enum NoteComposeMode {
+    case voice
+    case type
+}
+
 private struct NewNoteComposeSheet: View {
     let initialBody: String
     let onSave: (String, String) -> Void
@@ -2129,6 +2135,9 @@ private struct NewNoteComposeSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
     @State private var bodyText: String = ""
+    @State private var mode: NoteComposeMode = .type
+    @StateObject private var voice = NoteVoiceRecorder()
+    @State private var voiceError: String?
 
     private var canSave: Bool {
         !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
@@ -2137,84 +2146,517 @@ private struct NewNoteComposeSheet: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("TITLE")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .tracking(0.6)
-                            .foregroundColor(Color(hex: "8D958E"))
-                        ZStack(alignment: .leading) {
-                            if title.isEmpty {
-                                Text("Give it a title…")
-                                    .font(.system(size: 17, weight: .regular, design: .rounded))
-                                    .foregroundColor(Color(hex: "8D958E"))
-                                    .padding(.horizontal, 14)
-                                    .allowsHitTesting(false)
-                            }
-                            TextField("", text: $title)
-                                .font(.system(size: 17, weight: .regular, design: .rounded))
-                                .foregroundColor(Color(hex: "1F2420"))
-                                .tint(Color(hex: "276B32"))
-                                .padding(14)
-                        }
-                        .background(Color.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
-                    }
+            VStack(spacing: 0) {
+                modeToggle
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("NOTE")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .tracking(0.6)
-                            .foregroundColor(Color(hex: "8D958E"))
-                        ZStack(alignment: .topLeading) {
-                            if bodyText.isEmpty {
-                                Text("Start typing…")
-                                    .font(.system(size: 16, weight: .regular, design: .rounded))
-                                    .foregroundColor(Color(hex: "A5AAA4"))
-                                    .padding(.horizontal, 18)
-                                    .padding(.vertical, 18)
-                            }
-                            TextEditor(text: $bodyText)
-                                .font(.system(size: 16, weight: .regular, design: .rounded))
-                                .foregroundColor(Color(hex: "1F2420"))
-                                .tint(Color(hex: "276B32"))
-                                .scrollContentBackground(.hidden)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 12)
-                                .frame(minHeight: 280)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        if mode == .voice {
+                            voiceSection
+                        } else {
+                            typeSection
                         }
-                        .background(Color.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
                     }
+                    .padding(20)
                 }
-                .padding(20)
             }
             .background(AppColors.memorizeBackground.ignoresSafeArea())
             .navigationTitle("New note")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundColor(Color(hex: "6E776F"))
+                    Button("Cancel") {
+                        voice.stopListening()
+                        dismiss()
+                    }
+                    .foregroundColor(Color(hex: "6E776F"))
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
-                        onSave(title, bodyText)
+                        voice.stopListening()
+                        let finalBody = mode == .voice ? voice.transcript : bodyText
+                        onSave(title, finalBody)
                         dismiss()
                     } label: {
                         Text("Save note")
                             .fontWeight(.semibold)
                     }
-                    .disabled(!canSave)
-                    .foregroundColor(canSave ? Color(hex: "276B32") : Color(hex: "A5AAA4"))
+                    .disabled(!effectiveCanSave)
+                    .foregroundColor(effectiveCanSave ? Color(hex: "276B32") : Color(hex: "A5AAA4"))
                 }
             }
             .toolbarColorScheme(.light, for: .navigationBar)
         }
         .onAppear { bodyText = initialBody }
+        .onDisappear { voice.stopListening() }
+    }
+
+    private var effectiveCanSave: Bool {
+        if mode == .voice {
+            return !voice.isListening && !voice.isTranscribing &&
+                (!voice.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            )
+        }
+        return canSave
+    }
+
+    private var modeToggle: some View {
+        HStack(spacing: 6) {
+            modeTab(label: "Voice", system: "mic.fill", value: .voice)
+            modeTab(label: "Type", system: "keyboard", value: .type)
+        }
+        .padding(4)
+        .background(Color(hex: "EFE9DF"))
+        .clipShape(Capsule())
+    }
+
+    private func modeTab(label: String, system: String, value: NoteComposeMode) -> some View {
+        let selected = mode == value
+        return Button {
+            if value == .type {
+                voice.stopListening()
+            }
+            withAnimation(.easeInOut(duration: 0.18)) { mode = value }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: system)
+                    .font(.system(size: 13, weight: .semibold))
+                Text(label)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+            }
+            .foregroundColor(selected ? Color(hex: "1F2420") : Color(hex: "8D958E"))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(selected ? Color.white : Color.clear)
+            .clipShape(Capsule())
+            .shadow(color: selected ? Color.black.opacity(0.06) : Color.clear, radius: 4, x: 0, y: 2)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var typeSection: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("TITLE")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .tracking(0.6)
+                    .foregroundColor(Color(hex: "8D958E"))
+                ZStack(alignment: .leading) {
+                    if title.isEmpty {
+                        Text("Give it a title…")
+                            .font(.system(size: 17, weight: .regular, design: .rounded))
+                            .foregroundColor(Color(hex: "8D958E"))
+                            .padding(.horizontal, 14)
+                            .allowsHitTesting(false)
+                    }
+                    TextField("", text: $title)
+                        .font(.system(size: 17, weight: .regular, design: .rounded))
+                        .foregroundColor(Color(hex: "1F2420"))
+                        .tint(Color(hex: "276B32"))
+                        .padding(14)
+                }
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("NOTE")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .tracking(0.6)
+                    .foregroundColor(Color(hex: "8D958E"))
+                ZStack(alignment: .topLeading) {
+                    if bodyText.isEmpty {
+                        Text("Start typing…")
+                            .font(.system(size: 16, weight: .regular, design: .rounded))
+                            .foregroundColor(Color(hex: "A5AAA4"))
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 18)
+                    }
+                    TextEditor(text: $bodyText)
+                        .font(.system(size: 16, weight: .regular, design: .rounded))
+                        .foregroundColor(Color(hex: "1F2420"))
+                        .tint(Color(hex: "276B32"))
+                        .scrollContentBackground(.hidden)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .frame(minHeight: 280)
+                }
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+            }
+        }
+    }
+
+    private var voiceSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            listeningCard
+            transcriptCard
+            if let voiceError, !voiceError.isEmpty {
+                Text(voiceError)
+                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                    .foregroundColor(Color(hex: "B0444C"))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            voiceControls
+        }
+    }
+
+    private var listeningCard: some View {
+        let active = voice.isListening
+        return HStack(spacing: 14) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(active ? Color(hex: "276B32") : Color(hex: "8D958E"))
+                    .frame(width: 8, height: 8)
+                    .opacity(active ? 1 : 0.5)
+                    .scaleEffect(active ? 1.0 : 0.85)
+                    .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: active)
+                Text(voice.statusText)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .tracking(0.8)
+                    .foregroundColor(active ? Color(hex: "276B32") : Color(hex: "6E776F"))
+            }
+            Spacer()
+            MicWaveformView(level: voice.audioLevel, accent: Color(hex: "276B32"))
+                .opacity(active ? 1 : 0.35)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(Color(hex: "DCEFDC"))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "B6D9B7"), lineWidth: 1))
+    }
+
+    private var transcriptCard: some View {
+        let active = voice.isListening
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("TRANSCRIPT")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .tracking(0.6)
+                .foregroundColor(Color(hex: "8D958E"))
+            ZStack {
+                VoiceTranscriptWaveformBackground(
+                    level: voice.audioLevel,
+                    isActive: active,
+                    accent: Color(hex: "276B32")
+                )
+
+                ScrollView {
+                    if !active {
+                        Text(voice.transcriptPlaceholder)
+                            .font(.system(size: 16, weight: .regular, design: .rounded))
+                            .foregroundColor(voice.transcript.isEmpty ? Color(hex: "6E776F") : Color(hex: "1F2420"))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                    }
+                }
+            }
+            .frame(minHeight: 180, maxHeight: 320)
+            .background(active ? Color(hex: "F4FFF2") : Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(active ? Color(hex: "9ED4A1") : Color(hex: "EAE4DC"), lineWidth: active ? 1.4 : 1)
+            )
+        }
+    }
+
+    private var voiceControls: some View {
+        HStack(spacing: 12) {
+            Button {
+                if voice.isListening {
+                    voice.stopListening()
+                } else if !voice.isTranscribing {
+                    Task {
+                        await voice.requestPermissionsIfNeeded()
+                        if voice.speechPermissionDenied || voice.micPermissionDenied {
+                            voiceError = "Microphone and speech permissions are required."
+                            return
+                        }
+                        do {
+                            voiceError = nil
+                            try voice.startListening()
+                        } catch {
+                            voiceError = error.localizedDescription
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: voice.isListening ? "pause.fill" : "mic.fill")
+                        .font(.system(size: 14, weight: .bold))
+                    Text(voice.primaryButtonTitle)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                }
+                .foregroundColor(Color(hex: "1F2420"))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .disabled(voice.isTranscribing)
+
+            Button {
+                voice.stopListening()
+                onSave(title, voice.transcript)
+                dismiss()
+            } label: {
+                Text("Save note")
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(effectiveCanSave ? Color(hex: "276B32") : Color(hex: "A5AAA4"))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(!effectiveCanSave)
+        }
+    }
+}
+
+private struct VoiceTranscriptWaveformBackground: View {
+    let level: Float
+    let isActive: Bool
+    let accent: Color
+
+    private let spacing: CGFloat = 5
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+            GeometryReader { geometry in
+                let width = geometry.size.width
+                let height = geometry.size.height
+                let barCount = max(20, Int(width / 12))
+                let barWidth = max(3, (width - CGFloat(barCount - 1) * spacing) / CGFloat(barCount))
+                let time = timeline.date.timeIntervalSinceReferenceDate
+                let normalizedLevel = max(0.08, CGFloat(level))
+
+                HStack(alignment: .center, spacing: spacing) {
+                    ForEach(0..<barCount, id: \.self) { index in
+                        let progress = CGFloat(index) / CGFloat(max(1, barCount - 1))
+                        let centerBias = 1 - abs(progress - 0.5) * 0.9
+                        let wave = (sin(time * 4.8 + Double(index) * 0.58) + 1) / 2
+                        let pulse = CGFloat(wave) * 0.45 + normalizedLevel * 0.75
+                        let barHeight = isActive
+                            ? max(4, height * min(0.34, pulse * centerBias * 0.48))
+                            : 6
+
+                        Capsule()
+                            .fill(accent.opacity(isActive ? 0.16 + Double(normalizedLevel) * 0.12 : 0.025))
+                            .frame(width: barWidth, height: barHeight)
+                            .animation(.easeOut(duration: 0.08), value: level)
+                    }
+                }
+                .frame(width: width, height: height)
+                .opacity(isActive ? 1 : 0.45)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+@MainActor
+private final class NoteVoiceRecorder: NSObject, ObservableObject {
+    @Published var transcript: String = ""
+    @Published var isListening: Bool = false
+    @Published var isTranscribing: Bool = false
+    @Published var speechPermissionDenied: Bool = false
+    @Published var micPermissionDenied: Bool = false
+    @Published var permissionsResolved: Bool = false
+    @Published var audioLevel: Float = 0
+    @Published var elapsedSeconds: Int = 0
+
+    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: Locale.preferredLanguages.first ?? "en-US"))
+    private var audioRecorder: AVAudioRecorder?
+    private var recordingURL: URL?
+    private var recognitionTask: SFSpeechRecognitionTask?
+    private var durationTimer: Timer?
+    private var meteringTimer: Timer?
+    private var sessionBaseLength: Int = 0
+    private var sessionStart: Date?
+
+    var formattedDuration: String {
+        let total = elapsedSeconds
+        let m = total / 60
+        let s = total % 60
+        return String(format: "%02d:%02d", m, s)
+    }
+
+    var statusText: String {
+        if isListening {
+            return "RECORDING · \(formattedDuration)"
+        }
+        if isTranscribing {
+            return "TRANSCRIBING · \(formattedDuration)"
+        }
+        return "PAUSED · \(formattedDuration)"
+    }
+
+    var transcriptPlaceholder: String {
+        if !transcript.isEmpty {
+            return transcript
+        }
+        if isListening {
+            return "Recording audio. Pause when you’re ready to turn it into text."
+        }
+        if isTranscribing {
+            return "Turning your recording into text…"
+        }
+        return "Tap Start, speak naturally, then pause to create your note transcript."
+    }
+
+    var primaryButtonTitle: String {
+        if isListening {
+            return "Pause"
+        }
+        if isTranscribing {
+            return "Transcribing"
+        }
+        return transcript.isEmpty ? "Start" : "Resume"
+    }
+
+    func requestPermissionsIfNeeded() async {
+        let speechAuthorized: Bool = await withCheckedContinuation { continuation in
+            let status = SFSpeechRecognizer.authorizationStatus()
+            if status == .authorized {
+                continuation.resume(returning: true)
+            } else {
+                SFSpeechRecognizer.requestAuthorization { newStatus in
+                    continuation.resume(returning: newStatus == .authorized)
+                }
+            }
+        }
+        speechPermissionDenied = !speechAuthorized
+
+        let micAuthorized: Bool = await withCheckedContinuation { continuation in
+            if #available(iOS 17.0, *) {
+                AVAudioApplication.requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            } else {
+                AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            }
+        }
+        micPermissionDenied = !micAuthorized
+        permissionsResolved = true
+    }
+
+    func startListening() throws {
+        guard !isListening else { return }
+        guard !isTranscribing else { return }
+        guard permissionsResolved, !speechPermissionDenied, !micPermissionDenied else {
+            throw NSError(domain: "NoteVoiceRecorder", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "Microphone and speech permissions are required."])
+        }
+
+        recognitionTask?.cancel()
+        recognitionTask = nil
+
+        let audioSession = AVAudioSession.sharedInstance()
+        try audioSession.setCategory(.record, mode: .default, options: [.allowBluetoothHFP, .duckOthers])
+        try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("note-voice-\(UUID().uuidString)")
+            .appendingPathExtension("m4a")
+        let settings: [String: Any] = [
+            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+            AVSampleRateKey: 44_100,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+        ]
+
+        let recorder = try AVAudioRecorder(url: fileURL, settings: settings)
+        recorder.isMeteringEnabled = true
+        recorder.prepareToRecord()
+        guard recorder.record() else {
+            throw NSError(domain: "NoteVoiceRecorder", code: 3,
+                          userInfo: [NSLocalizedDescriptionKey: "Unable to start audio recording."])
+        }
+
+        audioRecorder = recorder
+        recordingURL = fileURL
+        sessionStart = Date()
+        isListening = true
+
+        durationTimer?.invalidate()
+        durationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let start = self.sessionStart else { return }
+                let delta = Int(Date().timeIntervalSince(start))
+                self.elapsedSeconds = self.sessionBaseLength + delta
+            }
+        }
+        meteringTimer?.invalidate()
+        meteringTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let recorder = self.audioRecorder, recorder.isRecording else { return }
+                recorder.updateMeters()
+                let averagePower = recorder.averagePower(forChannel: 0)
+                self.audioLevel = min(1.0, max(0.0, (averagePower + 55.0) / 55.0))
+            }
+        }
+    }
+
+    func stopListening() {
+        guard isListening else { return }
+
+        audioRecorder?.stop()
+        audioRecorder = nil
+        isListening = false
+        audioLevel = 0
+        if let start = sessionStart {
+            sessionBaseLength += Int(Date().timeIntervalSince(start))
+            sessionStart = nil
+        }
+        durationTimer?.invalidate()
+        durationTimer = nil
+        meteringTimer?.invalidate()
+        meteringTimer = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
+        if let recordingURL {
+            transcribeRecording(at: recordingURL)
+        }
+    }
+
+    private func transcribeRecording(at url: URL) {
+        guard let speechRecognizer, speechRecognizer.isAvailable else {
+            isTranscribing = false
+            return
+        }
+
+        isTranscribing = true
+        let existingTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let request = SFSpeechURLRecognitionRequest(url: url)
+        request.shouldReportPartialResults = true
+
+        recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let result {
+                    let newText = result.bestTranscription.formattedString
+                    self.transcript = existingTranscript.isEmpty ? newText : existingTranscript + " " + newText
+                }
+                if error != nil || (result?.isFinal ?? false) {
+                    self.isTranscribing = false
+                    self.recognitionTask = nil
+                    self.recordingURL = nil
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+        }
     }
 }
 
