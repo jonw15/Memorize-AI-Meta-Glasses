@@ -126,7 +126,7 @@ struct MemorizeCaptureView: View {
 
                     Text("Say \"take a photo\" or \"done reading\"")
                         .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(0.55))
+                        .foregroundColor(Color(hex: "8D958E"))
                         .multilineTextAlignment(.center)
                         .padding(.top, AppSpacing.sm)
                         .padding(.horizontal, AppSpacing.md)
@@ -157,11 +157,11 @@ struct MemorizeCaptureView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(hex: "1F2420"))
                     }
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
             } // end else (hasSelectedDevice)
         }
         .fullScreenCover(item: $selectedThumbnail) { preview in
@@ -304,10 +304,10 @@ struct MemorizeCaptureView: View {
             } else {
                 VStack(spacing: AppSpacing.sm) {
                     ProgressView()
-                        .tint(AppColors.memorizeAccent)
+                        .tint(Color(hex: "276B32"))
                     Text("memorize.connecting_camera".localized)
                         .font(AppTypography.caption)
-                        .foregroundColor(Color.white.opacity(0.5))
+                        .foregroundColor(Color(hex: "8D958E"))
                 }
                 .frame(minHeight: 200)
                 .frame(maxWidth: .infinity)
@@ -323,8 +323,9 @@ struct MemorizeCaptureView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .background(Color.black.opacity(0.3))
+        .background(Color(hex: "EFE9DF"))
         .cornerRadius(AppCornerRadius.md)
+        .overlay(RoundedRectangle(cornerRadius: AppCornerRadius.md).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
         .animation(.easeInOut(duration: 0.3), value: viewModel.lastCapturedImage != nil)
     }
 
@@ -334,12 +335,12 @@ struct MemorizeCaptureView: View {
         VStack(spacing: AppSpacing.xs) {
             Text("memorize.ready_to_capture".localized)
                 .font(AppTypography.title)
-                .foregroundColor(.white)
+                .foregroundColor(Color(hex: "1F2420"))
 
             if let title = displayBookTitle {
                 Text(title)
                     .font(AppTypography.headline)
-                    .foregroundColor(AppColors.memorizeAccent)
+                    .foregroundColor(Color(hex: "276B32"))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .padding(.horizontal, AppSpacing.md)
@@ -347,7 +348,7 @@ struct MemorizeCaptureView: View {
 
             Text("memorize.capture_subtitle".localized)
                 .font(AppTypography.subheadline)
-                .foregroundColor(Color.white.opacity(0.6))
+                .foregroundColor(Color(hex: "6E776F"))
                 .multilineTextAlignment(.center)
         }
         .padding(.top, AppSpacing.lg)
@@ -380,14 +381,14 @@ struct MemorizeCaptureView: View {
         } label: {
             ZStack {
                 Circle()
-                    .stroke(AppColors.memorizeAccent.opacity(0.3), lineWidth: 4)
+                    .stroke(Color(hex: "276B32").opacity(0.18), lineWidth: 4)
                     .frame(width: 100, height: 100)
 
                 Circle()
                     .fill(
                         viewModel.isCountingDown
-                            ? Color.red.opacity(0.8)
-                            : AppColors.memorizeAccent
+                            ? Color(hex: "B0444C")
+                            : Color(hex: "276B32")
                     )
                     .frame(width: 80, height: 80)
 
@@ -409,15 +410,15 @@ struct MemorizeCaptureView: View {
             VStack(spacing: AppSpacing.lg) {
                 Image(systemName: "camera.fill")
                     .font(.system(size: 40))
-                    .foregroundColor(AppColors.memorizeAccent)
+                    .foregroundColor(Color(hex: "276B32"))
 
                 Text("memorize.select_device".localized)
                     .font(AppTypography.title2)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
 
                 Text("memorize.select_device_desc".localized)
                     .font(AppTypography.subheadline)
-                    .foregroundColor(Color.white.opacity(0.6))
+                    .foregroundColor(Color(hex: "6E776F"))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, AppSpacing.xl)
 
@@ -430,16 +431,18 @@ struct MemorizeCaptureView: View {
                             HStack(spacing: 16) {
                                 Image(systemName: device.iconName)
                                     .font(.system(size: 24))
+                                    .foregroundColor(Color(hex: "276B32"))
                                     .frame(width: 44, height: 44)
-                                    .background(AppColors.memorizeAccent.opacity(0.15))
+                                    .background(Color(hex: "D6F4D8"))
                                     .clipShape(Circle())
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(device.rawValue)
                                         .font(AppTypography.headline)
+                                        .foregroundColor(Color(hex: "1F2420"))
                                     Text(device == .glasses ? "memorize.device_glasses_desc".localized : "memorize.device_phone_desc".localized)
                                         .font(AppTypography.caption)
-                                        .foregroundColor(Color.white.opacity(0.5))
+                                        .foregroundColor(Color(hex: "8D958E"))
                                         .multilineTextAlignment(.leading)
                                 }
 
@@ -447,13 +450,15 @@ struct MemorizeCaptureView: View {
 
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(Color.white.opacity(0.3))
+                                    .foregroundColor(Color(hex: "A5AAA4"))
                             }
-                            .foregroundColor(.white)
                             .padding(AppSpacing.md)
-                            .background(AppColors.memorizeCard)
+                            .background(Color.white)
                             .cornerRadius(AppCornerRadius.lg)
+                            .overlay(RoundedRectangle(cornerRadius: AppCornerRadius.lg).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+                            .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 3)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, AppSpacing.md)
@@ -468,11 +473,11 @@ struct MemorizeCaptureView: View {
                     dismiss()
                 } label: {
                     Image(systemName: "chevron.left")
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(hex: "1F2420"))
                 }
             }
         }
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarColorScheme(.light, for: .navigationBar)
     }
 
     // MARK: - Delay Indicator
@@ -486,7 +491,7 @@ struct MemorizeCaptureView: View {
                 .textCase(.uppercase)
                 .tracking(0.8)
         }
-        .foregroundColor(Color.white.opacity(0.4))
+        .foregroundColor(Color(hex: "A5AAA4"))
     }
 
     // MARK: - Session Timeline
@@ -496,7 +501,7 @@ struct MemorizeCaptureView: View {
             HStack {
                 Text("memorize.session_timeline".localized)
                     .font(AppTypography.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(hex: "1F2420"))
 
                 Spacer()
             }
@@ -660,7 +665,7 @@ struct MemorizeCaptureView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(isDoneReadingEnabled ? Color.blue : Color.gray.opacity(0.5))
+                .background(isDoneReadingEnabled ? Color(hex: "276B32") : Color(hex: "C8CDC6"))
                 .cornerRadius(AppCornerRadius.md)
         }
         .padding(.horizontal, AppSpacing.md)

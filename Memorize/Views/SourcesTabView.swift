@@ -173,7 +173,6 @@ struct SourcesTabView: View {
             columns: [
                 GridItem(.flexible(), spacing: 10),
                 GridItem(.flexible(), spacing: 10),
-                GridItem(.flexible(), spacing: 10),
                 GridItem(.flexible(), spacing: 10)
             ],
             spacing: 10
@@ -195,15 +194,6 @@ struct SourcesTabView: View {
                 title: "memorize.source_camera".localized,
                 tint: Color(hex: "D6F4D8"),
                 foreground: Color(hex: "276B32")
-            ) {
-                showCameraCapture = true
-            }
-
-            sourceActionTile(
-                icon: "eyeglasses",
-                title: "memorize.source_glasses".localized,
-                tint: Color(hex: "FFE1E5"),
-                foreground: Color(hex: "9A3B4B")
             ) {
                 showCameraCapture = true
             }
