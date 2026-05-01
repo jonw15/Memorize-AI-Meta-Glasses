@@ -23,8 +23,10 @@ class ProjectDetailViewModel: ObservableObject {
     @Published var isGeneratingPaper = false
     @Published var isGeneratingBulletPoints = false
     @Published var isGeneratingStudyTopics = false
+    @Published var isGeneratingFromNotes = false
     @Published var studyTopicsError: String?
     @Published var noteGenerationError: String?
+    @Published var notesQueryError: String?
     @Published var slideDeckGenerationError: String?
     @Published var paperGenerationError: String?
 
@@ -453,7 +455,8 @@ class ProjectDetailViewModel: ObservableObject {
         }
     }
 
-    func saveGeneratedNote(_ note: GeneratedNote) {
+    @discardableResult
+    func saveGeneratedNote(_ note: GeneratedNote) -> GeneratedNote {
         let prefix = note.mode.displayTitle
         let trimmedTitle = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let newTitle: String
@@ -485,6 +488,8 @@ class ProjectDetailViewModel: ObservableObject {
 
         generatedNoteDraft = nil
         noteGenerationError = nil
+
+        return titledNote
     }
 
     func generateSlideDeck(
@@ -588,6 +593,39 @@ class ProjectDetailViewModel: ObservableObject {
         book.notes.removeAll { $0.id == id }
         book.updatedAt = Date()
         storage.updateBook(book)
+    }
+
+    func generateFromSavedNotes(
+        prompt: String,
+        notes: [GeneratedNote],
+        onComplete: ((GeneratedNote) -> Void)? = nil
+    ) {
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !notes.isEmpty else {
+            notesQueryError = "Enter a prompt and choose at least one matching note."
+            return
+        }
+        guard !isGeneratingFromNotes else { return }
+
+        isGeneratingFromNotes = true
+        notesQueryError = nil
+        let title = book.title
+
+        Task {
+            do {
+                let note = try await memorizeService.generateFromSavedNotes(
+                    notes: notes,
+                    userPrompt: trimmed,
+                    bookTitle: title
+                )
+                let savedNote = saveGeneratedNote(note)
+                onComplete?(savedNote)
+            } catch {
+                notesQueryError = error.localizedDescription
+                print("❌ [ProjectDetail] Saved notes generation failed: \(error)")
+            }
+            isGeneratingFromNotes = false
+        }
     }
 
     func generateStudyTopics() {

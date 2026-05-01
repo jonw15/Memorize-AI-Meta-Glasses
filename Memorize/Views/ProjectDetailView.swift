@@ -1967,10 +1967,51 @@ private struct NotesTabView: View {
     @State private var selectedNote: GeneratedNote?
     @State private var notePendingDelete: GeneratedNote?
     @State private var quickNote: String = ""
+    @State private var notesQuery: String = ""
+    @State private var notesSearch: String = ""
+    @State private var selectedQueryNoteIDs: Set<UUID> = []
     @State private var showCompose = false
 
     private var notes: [GeneratedNote] {
         viewModel.book.notes.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    private var matchingNotes: [GeneratedNote] {
+        let trimmed = notesSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return notes }
+        let terms = trimmed
+            .lowercased()
+            .split { $0.isWhitespace || $0.isNewline }
+            .map(String.init)
+
+        return notes.filter { note in
+            let searchable = "\(note.title) \(note.mode.displayTitle) \(note.body)".lowercased()
+            return terms.allSatisfy { searchable.contains($0) }
+        }
+    }
+
+    private var selectedQueryNotes: [GeneratedNote] {
+        notes.filter { selectedQueryNoteIDs.contains($0.id) }
+    }
+
+    private var notesForGeneration: [GeneratedNote] {
+        if !selectedQueryNotes.isEmpty {
+            return selectedQueryNotes
+        }
+        return notes
+    }
+
+    private var canGenerateFromNotes: Bool {
+        !notesQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !notesForGeneration.isEmpty &&
+            !viewModel.isGeneratingFromNotes
+    }
+
+    private var notesQueryScopeText: String {
+        if !selectedQueryNotes.isEmpty {
+            return "Using \(selectedQueryNotes.count) selected note\(selectedQueryNotes.count == 1 ? "" : "s")"
+        }
+        return "Using all \(notes.count) note\(notes.count == 1 ? "" : "s")"
     }
 
     var body: some View {
@@ -1989,6 +2030,10 @@ private struct NotesTabView: View {
 
                 quickNoteBar
 
+                if !notes.isEmpty {
+                    notesQueryBox
+                }
+
                 if notes.isEmpty {
                     VStack(spacing: AppSpacing.md) {
                         Image(systemName: "note.text")
@@ -2006,22 +2051,44 @@ private struct NotesTabView: View {
                     .padding(.vertical, 50)
                     .padding(.horizontal, AppSpacing.lg)
                 } else {
-                    Text("ALL NOTES")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .tracking(0.6)
-                        .foregroundColor(Color(hex: "8D958E"))
-                        .padding(.top, AppSpacing.sm)
+                    HStack {
+                        Text(notesSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "ALL NOTES" : "MATCHING NOTES")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .tracking(0.6)
+                            .foregroundColor(Color(hex: "8D958E"))
 
-                    ForEach(notes) { note in
-                        SavedNoteCard(
-                            note: note,
-                            onOpen: {
-                                selectedNote = note
-                            },
-                            onDelete: {
-                                notePendingDelete = note
-                            }
-                        )
+                        Spacer()
+
+                        Text("\(matchingNotes.count)")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundColor(Color(hex: "8D958E"))
+                    }
+                    .padding(.top, AppSpacing.sm)
+
+                    localSearchBar
+
+                    if matchingNotes.isEmpty {
+                        Text("No notes match this filter.")
+                            .font(.system(size: 13, weight: .regular, design: .rounded))
+                            .foregroundColor(Color(hex: "8D958E"))
+                            .padding(.vertical, 10)
+                    } else {
+                        ForEach(matchingNotes) { note in
+                            SavedNoteCard(
+                                note: note,
+                                isSelectionVisible: true,
+                                isSelected: selectedQueryNoteIDs.contains(note.id),
+                                onOpen: {
+                                    selectedNote = note
+                                },
+                                onDelete: {
+                                    notePendingDelete = note
+                                },
+                                onToggleSelection: {
+                                    toggleQueryNoteSelection(note.id)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -2065,6 +2132,138 @@ private struct NotesTabView: View {
         } message: {
             Text("memorize.notes_delete_message".localized)
         }
+    }
+
+    private var notesQueryBox: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(Color(hex: "276B32"))
+
+                ZStack(alignment: .leading) {
+                    if notesQuery.isEmpty {
+                        Text("Ask your notes to generate something…")
+                            .font(.system(size: 15, weight: .regular, design: .rounded))
+                            .foregroundColor(Color(hex: "8D958E"))
+                            .allowsHitTesting(false)
+                    }
+
+                    TextField("", text: $notesQuery)
+                        .font(.system(size: 15, weight: .regular, design: .rounded))
+                        .foregroundColor(Color(hex: "1F2420"))
+                        .tint(Color(hex: "276B32"))
+                        .submitLabel(.done)
+                }
+
+                if !notesQuery.isEmpty {
+                    Button {
+                        notesQuery = ""
+                        selectedQueryNoteIDs = []
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(Color(hex: "A5AAA4"))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 46)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color(hex: "D7E6D4"), lineWidth: 1))
+
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(notesQueryScopeText)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundColor(Color(hex: "535B54"))
+                    Text("Generate summaries, answers, flashcards, outlines, or quiz prompts from notes.")
+                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .foregroundColor(Color(hex: "8D958E"))
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 8)
+
+                Button {
+                    guard canGenerateFromNotes else { return }
+                    viewModel.generateFromSavedNotes(prompt: notesQuery, notes: notesForGeneration) { note in
+                        selectedNote = note
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        if viewModel.isGeneratingFromNotes {
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(0.75)
+                        } else {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 13, weight: .bold))
+                        }
+                        Text(viewModel.isGeneratingFromNotes ? "Generating" : "Generate")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 10)
+                    .background(canGenerateFromNotes ? Color(hex: "276B32") : Color(hex: "A5AAA4"))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canGenerateFromNotes)
+            }
+
+            if let error = viewModel.notesQueryError, !error.isEmpty {
+                Text(error)
+                    .font(.system(size: 12, weight: .regular, design: .rounded))
+                    .foregroundColor(Color(hex: "B0444C"))
+            }
+        }
+        .padding(14)
+        .background(Color(hex: "EFF8EC"))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(hex: "C8DFC6"), lineWidth: 1))
+    }
+
+    private var localSearchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(Color(hex: "8D958E"))
+
+            ZStack(alignment: .leading) {
+                if notesSearch.isEmpty {
+                    Text("Filter visible notes...")
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .foregroundColor(Color(hex: "A5AAA4"))
+                        .allowsHitTesting(false)
+                }
+
+                TextField("", text: $notesSearch)
+                    .font(.system(size: 14, weight: .regular, design: .rounded))
+                    .foregroundColor(Color(hex: "1F2420"))
+                    .tint(Color(hex: "276B32"))
+                    .submitLabel(.done)
+            }
+
+            if !notesSearch.isEmpty {
+                Button {
+                    notesSearch = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Color(hex: "A5AAA4"))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 13)
+        .frame(height: 42)
+        .background(Color.white.opacity(0.92))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(Color(hex: "EAE4DC"), lineWidth: 1))
     }
 
     private var deleteAlertPresented: Binding<Bool> {
@@ -2120,6 +2319,14 @@ private struct NotesTabView: View {
         guard !trimmed.isEmpty else { return }
         viewModel.addUserNote(title: "", body: trimmed)
         quickNote = ""
+    }
+
+    private func toggleQueryNoteSelection(_ id: UUID) {
+        if selectedQueryNoteIDs.contains(id) {
+            selectedQueryNoteIDs.remove(id)
+        } else {
+            selectedQueryNoteIDs.insert(id)
+        }
     }
 }
 
@@ -2662,12 +2869,25 @@ private final class NoteVoiceRecorder: NSObject, ObservableObject {
 
 private struct SavedNoteCard: View {
     let note: GeneratedNote
+    var isSelectionVisible: Bool = false
+    var isSelected: Bool = false
     let onOpen: () -> Void
     let onDelete: () -> Void
+    var onToggleSelection: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 10) {
+                if isSelectionVisible {
+                    Button(action: onToggleSelection) {
+                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundColor(isSelected ? Color(hex: "6FC985") : Color(hex: "A5AAA4"))
+                            .frame(width: 34, height: 34)
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 Image(systemName: iconName)
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(Color(hex: "276B32"))
@@ -2720,7 +2940,7 @@ private struct SavedNoteCard: View {
         .cornerRadius(AppCornerRadius.lg)
         .overlay(
             RoundedRectangle(cornerRadius: AppCornerRadius.lg)
-                .stroke(Color(hex: "EAE4DC"), lineWidth: 1)
+                .stroke(isSelected ? Color(hex: "6FC985").opacity(0.65) : Color(hex: "EAE4DC"), lineWidth: isSelected ? 1.3 : 1)
         )
         .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
         .contentShape(Rectangle())

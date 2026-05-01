@@ -1605,6 +1605,59 @@ struct MemorizeService {
         return parseGeneratedNote(from: result, mode: mode)
     }
 
+    func generateFromSavedNotes(
+        notes: [GeneratedNote],
+        userPrompt: String,
+        bookTitle: String
+    ) async throws -> GeneratedNote {
+        let trimmedPrompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !notes.isEmpty, !trimmedPrompt.isEmpty else {
+            throw NSError(
+                domain: "MemorizeService",
+                code: 12,
+                userInfo: [NSLocalizedDescriptionKey: "Choose notes and enter a prompt first."]
+            )
+        }
+
+        let notesText = notes.enumerated().map { index, note in
+            """
+            --- Note \(index + 1): \(note.title) ---
+            Type: \(note.mode.displayTitle)
+            Created: \(note.formattedDate)
+
+            \(note.body)
+            """
+        }.joined(separator: "\n\n")
+
+        let titleText = bookTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prompt = """
+        You are helping a learner work with their saved notes from "\(titleText.isEmpty ? "Untitled project" : titleText)".
+
+        User request:
+        \(trimmedPrompt)
+
+        Saved notes to use:
+        \(notesText)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "title": "short result title",
+          "body": "generated text"
+        }
+
+        Requirements:
+        - Use only the saved notes above. Do not invent facts that are not supported by them.
+        - If the notes do not contain enough information, say what is missing instead of guessing.
+        - Follow the user's requested format when they ask for flashcards, quiz questions, summaries, outlines, rewrites, or explanations.
+        - Keep the title under 8 words.
+        - Make the body useful as a saved note: clear headings are okay, bullets are okay, plain text only.
+        - No markdown fences and no extra JSON keys.
+        """
+
+        let result = try await visionService.analyzeImage(createPlaceholderImage(), prompt: prompt)
+        return parseGeneratedNote(from: result, mode: .studyGuide)
+    }
+
     func generateSlideDeck(
         from pages: [PageCapture],
         bookTitle: String,
