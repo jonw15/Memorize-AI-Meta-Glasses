@@ -1725,6 +1725,72 @@ struct MemorizeService {
         return parseGeneratedPaper(from: result)
     }
 
+    func generateStudyTopics(from pages: [PageCapture]) async throws -> [StudyTopic] {
+        let completed = pages.filter { $0.status == .completed }
+        guard !completed.isEmpty else { return [] }
+
+        let numbered = completed
+            .enumerated()
+            .map { "Page \($0.offset + 1):\n\($0.element.extractedText)" }
+            .joined(separator: "\n\n")
+
+        let target = max(3, min(8, completed.count / 3 + 2))
+
+        let prompt = """
+        You are organizing a student's source material into clear, study-friendly topics.
+
+        Source pages (numbered):
+        \(numbered)
+
+        Group the pages into \(target) coherent topics that a student would actually want to study one at a time. Each topic should:
+        - Have a short, descriptive title (3-6 words, Title Case, no quotes, no numbering prefix)
+        - Group adjacent pages when their content belongs together — but never split a single concept across two topics
+        - Cover every page exactly once across all topics
+        - Have a one-line summary describing what's in those pages (under 90 characters)
+
+        Return ONLY valid JSON in this exact shape:
+        {
+          "topics": [
+            {
+              "title": "Topic title",
+              "summary": "One-line summary",
+              "pages": [1, 2, 3]
+            }
+          ]
+        }
+
+        Rules:
+        - Page numbers refer to the "Page N:" labels above. Use 1-indexed integers, ascending within each topic.
+        - Do not invent topic titles unrelated to the source content. Stay grounded.
+        - Do not include markdown, fences, or extra keys.
+        """
+
+        struct TopicJSON: Decodable {
+            let title: String
+            let summary: String?
+            let pages: [Int]
+        }
+        struct Wrap: Decodable { let topics: [TopicJSON] }
+
+        let result = try await fastVisionService.generateText(prompt: prompt)
+        let wrapped = parseJSON(result, fallback: Wrap(topics: []))
+
+        return wrapped.topics.compactMap { topic in
+            let title = topic.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty else { return nil }
+            let pageIDs = topic.pages.compactMap { idx -> UUID? in
+                guard idx >= 1, idx <= completed.count else { return nil }
+                return completed[idx - 1].id
+            }
+            guard !pageIDs.isEmpty else { return nil }
+            return StudyTopic(
+                title: title,
+                summary: topic.summary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                pageIDs: pageIDs
+            )
+        }
+    }
+
     func generateBulletPoints(
         from pages: [PageCapture],
         bookTitle: String,

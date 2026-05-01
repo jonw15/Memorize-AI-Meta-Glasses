@@ -45,6 +45,13 @@ struct TutorMethodCard: Identifiable {
     ]
 }
 
+private struct StudyScopeOption: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let pages: [PageCapture]
+}
+
 struct StudyTabView: View {
     @ObservedObject var viewModel: ProjectDetailViewModel
     let onShowSources: () -> Void
@@ -75,10 +82,46 @@ struct StudyTabView: View {
     @State private var showPopQuizConfig = false
     @State private var presentedTutorMiniApp: TutorMiniAppKind?
     @State private var modeStartedAt: [GeneratedNoteKind: Date] = [:]
+    @State private var selectedStudyScopeID = "whole"
     private let minimumNoteGenerationDuration: TimeInterval = 10
 
     private var completedPages: [PageCapture] {
         viewModel.allCompletedPages
+    }
+
+    private var studyScopeOptions: [StudyScopeOption] {
+        var options = [
+            StudyScopeOption(
+                id: "whole",
+                title: "Whole project",
+                subtitle: "\(completedPages.count) page\(completedPages.count == 1 ? "" : "s")",
+                pages: completedPages
+            )
+        ]
+
+        let pageByID = Dictionary(uniqueKeysWithValues: completedPages.map { ($0.id, $0) })
+        for topic in viewModel.book.aiTopics {
+            let topicPages = topic.pageIDs.compactMap { pageByID[$0] }
+            guard !topicPages.isEmpty else { continue }
+            options.append(
+                StudyScopeOption(
+                    id: "topic-\(topic.id.uuidString)",
+                    title: topic.title,
+                    subtitle: "\(topicPages.count) page\(topicPages.count == 1 ? "" : "s")",
+                    pages: topicPages
+                )
+            )
+        }
+
+        return options
+    }
+
+    private var selectedStudyScope: StudyScopeOption {
+        studyScopeOptions.first { $0.id == selectedStudyScopeID } ?? studyScopeOptions[0]
+    }
+
+    private var scopedCompletedPages: [PageCapture] {
+        selectedStudyScope.pages
     }
 
     private var bookTitle: String {
@@ -86,7 +129,7 @@ struct StudyTabView: View {
     }
 
     private var sectionTitle: String {
-        viewModel.book.chapter
+        selectedStudyScope.id == "whole" ? viewModel.book.chapter : selectedStudyScope.title
     }
 
     private var hasContent: Bool {
@@ -118,6 +161,8 @@ struct StudyTabView: View {
                     Text("Study with Mastery")
                         .font(.system(size: 30, weight: .regular, design: .serif))
                         .foregroundColor(Color(hex: "1F2420"))
+
+                    studyScopeSection
 
                     learnCardGrid
 
@@ -167,8 +212,12 @@ struct StudyTabView: View {
         }
         // Pop quiz config
         .sheet(isPresented: $showPopQuizConfig) {
-            PopQuizConfigSheet { count, difficulty in
-                viewModel.generateQuiz(questionCount: count, difficulty: difficulty)
+            PopQuizConfigSheet(scopeTitle: selectedStudyScope.title) { count, difficulty in
+                viewModel.generateQuiz(
+                    questionCount: count,
+                    difficulty: difficulty,
+                    from: scopedCompletedPages
+                )
             }
             .presentationDetents([.height(440)])
         }
@@ -203,11 +252,11 @@ struct StudyTabView: View {
             finishTrackedMode(.explain)
         }) {
             MemorizeInteractView(
-                pages: completedPages,
+                pages: scopedCompletedPages,
                 bookTitle: bookTitle,
-                sectionTitle: "\(selectedPersona.displayKey.localized) Summary",
+                sectionTitle: "\(selectedPersona.displayKey.localized) Summary · \(selectedStudyScope.title)",
                 customSystemPrompt: """
-                You are a friendly tutor. The student wants a summary of the following material from "\(bookTitle)":
+                You are a friendly tutor. The student wants a summary of "\(selectedStudyScope.title)" from "\(bookTitle)":
 
                 ---
                 {{SOURCE_CONTEXT}}
@@ -326,6 +375,135 @@ struct StudyTabView: View {
                 .font(.system(size: 36, weight: .regular, design: .serif))
                 .foregroundColor(Color(hex: "1F2420"))
         }
+    }
+
+    private var studyScopeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Study scope")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .tracking(0.4)
+                    .foregroundColor(Color(hex: "535B54"))
+                    .textCase(.uppercase)
+
+                Spacer()
+
+                if !viewModel.book.aiTopics.isEmpty {
+                    regenerateTopicsButton
+                }
+            }
+
+            if viewModel.isGeneratingStudyTopics {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .tint(Color(hex: "276B32"))
+                    Text("Mastery is grouping your sources into topics…")
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundColor(Color(hex: "535B54"))
+                }
+                .padding(.vertical, 6)
+            } else if viewModel.book.aiTopics.isEmpty {
+                Text("Topics will appear here once Mastery groups your sources.")
+                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                    .foregroundColor(Color(hex: "8D958E"))
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(studyScopeOptions) { scope in
+                            studyScopeChip(scope)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+
+            if let error = viewModel.studyTopicsError, !error.isEmpty {
+                Text(error)
+                    .font(.system(size: 12, weight: .regular, design: .rounded))
+                    .foregroundColor(Color(hex: "B0444C"))
+            }
+        }
+        .padding(14)
+        .background(Color.white.opacity(0.82))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color(hex: "E8E1D8"), lineWidth: 1)
+        )
+    }
+
+    private var generateTopicsButton: some View {
+        Button {
+            viewModel.generateStudyTopics()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 11, weight: .bold))
+                Text("Generate")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .background(Color(hex: "276B32"))
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isGeneratingStudyTopics)
+        .opacity(viewModel.isGeneratingStudyTopics ? 0.5 : 1)
+    }
+
+    private var regenerateTopicsButton: some View {
+        Button {
+            viewModel.generateStudyTopics()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 10, weight: .bold))
+                Text("Regenerate")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+            }
+            .foregroundColor(Color(hex: "276B32"))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color(hex: "D8F7D8"))
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isGeneratingStudyTopics)
+        .opacity(viewModel.isGeneratingStudyTopics ? 0.5 : 1)
+    }
+
+    private func studyScopeChip(_ scope: StudyScopeOption) -> some View {
+        let selected = selectedStudyScope.id == scope.id
+        return Button {
+            selectedStudyScopeID = scope.id
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(scope.title)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(selected ? Color(hex: "1F2420") : Color(hex: "535B54"))
+                    .lineLimit(1)
+
+                Text(scope.subtitle)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(selected ? Color(hex: "276B32") : Color(hex: "8D958E"))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 9)
+            .frame(minWidth: 128, alignment: .leading)
+            .background(selected ? Color(hex: "D8F7D8") : Color(hex: "F6F0E7"))
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(selected ? Color(hex: "6FC985") : Color(hex: "E8E1D8"), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private var projectEyebrow: String {
@@ -833,6 +1011,7 @@ private struct CornellIllustration: View {
 }
 
 private struct PopQuizConfigSheet: View {
+    let scopeTitle: String
     let onGenerate: (Int, MemorizeService.QuizDifficulty) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -855,6 +1034,10 @@ private struct PopQuizConfigSheet: View {
                 Text("Set the length and difficulty before generating.")
                     .font(.system(size: 13, weight: .regular, design: .rounded))
                     .foregroundColor(Color(hex: "8D958E"))
+                Text("Scope: \(scopeTitle)")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundColor(Color(hex: "276B32"))
+                    .lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 22)

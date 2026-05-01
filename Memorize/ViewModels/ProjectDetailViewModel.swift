@@ -22,6 +22,8 @@ class ProjectDetailViewModel: ObservableObject {
     @Published var isGeneratingSlideDeck = false
     @Published var isGeneratingPaper = false
     @Published var isGeneratingBulletPoints = false
+    @Published var isGeneratingStudyTopics = false
+    @Published var studyTopicsError: String?
     @Published var noteGenerationError: String?
     @Published var slideDeckGenerationError: String?
     @Published var paperGenerationError: String?
@@ -109,6 +111,8 @@ class ProjectDetailViewModel: ObservableObject {
         if book.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             autoDetectTitle()
         }
+
+        regenerateTopicsIfNeeded()
     }
 
     private func preferredProjectTitle(from source: Source) -> String? {
@@ -338,9 +342,10 @@ class ProjectDetailViewModel: ObservableObject {
 
     func generateQuiz(
         questionCount: Int? = nil,
-        difficulty: MemorizeService.QuizDifficulty = .medium
+        difficulty: MemorizeService.QuizDifficulty = .medium,
+        from scopedPages: [PageCapture]? = nil
     ) {
-        let pages = allCompletedPages
+        let pages = (scopedPages ?? allCompletedPages).filter { $0.status == .completed }
         let resolvedCount = questionCount ?? targetQuizQuestionCount
         print("🧪 [ProjectDetail] generateQuiz — questions: \(resolvedCount), difficulty: \(difficulty.rawValue)")
         guard !pages.isEmpty else {
@@ -585,6 +590,50 @@ class ProjectDetailViewModel: ObservableObject {
         storage.updateBook(book)
     }
 
+    func generateStudyTopics() {
+        guard !isGeneratingStudyTopics else { return }
+        let pages = allCompletedPages
+        guard !pages.isEmpty else { return }
+        let signature = currentTopicSignature(for: pages)
+
+        isGeneratingStudyTopics = true
+        studyTopicsError = nil
+
+        Task {
+            do {
+                let topics = try await memorizeService.generateStudyTopics(from: pages)
+                book.aiTopics = topics
+                book.aiTopicsSignature = signature
+                book.updatedAt = Date()
+                storage.updateBook(book)
+            } catch {
+                studyTopicsError = error.localizedDescription
+                print("❌ [ProjectDetail] Study topics generation failed: \(error)")
+            }
+            isGeneratingStudyTopics = false
+        }
+    }
+
+    func clearStudyTopics() {
+        book.aiTopics = []
+        book.aiTopicsSignature = ""
+        book.updatedAt = Date()
+        storage.updateBook(book)
+    }
+
+    func regenerateTopicsIfNeeded() {
+        let pages = allCompletedPages
+        guard !pages.isEmpty else { return }
+        guard !isGeneratingStudyTopics else { return }
+        let signature = currentTopicSignature(for: pages)
+        guard signature != book.aiTopicsSignature else { return }
+        generateStudyTopics()
+    }
+
+    private func currentTopicSignature(for pages: [PageCapture]) -> String {
+        pages.map { $0.id.uuidString }.sorted().joined(separator: ",")
+    }
+
     func captureSessionMessages(_ messages: [MemorizeInteractMessage], for mode: GeneratedNoteKind) {
         let transcript = formattedTranscript(from: messages)
         guard !transcript.isEmpty else { return }
@@ -683,5 +732,7 @@ class ProjectDetailViewModel: ObservableObject {
             }
         }
         print("📚 [ProjectDetail] Reloaded — pages: \(book.pages.count), sources: \(book.sources.count), allPages: \(book.allPages.count)")
+
+        regenerateTopicsIfNeeded()
     }
 }

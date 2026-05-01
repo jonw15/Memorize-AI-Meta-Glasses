@@ -258,6 +258,22 @@ struct GeneratedPaper: Identifiable, Codable {
     }
 }
 
+// MARK: - AI Study Topic
+
+struct StudyTopic: Identifiable, Codable, Equatable {
+    let id: UUID
+    var title: String
+    var summary: String
+    var pageIDs: [UUID]
+
+    init(id: UUID = UUID(), title: String, summary: String = "", pageIDs: [UUID] = []) {
+        self.id = id
+        self.title = title
+        self.summary = summary
+        self.pageIDs = pageIDs
+    }
+}
+
 // MARK: - Book
 
 struct Book: Identifiable, Codable {
@@ -270,14 +286,16 @@ struct Book: Identifiable, Codable {
     var sections: [Book]
     var sources: [Source]
     var notes: [GeneratedNote]
+    var aiTopics: [StudyTopic]
+    var aiTopicsSignature: String
     let createdAt: Date
     var updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, title, author, chapter, icon, pages, sections, sources, notes, createdAt, updatedAt
+        case id, title, author, chapter, icon, pages, sections, sources, notes, aiTopics, aiTopicsSignature, createdAt, updatedAt
     }
 
-    init(title: String = "", author: String = "", chapter: String = "", icon: String = "", pages: [PageCapture] = [], sections: [Book] = [], sources: [Source] = [], notes: [GeneratedNote] = []) {
+    init(title: String = "", author: String = "", chapter: String = "", icon: String = "", pages: [PageCapture] = [], sections: [Book] = [], sources: [Source] = [], notes: [GeneratedNote] = [], aiTopics: [StudyTopic] = [], aiTopicsSignature: String = "") {
         self.id = UUID()
         self.title = title
         self.author = author
@@ -287,6 +305,8 @@ struct Book: Identifiable, Codable {
         self.sections = sections
         self.sources = sources
         self.notes = notes
+        self.aiTopics = aiTopics
+        self.aiTopicsSignature = aiTopicsSignature
         self.createdAt = Date()
         self.updatedAt = Date()
     }
@@ -302,6 +322,8 @@ struct Book: Identifiable, Codable {
         sections = try container.decodeIfPresent([Book].self, forKey: .sections) ?? []
         sources = try container.decodeIfPresent([Source].self, forKey: .sources) ?? []
         notes = try container.decodeIfPresent([GeneratedNote].self, forKey: .notes) ?? []
+        aiTopics = try container.decodeIfPresent([StudyTopic].self, forKey: .aiTopics) ?? []
+        aiTopicsSignature = try container.decodeIfPresent(String.self, forKey: .aiTopicsSignature) ?? ""
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
@@ -317,13 +339,15 @@ struct Book: Identifiable, Codable {
         try container.encode(sections, forKey: .sections)
         try container.encode(sources, forKey: .sources)
         try container.encode(notes, forKey: .notes)
+        try container.encode(aiTopics, forKey: .aiTopics)
+        try container.encode(aiTopicsSignature, forKey: .aiTopicsSignature)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
     }
 
     /// All content pages from legacy pages + all sources, for study actions
     var allPages: [PageCapture] {
-        pages + sources.flatMap(\.pages)
+        pages + sources.flatMap(\.pages) + sections.flatMap(\.allPages)
     }
 
     var sourceCount: Int {
