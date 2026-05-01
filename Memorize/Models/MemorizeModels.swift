@@ -274,6 +274,23 @@ struct StudyTopic: Identifiable, Codable, Equatable {
     }
 }
 
+// MARK: - Weak Topic
+
+struct WeakTopicRecord: Identifiable, Codable, Equatable {
+    let topicID: UUID
+    var topicTitle: String
+    var attemptCount: Int
+    var missCount: Int
+    var lastSeenAt: Date
+
+    var id: UUID { topicID }
+
+    var missRate: Double {
+        guard attemptCount > 0 else { return 0 }
+        return Double(missCount) / Double(attemptCount)
+    }
+}
+
 // MARK: - Book
 
 struct Book: Identifiable, Codable {
@@ -288,14 +305,15 @@ struct Book: Identifiable, Codable {
     var notes: [GeneratedNote]
     var aiTopics: [StudyTopic]
     var aiTopicsSignature: String
+    var weakTopics: [WeakTopicRecord]
     let createdAt: Date
     var updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, title, author, chapter, icon, pages, sections, sources, notes, aiTopics, aiTopicsSignature, createdAt, updatedAt
+        case id, title, author, chapter, icon, pages, sections, sources, notes, aiTopics, aiTopicsSignature, weakTopics, createdAt, updatedAt
     }
 
-    init(title: String = "", author: String = "", chapter: String = "", icon: String = "", pages: [PageCapture] = [], sections: [Book] = [], sources: [Source] = [], notes: [GeneratedNote] = [], aiTopics: [StudyTopic] = [], aiTopicsSignature: String = "") {
+    init(title: String = "", author: String = "", chapter: String = "", icon: String = "", pages: [PageCapture] = [], sections: [Book] = [], sources: [Source] = [], notes: [GeneratedNote] = [], aiTopics: [StudyTopic] = [], aiTopicsSignature: String = "", weakTopics: [WeakTopicRecord] = []) {
         self.id = UUID()
         self.title = title
         self.author = author
@@ -307,6 +325,7 @@ struct Book: Identifiable, Codable {
         self.notes = notes
         self.aiTopics = aiTopics
         self.aiTopicsSignature = aiTopicsSignature
+        self.weakTopics = weakTopics
         self.createdAt = Date()
         self.updatedAt = Date()
     }
@@ -324,6 +343,7 @@ struct Book: Identifiable, Codable {
         notes = try container.decodeIfPresent([GeneratedNote].self, forKey: .notes) ?? []
         aiTopics = try container.decodeIfPresent([StudyTopic].self, forKey: .aiTopics) ?? []
         aiTopicsSignature = try container.decodeIfPresent(String.self, forKey: .aiTopicsSignature) ?? ""
+        weakTopics = try container.decodeIfPresent([WeakTopicRecord].self, forKey: .weakTopics) ?? []
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
@@ -341,6 +361,7 @@ struct Book: Identifiable, Codable {
         try container.encode(notes, forKey: .notes)
         try container.encode(aiTopics, forKey: .aiTopics)
         try container.encode(aiTopicsSignature, forKey: .aiTopicsSignature)
+        try container.encode(weakTopics, forKey: .weakTopics)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
     }

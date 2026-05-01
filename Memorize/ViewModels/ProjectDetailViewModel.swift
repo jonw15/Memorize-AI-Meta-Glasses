@@ -52,6 +52,7 @@ class ProjectDetailViewModel: ObservableObject {
     private let youtubeTranscriptChunkTargetChars = 2600
     private var pendingSessionTranscripts: [GeneratedNoteKind: String] = [:]
     private var hasPersistedBook: Bool
+    private var activeQuizTopicID: UUID?
 
     var allCompletedPages: [PageCapture] {
         book.allPages.filter { $0.status == .completed }
@@ -655,6 +656,50 @@ class ProjectDetailViewModel: ObservableObject {
     func clearStudyTopics() {
         book.aiTopics = []
         book.aiTopicsSignature = ""
+        book.updatedAt = Date()
+        storage.updateBook(book)
+    }
+
+    // MARK: - Weak topic tracking
+
+    func setQuizTopicScope(_ topicID: UUID?) {
+        activeQuizTopicID = topicID
+    }
+
+    func recordQuizCompletion() {
+        guard let topicID = activeQuizTopicID else { return }
+        defer { activeQuizTopicID = nil }
+        let questions = quizQuestions
+        guard !questions.isEmpty else { return }
+
+        let attempted = questions.filter { $0.selectedIndex != nil }
+        guard !attempted.isEmpty else { return }
+        let misses = attempted.filter { $0.selectedIndex != $0.correctIndex }.count
+
+        guard let topic = book.aiTopics.first(where: { $0.id == topicID }) else { return }
+
+        if let idx = book.weakTopics.firstIndex(where: { $0.topicID == topicID }) {
+            book.weakTopics[idx].topicTitle = topic.title
+            book.weakTopics[idx].attemptCount += attempted.count
+            book.weakTopics[idx].missCount += misses
+            book.weakTopics[idx].lastSeenAt = Date()
+        } else {
+            book.weakTopics.append(
+                WeakTopicRecord(
+                    topicID: topicID,
+                    topicTitle: topic.title,
+                    attemptCount: attempted.count,
+                    missCount: misses,
+                    lastSeenAt: Date()
+                )
+            )
+        }
+        book.updatedAt = Date()
+        storage.updateBook(book)
+    }
+
+    func dismissWeakTopic(_ topicID: UUID) {
+        book.weakTopics.removeAll { $0.topicID == topicID }
         book.updatedAt = Date()
         storage.updateBook(book)
     }

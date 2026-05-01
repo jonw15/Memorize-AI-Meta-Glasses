@@ -603,7 +603,9 @@ private struct CreateTabView: View {
             .padding(.bottom, 120)
         }
         .background(Color(hex: "FCF7EF"))
-        .fullScreenCover(isPresented: $viewModel.showQuiz) {
+        .fullScreenCover(isPresented: $viewModel.showQuiz, onDismiss: {
+            viewModel.recordQuizCompletion()
+        }) {
             MemorizeQuizView(questions: $viewModel.quizQuestions)
         }
         .fullScreenCover(isPresented: $showInfographics) {
@@ -1968,7 +1970,6 @@ private struct NotesTabView: View {
     @State private var notePendingDelete: GeneratedNote?
     @State private var quickNote: String = ""
     @State private var notesQuery: String = ""
-    @State private var notesSearch: String = ""
     @State private var selectedQueryNoteIDs: Set<UUID> = []
     @State private var showCompose = false
 
@@ -1977,7 +1978,7 @@ private struct NotesTabView: View {
     }
 
     private var matchingNotes: [GeneratedNote] {
-        let trimmed = notesSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = notesQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return notes }
         let terms = trimmed
             .lowercased()
@@ -2030,6 +2031,8 @@ private struct NotesTabView: View {
 
                 quickNoteBar
 
+                weakTopicsCard
+
                 if !notes.isEmpty {
                     notesQueryBox
                 }
@@ -2052,7 +2055,7 @@ private struct NotesTabView: View {
                     .padding(.horizontal, AppSpacing.lg)
                 } else {
                     HStack {
-                        Text(notesSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "ALL NOTES" : "MATCHING NOTES")
+                        Text(notesQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "ALL NOTES" : "MATCHING NOTES")
                             .font(.system(size: 12, weight: .bold, design: .rounded))
                             .tracking(0.6)
                             .foregroundColor(Color(hex: "8D958E"))
@@ -2064,8 +2067,6 @@ private struct NotesTabView: View {
                             .foregroundColor(Color(hex: "8D958E"))
                     }
                     .padding(.top, AppSpacing.sm)
-
-                    localSearchBar
 
                     if matchingNotes.isEmpty {
                         Text("No notes match this filter.")
@@ -2143,7 +2144,7 @@ private struct NotesTabView: View {
 
                 ZStack(alignment: .leading) {
                     if notesQuery.isEmpty {
-                        Text("Ask your notes to generate something…")
+                        Text("Filter notes or ask AI…")
                             .font(.system(size: 15, weight: .regular, design: .rounded))
                             .foregroundColor(Color(hex: "8D958E"))
                             .allowsHitTesting(false)
@@ -2227,45 +2228,6 @@ private struct NotesTabView: View {
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(hex: "C8DFC6"), lineWidth: 1))
     }
 
-    private var localSearchBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "line.3.horizontal.decrease.circle")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(Color(hex: "8D958E"))
-
-            ZStack(alignment: .leading) {
-                if notesSearch.isEmpty {
-                    Text("Filter visible notes...")
-                        .font(.system(size: 14, weight: .regular, design: .rounded))
-                        .foregroundColor(Color(hex: "A5AAA4"))
-                        .allowsHitTesting(false)
-                }
-
-                TextField("", text: $notesSearch)
-                    .font(.system(size: 14, weight: .regular, design: .rounded))
-                    .foregroundColor(Color(hex: "1F2420"))
-                    .tint(Color(hex: "276B32"))
-                    .submitLabel(.done)
-            }
-
-            if !notesSearch.isEmpty {
-                Button {
-                    notesSearch = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(Color(hex: "A5AAA4"))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 13)
-        .frame(height: 42)
-        .background(Color.white.opacity(0.92))
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(Color(hex: "EAE4DC"), lineWidth: 1))
-    }
-
     private var deleteAlertPresented: Binding<Bool> {
         Binding(
             get: { notePendingDelete != nil },
@@ -2274,6 +2236,77 @@ private struct NotesTabView: View {
                     notePendingDelete = nil
                 }
             }
+        )
+    }
+
+    @ViewBuilder
+    private var weakTopicsCard: some View {
+        let weak = viewModel.book.weakTopics
+            .filter { $0.attemptCount > 0 && $0.missCount > 0 }
+            .sorted { $0.missRate > $1.missRate }
+            .prefix(3)
+        if !weak.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(Color(hex: "B0444C"))
+                    Text("TOPICS TO REVISIT")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .tracking(0.6)
+                        .foregroundColor(Color(hex: "B0444C"))
+                    Spacer()
+                }
+
+                VStack(spacing: 8) {
+                    ForEach(Array(weak), id: \.id) { record in
+                        weakTopicRow(record)
+                    }
+                }
+            }
+            .padding(14)
+            .background(Color(hex: "FCEDEE"))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color(hex: "F2C9CD"), lineWidth: 1)
+            )
+        }
+    }
+
+    private func weakTopicRow(_ record: WeakTopicRecord) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(record.topicTitle)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundColor(Color(hex: "1F2420"))
+                    .lineLimit(1)
+                Text("\(record.missCount) of \(record.attemptCount) missed · \(Int((record.missRate * 100).rounded()))%")
+                    .font(.system(size: 12, weight: .regular, design: .rounded))
+                    .foregroundColor(Color(hex: "8D958E"))
+                    .lineLimit(1)
+            }
+            Spacer()
+            Button {
+                viewModel.dismissWeakTopic(record.topicID)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(Color(hex: "8D958E"))
+                    .frame(width: 26, height: 26)
+                    .background(Color.white)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color(hex: "EAE4DC"), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color(hex: "F2C9CD"), lineWidth: 1)
         )
     }
 

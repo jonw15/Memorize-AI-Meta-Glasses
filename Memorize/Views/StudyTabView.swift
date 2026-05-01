@@ -120,6 +120,13 @@ struct StudyTabView: View {
         studyScopeOptions.first { $0.id == selectedStudyScopeID } ?? studyScopeOptions[0]
     }
 
+    private var currentScopedTopicID: UUID? {
+        let id = selectedStudyScope.id
+        guard id.hasPrefix("topic-") else { return nil }
+        let raw = String(id.dropFirst("topic-".count))
+        return UUID(uuidString: raw)
+    }
+
     private var scopedCompletedPages: [PageCapture] {
         selectedStudyScope.pages
     }
@@ -213,6 +220,7 @@ struct StudyTabView: View {
         // Pop quiz config
         .sheet(isPresented: $showPopQuizConfig) {
             PopQuizConfigSheet(scopeTitle: selectedStudyScope.title) { count, difficulty in
+                viewModel.setQuizTopicScope(currentScopedTopicID)
                 viewModel.generateQuiz(
                     questionCount: count,
                     difficulty: difficulty,
