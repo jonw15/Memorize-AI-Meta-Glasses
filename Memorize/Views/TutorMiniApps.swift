@@ -1489,6 +1489,8 @@ private struct MnemonicsMiniApp: View {
 
     @State private var step = 0
     @State private var hasSavedSession = false
+    @State private var availableSets: [MemorizeService.MemorizationSet] = []
+    @State private var selectedSetID: String?
     @State private var items: [String] = []
     @State private var orderMatters = false
     @State private var selectedType: MemorizeService.MnemonicType = .sentence
@@ -1571,7 +1573,7 @@ private struct MnemonicsMiniApp: View {
 
     private var footerTitle: String {
         switch step {
-        case 0: return isLoadingItems ? "Reading…" : "Pick a type"
+        case 0: return isLoadingItems ? "Reading…" : "Confirm set"
         case 1: return isLoadingMnemonic ? "Building…" : "Test recall"
         case 2: return isEvaluating ? "Checking…" : "See score"
         case 3: return isRefining ? "Refining…" : "Reinforce"
@@ -1581,7 +1583,9 @@ private struct MnemonicsMiniApp: View {
 
     private var footerDisabled: Bool {
         switch step {
-        case 0: return isLoadingItems || items.isEmpty
+        case 0:
+            let hasNonEmptyItem = items.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            return isLoadingItems || availableSets.isEmpty || selectedSetID == nil || !hasNonEmptyItem
         case 1: return isLoadingMnemonic || mnemonic == nil
         case 2: return isEvaluating || recallText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case 3: return isRefining
@@ -1605,15 +1609,21 @@ private struct MnemonicsMiniApp: View {
     }
 
     private func loadItemsIfNeeded() {
-        guard items.isEmpty, !isLoadingItems, !sourceContext.isEmpty else { return }
+        guard availableSets.isEmpty, !isLoadingItems, !sourceContext.isEmpty else { return }
         isLoadingItems = true
         loadError = nil
         Task {
             do {
-                let result = try await memorizeService.extractMnemonicItems(topic: topic, sourceContext: sourceContext)
+                let sets = try await memorizeService.extractMemorizationSets(topic: topic, sourceContext: sourceContext)
                 await MainActor.run {
-                    items = Array(result.items.prefix(7))
-                    orderMatters = result.orderMatters
+                    availableSets = sets
+                    if let first = sets.first {
+                        selectSet(first)
+                    } else {
+                        selectedSetID = nil
+                        items = []
+                        orderMatters = false
+                    }
                     isLoadingItems = false
                 }
             } catch {
@@ -1623,6 +1633,17 @@ private struct MnemonicsMiniApp: View {
                 }
             }
         }
+    }
+
+    private func selectSet(_ set: MemorizeService.MemorizationSet) {
+        selectedSetID = set.id
+        items = Array(set.items.prefix(7))
+        orderMatters = set.orderMatters
+        mnemonic = nil
+    }
+
+    private var selectedSet: MemorizeService.MemorizationSet? {
+        availableSets.first { $0.id == selectedSetID }
     }
 
     private func requestMnemonic() {
@@ -1764,15 +1785,36 @@ private struct MnemonicsMiniApp: View {
     private func itemsStep(theme: TutorMiniAppTheme) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             TutorBodyText(
-                text: "Here are the key items to memorize. Tap an item to rename it, drag it up or down to reorder, or remove what you don't need.",
+                text: "Mastery only memorizes things worth memorizing — lists, sequences, frameworks, vocab groups, or components. Pick a set, then confirm or edit before we build the mnemonic.",
                 theme: theme
             )
 
             if isLoadingItems {
-                TutorThinkingCard(theme: theme, title: "Pulling items", subtitle: "Reading your sources…")
-            } else if items.isEmpty {
-                emptySourcesPlaceholder(theme: theme)
+                TutorThinkingCard(theme: theme, title: "Pulling sets", subtitle: "Looking for memorization-worthy lists…")
+            } else if availableSets.isEmpty {
+                noSetsPlaceholder(theme: theme)
             } else {
+                setPicker(theme: theme)
+
+                if let selected = selectedSet, !selected.reason.isEmpty {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(theme.primary)
+                            .padding(.top, 2)
+                        Text(selected.reason)
+                            .font(.system(size: 13, weight: .regular, design: .rounded))
+                            .foregroundColor(theme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(theme.primary.opacity(0.07))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            }
+
+            if !items.isEmpty && !isLoadingItems {
                 List {
                     ForEach(items.indices, id: \.self) { idx in
                         editableItemRow(index: idx, theme: theme)
@@ -1821,6 +1863,100 @@ private struct MnemonicsMiniApp: View {
             if let loadError {
                 tutorErrorCard(theme: theme, message: loadError)
             }
+        }
+    }
+
+    private func setPicker(theme: TutorMiniAppTheme) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(availableSets.count == 1 ? "MEMORIZATION SET" : "PICK A SET")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .tracking(0.6)
+                    .foregroundColor(theme.muted)
+                Spacer()
+                Text("\(availableSets.count) found")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(theme.muted)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(availableSets) { set in
+                        setChip(set: set, theme: theme)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+    }
+
+    private func setChip(set: MemorizeService.MemorizationSet, theme: TutorMiniAppTheme) -> some View {
+        let selected = set.id == selectedSetID
+        return Button {
+            selectSet(set)
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: iconName(for: set.type))
+                        .font(.system(size: 10, weight: .bold))
+                    Text(set.type.displayLabel.uppercased())
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .tracking(0.5)
+                }
+                .foregroundColor(selected ? theme.primary : theme.muted)
+
+                Text(set.title)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(selected ? Color(hex: "1F2420") : Color(hex: "535B54"))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                Text("\(set.items.count) items\(set.orderMatters ? " · ordered" : "")")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(theme.muted)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(width: 200, alignment: .leading)
+            .background(selected ? theme.primary.opacity(0.16) : Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(selected ? theme.primary : Color(hex: "EAE4DC"), lineWidth: selected ? 1.5 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func iconName(for type: MemorizeService.MemorizationSetType) -> String {
+        switch type {
+        case .list: return "list.bullet"
+        case .sequence: return "arrow.forward"
+        case .framework: return "square.grid.2x2"
+        case .vocabularyGroup: return "character.book.closed"
+        case .components: return "puzzlepiece.extension"
+        }
+    }
+
+    @ViewBuilder
+    private func noSetsPlaceholder(theme: TutorMiniAppTheme) -> some View {
+        if sourceContext.isEmpty {
+            emptySourcesPlaceholder(theme: theme)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("No memorization sets found")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(Color(hex: "1F2420"))
+                Text("Mastery couldn't find a clear list, sequence, framework, vocab group, or set of components in your sources. Try uploading material that has explicit lists or steps.")
+                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                    .foregroundColor(theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(Color(hex: "FBF5EA"))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "EAE4DC"), lineWidth: 1))
         }
     }
 

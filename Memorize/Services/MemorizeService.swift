@@ -244,6 +244,31 @@ struct MemorizeService {
         case acronym, sentence, visualImagery = "visual_imagery", storyChain = "story_chain"
     }
 
+    enum MemorizationSetType: String, Codable {
+        case list, sequence, framework
+        case vocabularyGroup = "vocabulary_group"
+        case components
+
+        var displayLabel: String {
+            switch self {
+            case .list: return "List"
+            case .sequence: return "Sequence"
+            case .framework: return "Framework"
+            case .vocabularyGroup: return "Vocab group"
+            case .components: return "Components"
+            }
+        }
+    }
+
+    struct MemorizationSet: Codable, Identifiable, Equatable {
+        let id: String
+        var title: String
+        var type: MemorizationSetType
+        var items: [String]
+        var reason: String
+        var orderMatters: Bool
+    }
+
     struct MnemonicTrigger: Codable {
         let item: String
         let trigger: String
@@ -267,26 +292,89 @@ struct MemorizeService {
         let comment: String
     }
 
-    func extractMnemonicItems(topic: String, sourceContext: String) async throws -> (items: [String], orderMatters: Bool) {
+    func extractMemorizationSets(topic: String, sourceContext: String) async throws -> [MemorizationSet] {
         let prompt = """
-        You are a memory coach. Pull a SHORT list of the most important items to memorize about "\(topic)" from the source below.
+        You are a memory coach extracting MEMORIZATION SETS from study material. A memorization set is content that is genuinely worth memorizing as a unit — NOT random phrases or broad summaries.
 
         Source material:
         \(sourceContext)
 
-        Return ONLY valid JSON in this exact shape:
-        { "items": ["item1", "item2"], "orderMatters": true }
+        Hard rules — read carefully:
+        - Do NOT generate mnemonics yet. Only extract candidate sets.
+        - Each set MUST be one of:
+          • a clear list (e.g. "rules of binary search invariants")
+          • a sequence (e.g. "stages of cell division")
+          • a framework (e.g. "the 4 P's of marketing")
+          • a vocabulary group of related terms
+          • the components of one thing (e.g. "parts of a neuron")
+        - Each set has 3 to 7 items. If you cannot find 3 cohesive items, do NOT emit that set.
+        - Items in a set must be tightly related to each other and live at the same level of abstraction.
+        - Reject anything that is: random facts, isolated concepts, unrelated topics, paragraph-level summaries, or single definitions.
+        - If the source has no qualifying sets, return an empty topics array.
 
-        Requirements:
-        - Return 5–7 items. Each is 1–4 words.
-        - Set orderMatters = true if the items have a natural sequence (steps, planets, layers); false if order is incidental.
-        - Stay grounded in the source. No invented items.
+        Return ONLY valid JSON in this exact shape:
+        {
+          "sets": [
+            {
+              "id": "set1",
+              "title": "Short label for the set, 3-6 words, Title Case",
+              "type": "list" | "sequence" | "framework" | "vocabulary_group" | "components",
+              "items": ["item one", "item two", "item three"],
+              "reason": "One sentence on why these belong together as a memorization unit, grounded in the source.",
+              "orderMatters": true
+            }
+          ]
+        }
+
+        Quality rules:
+        - Return at most 5 sets. Prefer fewer high-quality sets over many weak ones.
+        - "title" must describe the set itself, not the wider topic. Avoid generic words like "Key Concepts".
+        - Each item is 1–6 words.
+        - "type": "sequence" implies orderMatters=true. "list", "framework", "vocabulary_group", "components" usually orderMatters=false (use true only if order is part of what is being memorized).
+        - "reason" must be specific and source-grounded — no filler.
+        - Stay grounded in the source. Do not invent items, types, or relationships.
         - No markdown fences and no extra keys.
         """
+
+        struct SetJSON: Decodable {
+            let id: String?
+            let title: String
+            let type: String
+            let items: [String]
+            let reason: String?
+            let orderMatters: Bool?
+        }
+        struct Wrap: Decodable { let sets: [SetJSON] }
+
         let result = try await fastVisionService.generateText(prompt: prompt)
-        struct Wrap: Decodable { let items: [String]; let orderMatters: Bool }
-        let wrapped = parseJSON(result, fallback: Wrap(items: [], orderMatters: false))
-        return (wrapped.items, wrapped.orderMatters)
+        let wrapped = parseJSON(result, fallback: Wrap(sets: []))
+
+        return wrapped.sets.enumerated().compactMap { idx, raw in
+            let cleanedItems = raw.items
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            guard cleanedItems.count >= 3 else { return nil }
+            let trimmedItems = Array(cleanedItems.prefix(7))
+            let title = raw.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty else { return nil }
+            let resolvedType = MemorizationSetType(rawValue: raw.type) ?? .list
+            let orderMatters = raw.orderMatters ?? (resolvedType == .sequence)
+            let rawId = raw.id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return MemorizationSet(
+                id: rawId.isEmpty ? "set\(idx + 1)" : rawId,
+                title: title,
+                type: resolvedType,
+                items: trimmedItems,
+                reason: raw.reason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                orderMatters: orderMatters
+            )
+        }
+    }
+
+    func extractMnemonicItems(topic: String, sourceContext: String) async throws -> (items: [String], orderMatters: Bool) {
+        let sets = try await extractMemorizationSets(topic: topic, sourceContext: sourceContext)
+        guard let first = sets.first else { return ([], false) }
+        return (first.items, first.orderMatters)
     }
 
     func generateMnemonic(
